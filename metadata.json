@@ -1,0 +1,6 @@
+{
+  "name": "AI Stock Research Dashboard",
+  "description": "An automated stock analysis dashboard generating comprehensive reports using market data and AI.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

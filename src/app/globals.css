@@ -1,0 +1,306 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+
+@custom-variant dark (&:is(.dark *));
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+  --font-heading: var(--font-geist-sans);
+  --color-sidebar-ring: var(--sidebar-ring);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar: var(--sidebar);
+  --color-chart-5: var(--chart-5);
+  --color-chart-4: var(--chart-4);
+  --color-chart-3: var(--chart-3);
+  --color-chart-2: var(--chart-2);
+  --color-chart-1: var(--chart-1);
+  --color-ring: var(--ring);
+  --color-input: var(--input);
+  --color-border: var(--border);
+  --color-destructive: var(--destructive);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-accent: var(--accent);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-muted: var(--muted);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-secondary: var(--secondary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-primary: var(--primary);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-popover: var(--popover);
+  --color-card-foreground: var(--card-foreground);
+  --color-card: var(--card);
+  --radius-sm: calc(var(--radius) * 0.6);
+  --radius-md: calc(var(--radius) * 0.8);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) * 1.4);
+  --radius-2xl: calc(var(--radius) * 1.8);
+  --radius-3xl: calc(var(--radius) * 2.2);
+  --radius-4xl: calc(var(--radius) * 2.6);
+}
+
+:root {
+  --background: oklch(1 0 0);
+  --foreground: oklch(0.145 0 0);
+  --card: oklch(1 0 0);
+  --card-foreground: oklch(0.145 0 0);
+  --popover: oklch(1 0 0);
+  --popover-foreground: oklch(0.145 0 0);
+  --primary: oklch(0.205 0 0);
+  --primary-foreground: oklch(0.985 0 0);
+  --secondary: oklch(0.97 0 0);
+  --secondary-foreground: oklch(0.205 0 0);
+  --muted: oklch(0.97 0 0);
+  --muted-foreground: oklch(0.556 0 0);
+  --accent: oklch(0.97 0 0);
+  --accent-foreground: oklch(0.205 0 0);
+  --destructive: oklch(0.577 0.245 27.325);
+  --border: oklch(0.922 0 0);
+  --input: oklch(0.922 0 0);
+  --ring: oklch(0.708 0 0);
+  --chart-1: oklch(0.87 0 0);
+  --chart-2: oklch(0.556 0 0);
+  --chart-3: oklch(0.439 0 0);
+  --chart-4: oklch(0.371 0 0);
+  --chart-5: oklch(0.269 0 0);
+  --radius: 0.625rem;
+  --sidebar: oklch(0.985 0 0);
+  --sidebar-foreground: oklch(0.145 0 0);
+  --sidebar-primary: oklch(0.205 0 0);
+  --sidebar-primary-foreground: oklch(0.985 0 0);
+  --sidebar-accent: oklch(0.97 0 0);
+  --sidebar-accent-foreground: oklch(0.205 0 0);
+  --sidebar-border: oklch(0.922 0 0);
+  --sidebar-ring: oklch(0.708 0 0);
+}
+
+.dark {
+  --background: oklch(0.145 0 0);
+  --foreground: oklch(0.985 0 0);
+  --card: oklch(0.205 0 0);
+  --card-foreground: oklch(0.985 0 0);
+  --popover: oklch(0.205 0 0);
+  --popover-foreground: oklch(0.985 0 0);
+  --primary: oklch(0.922 0 0);
+  --primary-foreground: oklch(0.205 0 0);
+  --secondary: oklch(0.269 0 0);
+  --secondary-foreground: oklch(0.985 0 0);
+  --muted: oklch(0.269 0 0);
+  --muted-foreground: oklch(0.708 0 0);
+  --accent: oklch(0.269 0 0);
+  --accent-foreground: oklch(0.985 0 0);
+  --destructive: oklch(0.704 0.191 22.216);
+  --border: oklch(1 0 0 / 10%);
+  --input: oklch(1 0 0 / 15%);
+  --ring: oklch(0.556 0 0);
+  --chart-1: oklch(0.87 0 0);
+  --chart-2: oklch(0.556 0 0);
+  --chart-3: oklch(0.439 0 0);
+  --chart-4: oklch(0.371 0 0);
+  --chart-5: oklch(0.269 0 0);
+  --sidebar: oklch(0.205 0 0);
+  --sidebar-foreground: oklch(0.985 0 0);
+  --sidebar-primary: oklch(0.488 0.243 264.376);
+  --sidebar-primary-foreground: oklch(0.985 0 0);
+  --sidebar-accent: oklch(0.269 0 0);
+  --sidebar-accent-foreground: oklch(0.985 0 0);
+  --sidebar-border: oklch(1 0 0 / 10%);
+  --sidebar-ring: oklch(0.556 0 0);
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  body {
+    @apply bg-background text-foreground;
+  }
+  html {
+    @apply font-sans;
+  }
+}
+/* ============================================================
+   Dark mode retrofit.
+   The app's components use hardcoded light utilities (bg-white,
+   text-slate-*, etc.). These scoped overrides re-theme them when
+   the <html class="dark"> toggle is on, so dark mode is visible
+   app-wide without editing every component. Unlayered => wins over
+   Tailwind's layered utilities.
+   ============================================================ */
+.dark body { background-color: #0f172a; color: #e2e8f0; }
+
+/* Surfaces */
+.dark .bg-white { background-color: #1e293b; }
+.dark .bg-slate-50,
+.dark .bg-slate-50\/50,
+.dark .bg-slate-50\/80 { background-color: #0f172a; }
+.dark .bg-slate-100 { background-color: #334155; }
+.dark .bg-slate-200 { background-color: #475569; }
+
+/* Soft colored chips -> subtle dark tints */
+.dark .bg-indigo-50 { background-color: rgba(99,102,241,0.18); }
+.dark .bg-emerald-50 { background-color: rgba(16,185,129,0.16); }
+.dark .bg-rose-50 { background-color: rgba(244,63,94,0.16); }
+.dark .bg-amber-50 { background-color: rgba(245,158,11,0.16); }
+.dark .bg-sky-50 { background-color: rgba(14,165,233,0.16); }
+
+/* Text */
+.dark .text-slate-900 { color: #f1f5f9; }
+.dark .text-slate-800 { color: #e2e8f0; }
+.dark .text-slate-700 { color: #cbd5e1; }
+.dark .text-slate-600 { color: #b6c2d2; }
+.dark .text-slate-500 { color: #94a3b8; }
+.dark .text-slate-400 { color: #7c8ba1; }
+
+/* Brand text stays readable on dark */
+.dark .text-indigo-700 { color: #a5b4fc; }
+.dark .text-indigo-600 { color: #a5b4fc; }
+.dark .text-emerald-700 { color: #6ee7b7; }
+.dark .text-rose-700 { color: #fda4af; }
+.dark .text-amber-700 { color: #fcd34d; }
+.dark .text-sky-700 { color: #7dd3fc; }
+
+/* Borders */
+.dark .border-slate-200,
+.dark .border-slate-100,
+.dark .border-slate-50 { border-color: #334155; }
+
+/* Inputs / placeholders */
+.dark input, .dark textarea, .dark select { color: #e2e8f0; }
+.dark input::placeholder, .dark textarea::placeholder { color: #64748b; }
+
+/* Gradient snapshot cards -> flat dark surface */
+.dark .from-indigo-50 { --tw-gradient-from: #1e293b var(--tw-gradient-from-position); }
+.dark .to-white { --tw-gradient-to: #1e293b var(--tw-gradient-to-position); }
+
+/* Shadows softer on dark */
+.dark .shadow-sm, .dark .shadow-md { box-shadow: 0 1px 3px rgba(0,0,0,0.5); }
+
+/* ============================================================
+   PREMIUM THEME — Modern Fintech (clean & confident)
+   Global re-skin via CSS so no component markup changes.
+   Light-mode rules are scoped to :root:not(.dark) so they never
+   fight the dark-mode retrofit above.
+   ============================================================ */
+
+/* 1. Typography — apply Geist everywhere + refined rendering.
+   (The theme var was self-referential, so the app had been falling
+   back to the system font.) */
+html {
+  font-family: var(--font-geist-sans), ui-sans-serif, system-ui, -apple-system,
+    "Segoe UI", Roboto, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+}
+/* Headings: tighter tracking; dial back the ultra-black weight so it reads
+   refined rather than shouty. */
+h1, h2, h3, h4 { letter-spacing: -0.02em; }
+.font-black { font-weight: 800; }
+.tracking-tight { letter-spacing: -0.02em; }
+
+/* 2. Canvas — a soft off-white so white cards gain depth and lift. */
+:root:not(.dark) body { background-color: #f6f7f9; }
+
+/* 3. Elevation — swap flat shadows for soft, layered ambient shadows. */
+:root:not(.dark) .shadow-sm {
+  box-shadow: 0 1px 2px rgba(16, 24, 40, 0.04), 0 1px 3px rgba(16, 24, 40, 0.06);
+}
+:root:not(.dark) .shadow-md {
+  box-shadow: 0 4px 12px rgba(16, 24, 40, 0.06), 0 2px 4px rgba(16, 24, 40, 0.04);
+}
+:root:not(.dark) .shadow-lg,
+:root:not(.dark) .shadow-xl {
+  box-shadow: 0 16px 40px rgba(16, 24, 40, 0.10), 0 4px 10px rgba(16, 24, 40, 0.05);
+}
+
+/* 4. Hairline borders — softer than slate-200/100. */
+:root:not(.dark) .border-slate-200 { border-color: #e9ebef; }
+:root:not(.dark) .border-slate-100 { border-color: #f1f3f5; }
+
+/* 5. Primary buttons — subtle depth so the accent feels considered. */
+:root:not(.dark) .bg-indigo-600 { box-shadow: 0 1px 2px rgba(79, 70, 229, 0.25); }
+:root:not(.dark) .bg-indigo-600:hover { box-shadow: 0 4px 12px rgba(79, 70, 229, 0.28); }
+
+/* 6. Motion & press feedback — consistent easing, gentle button press. */
+button, a { transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1); }
+button:not(:disabled):active { transform: translateY(0.5px); }
+
+/* 7. Refined focus ring. */
+:focus-visible {
+  outline: 2px solid rgba(79, 70, 229, 0.55);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+/* ============================================================
+   MOBILE — app-like behaviour on phones.
+   ============================================================ */
+html, body {
+  overflow-x: hidden;              /* nothing ever scrolls the page sideways */
+  -webkit-tap-highlight-color: transparent;
+  overscroll-behavior-y: none;     /* no rubber-band bounce behind the shell */
+}
+
+@media (max-width: 767px) {
+  /* Tighter headings so titles don't eat the screen */
+  h1 { font-size: 1.5rem !important; line-height: 1.2 !important; }
+  .text-3xl { font-size: 1.5rem !important; }
+  .text-2xl { font-size: 1.25rem !important; }
+
+  /* Comfortable tap targets */
+  button, a[role="button"], .btn { min-height: 40px; }
+
+  /* Data tables: let them scroll horizontally inside their card, never the page */
+  .overflow-x-auto { -webkit-overflow-scrolling: touch; }
+
+  /* Cards breathe a little less on small screens */
+  .rounded-2xl { border-radius: 1rem; }
+}
+
+/* ============================================================
+   ANALYZE PAGE — readable, professional typography.
+   The page was built with a lot of 9–12px text; these scoped bumps
+   raise every step ~1–2px so it reads cleanly, without touching the
+   rest of the app or breaking any layout.
+   ============================================================ */
+.analyze-page .text-\[9px\]  { font-size: 11px; }
+.analyze-page .text-\[10px\] { font-size: 11.5px; }
+.analyze-page .text-\[11px\] { font-size: 12.5px; }
+.analyze-page .text-xs       { font-size: 13px; line-height: 1.45; }
+.analyze-page .text-sm       { font-size: 15px; line-height: 1.55; }
+.analyze-page .text-base     { font-size: 16.5px; }
+.analyze-page .text-lg       { font-size: 19px; }
+
+/* Section headings a touch stronger */
+.analyze-page h2 { letter-spacing: -0.01em; }
+.analyze-page h3 { font-size: 15px; letter-spacing: -0.01em; }
+
+/* More breathing room between cards/sections */
+.analyze-page .gap-6 { gap: 1.75rem; }
+.analyze-page .space-y-6 > :not([hidden]) ~ :not([hidden]) { margin-top: 1.75rem; }
+.analyze-page .p-4 { padding: 1.15rem; }
+
+@media (max-width: 767px) {
+  /* keep it compact enough to fit a phone */
+  .analyze-page .text-sm { font-size: 14px; }
+  .analyze-page .gap-6 { gap: 1.15rem; }
+  .analyze-page .space-y-6 > :not([hidden]) ~ :not([hidden]) { margin-top: 1.15rem; }
+}
+
+/* 8. Text selection + slim scrollbars — small premium touches. */
+::selection { background: rgba(79, 70, 229, 0.14); }
+* { scrollbar-width: thin; scrollbar-color: #cbd5e1 transparent; }
+::-webkit-scrollbar { width: 8px; height: 8px; }
+::-webkit-scrollbar-thumb { background: #cdd3db; border-radius: 8px; }
+::-webkit-scrollbar-thumb:hover { background: #aab2bd; }
+.dark * { scrollbar-color: #475569 transparent; }
+.dark ::-webkit-scrollbar-thumb { background: #475569; }
