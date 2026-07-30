@@ -3,22 +3,34 @@
 import React, { useState, useEffect } from "react";
 import { GitCompare, Search, Plus, X, BarChart2, Activity } from "lucide-react";
 import { getReports, getWatchlist } from "@/lib/storage";
+import { useGlobal } from "@/context/GlobalContext";
 
 export default function ComparePage() {
+  const { market } = useGlobal();
   const [query, setQuery] = useState("");
   const [symbolsToCompare, setSymbolsToCompare] = useState<string[]>([]);
   const [compareData, setCompareData] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
 
-  // Quick select from watchlist/reports
+  // Quick-add chips: the user's own watchlist/reports first, else popular
+  // names for their market — so a brand-new user has something to click.
   const [suggestions, setSuggestions] = useState<string[]>([]);
 
   useEffect(() => {
     const wl = getWatchlist().map((i) => i.symbol);
     const rp = getReports().map((i) => i.symbol);
     const unique = Array.from(new Set([...wl, ...rp])).filter(Boolean);
-    setSuggestions(unique.slice(0, 5));
-  }, []);
+    if (unique.length) {
+      setSuggestions(unique.slice(0, 5));
+      return;
+    }
+    const isIndia = market === "NSE" || market === "BSE";
+    setSuggestions(
+      isIndia
+        ? ["RELIANCE.NS", "TCS.NS", "HDFCBANK.NS", "INFY.NS", "ICICIBANK.NS"]
+        : ["AAPL", "MSFT", "NVDA", "GOOGL", "AMZN"],
+    );
+  }, [market]);
 
   const addSymbol = async (sym: string) => {
     const s = sym.toUpperCase();
@@ -106,8 +118,23 @@ export default function ComparePage() {
       )}
 
       {compareData.length === 0 && !loading ? (
-        <div className="bg-slate-50 border border-slate-200 rounded-2xl p-16 text-center text-slate-500 font-medium">
-          Add stocks using the search bar above to begin comparison.
+        <div className="bg-slate-50 border border-slate-200 rounded-2xl p-12 text-center">
+          <GitCompare className="w-10 h-10 text-slate-300 mx-auto mb-3" />
+          <p className="text-slate-600 font-bold">Compare up to 5 stocks side-by-side</p>
+          <p className="text-slate-400 text-sm mt-1 mb-5">
+            Search a symbol above, or tap a suggestion to start.
+          </p>
+          <div className="flex flex-wrap gap-2 justify-center">
+            {suggestions.map((sym) => (
+              <button
+                key={sym}
+                onClick={() => addSymbol(sym)}
+                className="px-3.5 py-2 bg-white border border-slate-200 text-slate-700 hover:border-indigo-300 hover:text-indigo-700 rounded-lg text-sm font-bold transition flex items-center gap-1.5 shadow-sm"
+              >
+                <Plus className="w-3.5 h-3.5" /> {sym}
+              </button>
+            ))}
+          </div>
         </div>
       ) : (
         <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-x-auto">

@@ -12,6 +12,8 @@ import {
   Sparkles,
   AlertTriangle,
   FileSpreadsheet,
+  Activity,
+  Bell,
 } from "lucide-react";
 import {
   getPortfolio,
@@ -21,6 +23,7 @@ import {
   replaceHoldingsForMarkets,
   inferPortfolioMarket,
   logAiUsageDetailed,
+  getPriceAlerts,
   PORTFOLIO_MARKETS,
   type PortfolioMarket,
 } from "@/lib/storage";
@@ -39,6 +42,10 @@ export default function PortfolioPage() {
   const [refreshing, setRefreshing] = useState(false);
   const [reviewLoading, setReviewLoading] = useState(false);
   const [review, setReview] = useState<any | null>(null);
+  // Per-holding factual chart read (trend / RSI / DMA position). NOT advice.
+  const [reads, setReads] = useState<Record<string, any>>({});
+  const [readsLoading, setReadsLoading] = useState(false);
+  const [priceAlerts, setPriceAlerts] = useState<any[]>([]);
 
   // Excel import
   const fileRef = useRef<HTMLInputElement>(null);
@@ -50,7 +57,66 @@ export default function PortfolioPage() {
 
   useEffect(() => {
     setHoldings(getPortfolio());
+    setPriceAlerts(getPriceAlerts());
   }, []);
+
+  // Read the chart for each holding — a factual technical snapshot (trend,
+  // RSI value + zone, price vs 50/200-DMA) so YOU can judge. Not buy/sell advice.
+  const runReads = async () => {
+    const current = getPortfolio().filter((h) => h.market === market);
+    if (!current.length) return;
+    setReadsLoading(true);
+    try {
+      const subset = current.slice(0, 15);
+      await Promise.all(
+        subset.map(async (h) => {
+          try {
+            const res = await fetch("/api/analyze", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                query: h.symbol,
+                market: market === "Indian Stocks" ? "IN" : "US",
+                skipAi: true,
+              }),
+            });
+            const j = await res.json();
+            const t = j?.technical;
+            const price = j?.stock?.currentPrice;
+            if (t) {
+              setReads((prev) => ({
+                ...prev,
+                [h.symbol]: {
+                  trend: t.trend,
+                  rsi: Number(t.rsi),
+                  dma50: Number(t.dma50),
+                  dma200: Number(t.dma200),
+                  score: t.score,
+                  summary: t.summary,
+                  price,
+                  changePct: j?.pricePerformance?.oneDay,
+                },
+              }));
+            }
+            // Refresh the live price into the holding so values stay current too.
+            if (price != null) savePortfolioHolding({ ...h, currentPrice: price });
+          } catch {
+            /* skip this symbol */
+          }
+        }),
+      );
+      setHoldings(getPortfolio());
+    } finally {
+      setReadsLoading(false);
+    }
+  };
+
+  // Factual, neutral zone label from RSI — describes the reading, never advises.
+  const rsiZone = (rsi: number) =>
+    !Number.isFinite(rsi) ? { label: "—", tone: "text-slate-400" }
+    : rsi >= 70 ? { label: "Overbought", tone: "text-rose-600" }
+    : rsi <= 30 ? { label: "Oversold", tone: "text-emerald-600" }
+    : { label: "Neutral", tone: "text-slate-500" };
 
   // Parse an Excel/CSV workbook -> resolve symbols for the active market ->
   // hand off to the overwrite/append prompt. Rows without qty AND price can't
@@ -289,6 +355,15 @@ PORTFOLIO DATA: ${JSON.stringify(stats)}`;
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
+          <button
+            onClick={runReads}
+            disabled={readsLoading || marketHoldings.length === 0}
+            className="px-3.5 py-2 bg-slate-900 text-white rounded-lg text-sm font-bold hover:bg-slate-800 flex items-center gap-2 transition disabled:opacity-50 whitespace-nowrap"
+            title="Factual technical read per holding — trend, RSI, moving averages. Not buy/sell advice."
+          >
+            {readsLoading ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Activity className="w-4 h-4" />}
+            Chart Read
+          </button>
           <button
             onClick={runReview}
             disabled={reviewLoading || marketHoldings.length === 0}
@@ -577,6 +652,7 @@ PORTFOLIO DATA: ${JSON.stringify(stats)}`;
                 <th className="p-3 text-xs font-bold text-slate-500 uppercase tracking-wide text-right">Market Value</th>
                 <th className="p-3 text-xs font-bold text-slate-500 uppercase tracking-wide text-right hidden md:table-cell">Cost Value</th>
                 <th className="p-3 text-xs font-bold text-slate-500 uppercase tracking-wide text-right">Unrealised Gain</th>
+                <th className="p-3 text-xs font-bold text-slate-500 uppercase tracking-wide">Chart Read</th>
                 <th className="p-3 text-xs font-bold text-slate-500 uppercase tracking-wide text-right">Action</th>
               </tr>
             </thead>
@@ -597,6 +673,9 @@ PORTFOLIO DATA: ${JSON.stringify(stats)}`;
                       {h.name && h.name !== h.symbol && (
                         <span className="ml-1.5 text-xs text-slate-400 font-bold">({h.symbol})</span>
                       )}
+                      <div className="text-[11px] font-bold text-slate-400 tabular-nums mt-0.5">
+                        LTP {money(ltp)}
+                      </div>
                     </td>
                     <td className="p-3 tabular-nums font-bold text-slate-700 text-right">{h.shares}</td>
                     <td className="p-3 tabular-nums font-bold text-slate-700 text-right hidden md:table-cell">{money(h.buyPrice)}</td>
@@ -606,6 +685,51 @@ PORTFOLIO DATA: ${JSON.stringify(stats)}`;
                       {up ? "+" : "-"}
                       {money(Math.abs(gain))}
                       <span className="block text-[10px] font-medium">({up ? "+" : ""}{gainPct.toFixed(2)}%)</span>
+                    </td>
+                    <td className="p-3">
+                      {(() => {
+                        const r = reads[h.symbol];
+                        if (!r) {
+                          return <span className="text-[11px] text-slate-300 font-bold">Tap “Chart Read”</span>;
+                        }
+                        const isUp = r.trend?.includes("Up");
+                        const isDown = r.trend?.includes("Down");
+                        const zone = rsiZone(r.rsi);
+                        const aboveBoth = r.price != null && r.dma50 != null && r.dma200 != null && r.price > r.dma50 && r.price > r.dma200;
+                        const belowBoth = r.price != null && r.dma50 != null && r.dma200 != null && r.price < r.dma50 && r.price < r.dma200;
+                        const alert = priceAlerts.find((a: any) => a.symbol === h.symbol);
+                        // nearest set level the price is beyond, purely factual
+                        let levelNote = "";
+                        if (alert && r.price != null) {
+                          const L = alert.levels || {};
+                          if (L.target != null && r.price >= L.target) levelNote = "At/above Target";
+                          else if (L.r2 != null && r.price >= L.r2) levelNote = "Above R2";
+                          else if (L.r1 != null && r.price >= L.r1) levelNote = "Above R1";
+                          else if (L.sl != null && r.price <= L.sl) levelNote = "At/below Stop-Loss";
+                          else if (L.s1 != null && r.price <= L.s1) levelNote = "At/below Support";
+                        }
+                        return (
+                          <div className="flex flex-col gap-1 items-start">
+                            <span className={`inline-flex items-center gap-1 text-[11px] font-black px-2 py-0.5 rounded-md ${
+                              isUp ? "bg-emerald-50 text-emerald-700" : isDown ? "bg-rose-50 text-rose-700" : "bg-slate-100 text-slate-600"
+                            }`}>
+                              {isUp ? <TrendingUp className="w-3 h-3" /> : isDown ? <TrendingDown className="w-3 h-3" /> : null}
+                              {r.trend || "—"}
+                            </span>
+                            <span className="text-[11px] font-bold text-slate-500 tabular-nums">
+                              RSI {Number.isFinite(r.rsi) ? r.rsi.toFixed(0) : "—"} · <span className={zone.tone}>{zone.label}</span>
+                            </span>
+                            <span className="text-[10.5px] font-bold text-slate-400">
+                              {aboveBoth ? "Above 50 & 200 DMA" : belowBoth ? "Below 50 & 200 DMA" : "Mixed vs DMAs"}
+                            </span>
+                            {levelNote && (
+                              <span className="inline-flex items-center gap-1 text-[10px] font-black text-indigo-600 bg-indigo-50 px-1.5 py-0.5 rounded">
+                                <Bell className="w-2.5 h-2.5" /> {levelNote}
+                              </span>
+                            )}
+                          </div>
+                        );
+                      })()}
                     </td>
                     <td className="p-3 text-right">
                       <button
@@ -622,7 +746,7 @@ PORTFOLIO DATA: ${JSON.stringify(stats)}`;
             </tbody>
             <tfoot>
               <tr className="bg-slate-50 border-t-2 border-slate-200 font-black">
-                <td colSpan={8} className="p-3">
+                <td colSpan={9} className="p-3">
                   <div className="flex flex-wrap items-center justify-end gap-x-6 gap-y-1 text-sm">
                     <span className="mr-auto text-xs uppercase tracking-wide text-slate-500">Total ({market})</span>
                     <span className="text-slate-500">

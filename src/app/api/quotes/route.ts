@@ -27,8 +27,16 @@ type QuoteLite = {
   time: number | null;
   currency: string | null;
   marketState: string | null;
+  marketCap: number | null;
   ok: boolean;
 };
+
+// Short-lived per-symbol cache. Several pollers (dashboard, markets, alert
+// monitor) request overlapping symbols; this collapses them so each symbol
+// hits Yahoo at most once per TTL, and a transient failure serves the last
+// good value instead of blanks. Per warm instance — a cold start just re-warms.
+const CACHE = new Map<string, { data: QuoteLite; exp: number }>();
+const CACHE_TTL = 12_000; // ms
 
 export async function POST(req: NextRequest) {
   try {
@@ -40,14 +48,18 @@ export async function POST(req: NextRequest) {
           .map((s) => String(s || "").trim().toUpperCase())
           .filter(Boolean),
       ),
-    ).slice(0, 60); // bound the fan-out
+    ).slice(0, 120); // bound the fan-out
 
     if (clean.length === 0) {
       return NextResponse.json({ quotes: {} });
     }
 
+    const now = Date.now();
     const results = await Promise.all(
       clean.map(async (symbol): Promise<QuoteLite> => {
+        // Serve a fresh cached value without touching the network.
+        const hit = CACHE.get(symbol);
+        if (hit && hit.exp > now) return hit.data;
         try {
           const q: any = await yahooFinance.quote(symbol);
           const price = q?.regularMarketPrice ?? q?.currentPrice ?? null;
@@ -57,7 +69,7 @@ export async function POST(req: NextRequest) {
             const t = Number(q.regularMarketTime);
             if (!Number.isNaN(t)) time = t > 1e12 ? t : t * 1000;
           }
-          return {
+          const data: QuoteLite = {
             symbol,
             name: q?.shortName || q?.longName || null,
             price: typeof price === "number" ? price : null,
@@ -70,9 +82,14 @@ export async function POST(req: NextRequest) {
             time,
             currency: q?.currency || null,
             marketState: q?.marketState || null,
+            marketCap: num(q?.marketCap),
             ok: price != null,
           };
+          if (data.ok) CACHE.set(symbol, { data, exp: now + CACHE_TTL });
+          return data;
         } catch {
+          // Transient failure — reuse the last good value if we have one.
+          if (hit) return hit.data;
           return {
             symbol,
             name: null,
@@ -86,11 +103,16 @@ export async function POST(req: NextRequest) {
             time: null,
             currency: null,
             marketState: null,
+            marketCap: null,
             ok: false,
           };
         }
       }),
     );
+    // Keep the cache from growing unbounded on a long-lived instance.
+    if (CACHE.size > 600) {
+      for (const [k, v] of CACHE) if (v.exp <= now) CACHE.delete(k);
+    }
 
     const quotes: Record<string, QuoteLite> = {};
     for (const r of results) quotes[r.symbol] = r;

@@ -223,7 +223,7 @@ export default function WatchlistPage() {
             <Bookmark className="w-8 h-8 text-indigo-600" /> Watchlists
           </h1>
           <p className="text-slate-500 mt-1 font-medium">
-            Organise ideas into lists — Indian, US, MarketSmith, Market Mojo &amp; MF Accumulation.
+            Organise the stocks you track into lists — Indian, US, commodities, crypto or your own.
           </p>
         </div>
         <div className="flex gap-3">

@@ -423,10 +423,10 @@ export default function MarketsPage() {
                         {up ? "" : "-"}{fmt(q.change != null ? Math.abs(q.change) : null, cur)}
                         {q.changePct != null && <span className="ml-1">({up ? "" : "-"}{Math.abs(q.changePct).toFixed(2)}%)</span>}
                       </td>
-                      <td className="px-5 py-3.5 text-right tabular-nums text-slate-600 hidden md:table-cell">{fmt(q.dayHigh, cur)}</td>
-                      <td className="px-5 py-3.5 text-right tabular-nums text-slate-600 hidden md:table-cell">{fmt(q.dayLow, cur)}</td>
-                      <td className="px-5 py-3.5 text-right tabular-nums text-slate-600 hidden lg:table-cell">{fmt(q.open, cur)}</td>
-                      <td className="px-5 py-3.5 text-right tabular-nums text-slate-600 hidden lg:table-cell">{fmt(q.prevClose, cur)}</td>
+                      <td className="px-5 py-3.5 text-right tabular-nums text-slate-600 hidden md:table-cell">{fmt(q.dayHigh || null, cur)}</td>
+                      <td className="px-5 py-3.5 text-right tabular-nums text-slate-600 hidden md:table-cell">{fmt(q.dayLow || null, cur)}</td>
+                      <td className="px-5 py-3.5 text-right tabular-nums text-slate-600 hidden lg:table-cell">{fmt(q.open || null, cur)}</td>
+                      <td className="px-5 py-3.5 text-right tabular-nums text-slate-600 hidden lg:table-cell">{fmt(q.prevClose || null, cur)}</td>
                       <td className="pr-4">
                         {r.custom && (
                           <button

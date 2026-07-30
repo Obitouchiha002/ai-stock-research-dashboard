@@ -299,8 +299,56 @@ html, body {
 /* 8. Text selection + slim scrollbars — small premium touches. */
 ::selection { background: rgba(79, 70, 229, 0.14); }
 * { scrollbar-width: thin; scrollbar-color: #cbd5e1 transparent; }
+/* Fully hide scrollbars where we scroll intentionally (tickers, nav, tab rows) —
+   the class beats the global rule above, so no stray light bar shows. */
+.no-scrollbar, .hide-scrollbar { scrollbar-width: none !important; -ms-overflow-style: none !important; }
+.no-scrollbar::-webkit-scrollbar, .hide-scrollbar::-webkit-scrollbar { display: none !important; width: 0 !important; height: 0 !important; }
 ::-webkit-scrollbar { width: 8px; height: 8px; }
 ::-webkit-scrollbar-thumb { background: #cdd3db; border-radius: 8px; }
 ::-webkit-scrollbar-thumb:hover { background: #aab2bd; }
 .dark * { scrollbar-color: #475569 transparent; }
 .dark ::-webkit-scrollbar-thumb { background: #475569; }
+
+/* ============================================================
+   PROFESSIONAL POLISH — one calm, consistent design language
+   applied globally. CSS-only, no markup changes.
+   ============================================================ */
+
+/* 1. Calmer weight. font-black (900) everywhere read as shouty; a restrained
+      700/600 with tight tracking looks measured and professional, not loud. */
+.font-black { font-weight: 700; letter-spacing: -0.012em; }
+.font-bold  { font-weight: 600; }
+.font-semibold { font-weight: 550; }
+
+/* Page titles: a measured, professional scale — 30px black read too large;
+   these keep headings emphatic without shouting, consistent across pages. */
+.text-3xl { font-size: 1.625rem; line-height: 1.2; }
+.text-2xl { font-size: 1.4rem; line-height: 1.25; }
+
+/* 2. Softer, more consistent elevation. Flat, subtle shadows read
+      more modern than hard drop-shadows. */
+.shadow-sm { box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04), 0 1px 3px rgba(15, 23, 42, 0.03) !important; }
+.shadow-md { box-shadow: 0 2px 8px rgba(15, 23, 42, 0.06), 0 1px 3px rgba(15, 23, 42, 0.04) !important; }
+.shadow-lg { box-shadow: 0 8px 24px rgba(15, 23, 42, 0.08) !important; }
+.shadow-xl,
+.shadow-2xl { box-shadow: 0 16px 48px rgba(15, 23, 42, 0.12) !important; }
+
+/* 3. Consistent hairline borders — one grey, everywhere. */
+:root:not(.dark) .border-slate-200 { border-color: #e9edf3; }
+:root:not(.dark) .border-slate-100 { border-color: #f1f4f8; }
+
+/* 4. Keep small labels at their true size — the earlier upsizing made the UI
+      feel heavy. Native sizes read cleaner and more professional. */
+
+/* 5. Smooth, uniform interactions across the app. */
+button, a, [role="button"] { transition: background-color .15s ease, border-color .15s ease, color .15s ease, box-shadow .15s ease, transform .12s ease; }
+button:active, a[role="button"]:active { transform: translateY(0.5px); }
+
+/* 6. Cards lift a touch on hover — a subtle sign of interactivity. */
+.hover\:shadow-md:hover { box-shadow: 0 6px 20px rgba(15, 23, 42, 0.09) !important; }
+
+/* 7. Calm, consistent focus ring (keyboard users). */
+*:focus-visible { outline: 2px solid rgba(79, 70, 229, 0.45); outline-offset: 2px; border-radius: 6px; }
+
+/* 8. Slightly warmer page background — pure grey can feel clinical. */
+:root:not(.dark) body { background-color: #f7f8fa; }

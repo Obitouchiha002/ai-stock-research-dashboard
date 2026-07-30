@@ -16,8 +16,10 @@ import {
   BarChart3,
   AlertTriangle,
   Play,
+  Bitcoin,
 } from "lucide-react";
 import { ResponsiveContainer, AreaChart, Area } from "recharts";
+import { motion } from "motion/react";
 import { useGlobal } from "@/context/GlobalContext";
 
 // Market overview — live indices, split by market.
@@ -60,13 +62,13 @@ const MARKETS = {
     accent: "text-blue-600",
     tab: "bg-blue-600",
     indices: [
-      { symbol: "^GSPC", label: "S&P 500" },
-      { symbol: "^SP400", label: "S&P 400 (Mid)" },
-      { symbol: "^IXIC", label: "Nasdaq" },
       { symbol: "^DJI", label: "Dow Jones" },
+      { symbol: "^GSPC", label: "S&P 500" },
+      { symbol: "^IXIC", label: "Nasdaq" },
+      { symbol: "^SP400", label: "S&P 400 (Mid)" },
       { symbol: "^RUT", label: "Russell 2000" },
-      { symbol: "^VIX", label: "VIX" },
       { symbol: "DX-Y.NYB", label: "Dollar Index" },
+      { symbol: "^VIX", label: "VIX" },
     ],
     stocks: [
       { symbol: "AAPL", label: "Apple" },
@@ -83,13 +85,44 @@ const MARKETS = {
   },
 };
 
+// Advance/decline breadth baskets — a broad large-cap sample per market,
+// fetched separately so the header board stays fast. Live-verified symbols.
+const BREADTH = {
+  india: [
+    "RELIANCE.NS","HDFCBANK.NS","ICICIBANK.NS","INFY.NS","TCS.NS","ITC.NS","LT.NS","BHARTIARTL.NS",
+    "SBIN.NS","AXISBANK.NS","KOTAKBANK.NS","HINDUNILVR.NS","BAJFINANCE.NS","ASIANPAINT.NS","MARUTI.NS",
+    "SUNPHARMA.NS","TITAN.NS","ULTRACEMCO.NS","WIPRO.NS","NESTLEIND.NS","ONGC.NS","NTPC.NS","POWERGRID.NS",
+    "M&M.NS","TATAMOTORS.NS","TATASTEEL.NS","JSWSTEEL.NS","HCLTECH.NS","TECHM.NS","ADANIENT.NS",
+    "ADANIPORTS.NS","COALINDIA.NS","GRASIM.NS","HDFCLIFE.NS","SBILIFE.NS","BAJAJFINSV.NS","BAJAJ-AUTO.NS",
+    "EICHERMOT.NS","HEROMOTOCO.NS","DRREDDY.NS","CIPLA.NS","DIVISLAB.NS","BRITANNIA.NS","TATACONSUM.NS",
+    "INDUSINDBK.NS","APOLLOHOSP.NS","BPCL.NS","HINDALCO.NS","UPL.NS","SHREECEM.NS",
+  ],
+  us: [
+    "AAPL","MSFT","NVDA","GOOGL","AMZN","META","TSLA","AVGO","BRK-B","JPM","LLY","V","XOM","UNH","MA",
+    "JNJ","PG","HD","COST","MRK","ABBV","CVX","CRM","WMT","BAC","KO","PEP","ADBE","NFLX","AMD","TMO",
+    "MCD","CSCO","ACN","ABT","LIN","DHR","INTC","WFC","DIS","QCOM","VZ","TXN","PM","INTU","AMGN","IBM",
+    "CAT","GE","NOW",
+  ],
+};
+
 const CRYPTO = [
-  { symbol: "BTC-USD", label: "Bitcoin" },
-  { symbol: "ETH-USD", label: "Ethereum" },
-  { symbol: "SOL-USD", label: "Solana" },
-  { symbol: "BNB-USD", label: "BNB" },
-  { symbol: "XRP-USD", label: "XRP" },
-  { symbol: "DOGE-USD", label: "Dogecoin" },
+  { symbol: "BTC-USD", label: "Bitcoin", ticker: "BTC", glyph: "₿", grad: "from-orange-400 to-amber-500" },
+  { symbol: "ETH-USD", label: "Ethereum", ticker: "ETH", glyph: "Ξ", grad: "from-indigo-400 to-violet-500" },
+  { symbol: "SOL-USD", label: "Solana", ticker: "SOL", glyph: "◎", grad: "from-purple-400 to-fuchsia-500" },
+  { symbol: "BNB-USD", label: "BNB", ticker: "BNB", glyph: "⬡", grad: "from-yellow-400 to-amber-500" },
+  { symbol: "XRP-USD", label: "XRP", ticker: "XRP", glyph: "✕", grad: "from-sky-400 to-blue-500" },
+  { symbol: "DOGE-USD", label: "Dogecoin", ticker: "DOGE", glyph: "Ð", grad: "from-amber-400 to-yellow-500" },
+];
+
+// Top ticker strip — the market's headline instruments, live with sparklines.
+const TICKER = [
+  { symbol: "^NSEI", label: "NIFTY 50" },
+  { symbol: "^BSESN", label: "SENSEX" },
+  { symbol: "^NSEBANK", label: "BANK NIFTY" },
+  { symbol: "INR=X", label: "USD/INR" },
+  { symbol: "^DJI", label: "DOW" },
+  { symbol: "^IXIC", label: "NASDAQ" },
+  { symbol: "BTC-USD", label: "BITCOIN" },
 ];
 
 // Everything the board needs, fetched in one batch.
@@ -104,8 +137,10 @@ const MARKET_SYMBOLS = Array.from(
 );
 
 export default function Dashboard() {
-  const { profileName } = useGlobal();
-  const firstName = (profileName || "there").trim().split(" ")[0];
+  const { profileName, setMarket } = useGlobal();
+  const rawName = (profileName || "").trim();
+  // "John Doe" was the old placeholder default — treat it (and empty) as "no name set".
+  const firstName = rawName && rawName.toLowerCase() !== "john doe" ? rawName.split(" ")[0] : "";
   const [recentSearches, setRecentSearches] = useState<any[]>([]);
   const [watchlistCount, setWatchlistCount] = useState<number>(0);
   const [reportsCount, setReportsCount] = useState<number>(0);
@@ -118,6 +153,34 @@ export default function Dashboard() {
   const [myMovers, setMyMovers] = useState<any[]>([]);
   const [moversLoading, setMoversLoading] = useState(true);
   const [mktTab, setMktTab] = useState<"india" | "us">("india");
+  // Breadth quotes per market — fetched lazily when a tab is first opened.
+  const [breadth, setBreadth] = useState<Record<string, Record<string, any>>>({ india: {}, us: {} });
+
+  // Active market's breadth basket — loaded on tab view and then kept live in
+  // the background so the advance/decline read never goes stale.
+  useEffect(() => {
+    let cancelled = false;
+    const load = async () => {
+      try {
+        const res = await fetch("/api/quotes", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ symbols: BREADTH[mktTab] }),
+        });
+        const j = await res.json();
+        // Only overwrite on a real payload, so a hiccup never blanks the read.
+        if (!cancelled && j.quotes && Object.keys(j.quotes).length) {
+          setBreadth((b) => ({ ...b, [mktTab]: j.quotes }));
+        }
+      } catch {
+        /* the header still shows top-name breadth as a fallback */
+      }
+    };
+    load();
+    const id = setInterval(load, 30000);
+    return () => { cancelled = true; clearInterval(id); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [mktTab]);
 
   useEffect(() => {
     try {
@@ -132,10 +195,11 @@ export default function Dashboard() {
     }
   }, []);
 
-  // Fetch both markets in one batch call.
+  // Fetch both markets in one batch call, then keep them live in the background
+  // (silent — no spinner) so prices stay fresh without a manual refresh.
   useEffect(() => {
     let cancelled = false;
-    (async () => {
+    const load = async (silent: boolean) => {
       try {
         const res = await fetch("/api/quotes", {
           method: "POST",
@@ -144,15 +208,50 @@ export default function Dashboard() {
         });
         const j = await res.json();
         if (cancelled) return;
-        setMktQuotes(j.quotes || {});
-        setMktUpdated(Date.now());
+        // Only replace on a real payload so a transient failure never blanks
+        // the board — the last good prices simply stay on screen.
+        if (j.quotes && Object.keys(j.quotes).length) {
+          setMktQuotes(j.quotes);
+          setMktUpdated(Date.now());
+        }
       } catch {
-        /* leave as — */
+        /* keep the last good values */
       } finally {
-        if (!cancelled) setMktLoading(false);
+        if (!cancelled && !silent) setMktLoading(false);
       }
-    })();
-    return () => { cancelled = true; };
+    };
+    load(false);
+    const id = setInterval(() => load(true), 30000);
+    return () => { cancelled = true; clearInterval(id); };
+  }, []);
+
+  // Keep the global market (which drives the topbar ticker) in sync with the
+  // dashboard's India / US tab, starting from whatever tab is shown.
+  useEffect(() => {
+    setMarket(mktTab === "us" ? "US" : "NSE");
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Crypto 24h sparkline series for the compact crypto list.
+  const [cryptoSpark, setCryptoSpark] = useState<Record<string, any>>({});
+  useEffect(() => {
+    let cancelled = false;
+    const load = async () => {
+      try {
+        const res = await fetch("/api/spark", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ symbols: CRYPTO.map((c) => c.symbol) }),
+        });
+        const j = await res.json();
+        if (!cancelled && j.data && Object.keys(j.data).length) setCryptoSpark(j.data);
+      } catch {
+        /* list still shows price/change from the batch quote fetch */
+      }
+    };
+    load();
+    const id = setInterval(load, 60000);
+    return () => { cancelled = true; clearInterval(id); };
   }, []);
 
   // Biggest movers among the user's own watchlist + holdings, today.
@@ -204,7 +303,7 @@ export default function Dashboard() {
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
         <div>
           <h1 className="text-2xl font-bold text-slate-900 tracking-tight">
-            Welcome back, {firstName}
+            {firstName ? `Welcome back, ${firstName}` : "Welcome to StockAnalytix"}
           </h1>
           <p className="text-slate-500 text-sm">
             Here is what is happening in the markets today.
@@ -235,7 +334,7 @@ export default function Dashboard() {
             {(["india", "us"] as const).map((k) => (
               <button
                 key={k}
-                onClick={() => setMktTab(k)}
+                onClick={() => { setMktTab(k); setMarket(k === "us" ? "US" : "NSE"); }}
                 className={`px-4 py-2 rounded-lg text-[13px] font-black transition flex items-center gap-1.5 ${
                   mktTab === k ? `${MARKETS[k].tab} text-white shadow-sm` : "text-slate-500 hover:text-slate-700"
                 }`}
@@ -257,102 +356,263 @@ export default function Dashboard() {
         {(() => {
           const m = MARKETS[mktTab];
 
-          // Advance / decline read, computed from THIS market's top constituents.
-          const rows = m.stocks.map((s) => mktQuotes[s.symbol]).filter((q) => q?.ok && Number.isFinite(q.changePct));
+          // Advance / decline read, computed from a broad large-cap basket for
+          // this market (falls back to the top names until breadth loads).
+          const bq = breadth[mktTab] || {};
+          const breadthRows = Object.values(bq).filter((q: any) => q?.ok && Number.isFinite(q.changePct));
+          const rows: any[] = breadthRows.length
+            ? breadthRows
+            : m.stocks.map((s) => mktQuotes[s.symbol]).filter((q) => q?.ok && Number.isFinite(q.changePct));
+          const universeLabel = mktTab === "india" ? "Nifty large-caps" : "S&P 500 large-caps";
           const adv = rows.filter((q) => q.changePct > 0).length;
           const dec = rows.filter((q) => q.changePct < 0).length;
           const unch = rows.length - adv - dec;
           const total = Math.max(1, rows.length);
+          const breadthPct = (adv / total) * 100;
+
+          // KPI inputs — headline index, volatility, and the day's extremes.
+          const headIt = m.indices[0];
+          const headQ = mktQuotes[headIt.symbol];
+          const vixIt = m.indices.find((i) => /VIX/i.test(i.label));
+          const vixQ = vixIt ? mktQuotes[vixIt.symbol] : null;
+          const ranked = [...rows].sort((a, b) => b.changePct - a.changePct);
+          const topG = ranked[0];
+          const topL = ranked[ranked.length - 1];
+          const top5G = ranked.slice(0, 5);
+          const top5L = ranked.slice(-5).reverse();
+          const cur = headQ?.currency === "INR" ? "₹" : "$";
+          const lvl = (n: any, d = 2) =>
+            n == null ? "—" : Number(n).toLocaleString(undefined, { minimumFractionDigits: d, maximumFractionDigits: d });
 
           return (
-            <div className="space-y-5">
-              {/* indices */}
-              <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
-                {m.indices.map((it) => (
-                  <IndexCard key={it.symbol} it={it} q={mktQuotes[it.symbol]} loading={mktLoading} />
-                ))}
-              </div>
+            <div key={mktTab} className="space-y-5">
+              {/* KPI row — breadth + the day's extremes + volatility. No index
+                  dupes (the topbar ticker already shows every index live). */}
+              <motion.div
+                className="grid grid-cols-2 xl:grid-cols-4 gap-3"
+                initial={{ opacity: 0, y: 12 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.4, ease: "easeOut" }}
+              >
+                <StatCard
+                  title="Market Breadth"
+                  value={
+                    <span className="flex items-center gap-1">
+                      <span className="text-emerald-600">{adv}</span>
+                      <TrendingUp className="w-3.5 h-3.5 text-emerald-500" />
+                      <span className="text-slate-300 mx-0.5">·</span>
+                      <span className="text-rose-600">{dec}</span>
+                      <TrendingDown className="w-3.5 h-3.5 text-rose-500" />
+                    </span>
+                  }
+                  sub={`of ${total} large-caps${breadthRows.length ? "" : " · loading…"}`}
+                  right={<DonutRing pct={breadthPct} label={`${Math.round(breadthPct)}%`} />}
+                />
+                <StatCard
+                  title="Top Gainer"
+                  value={topG ? cleanSym(topG.symbol) : "—"}
+                  tone="emerald"
+                  sub={topG ? `+${topG.changePct.toFixed(2)}% · ${cur}${lvl(topG.price)}` : "—"}
+                />
+                <StatCard
+                  title="Top Loser"
+                  value={topL ? cleanSym(topL.symbol) : "—"}
+                  tone="rose"
+                  sub={topL ? `${topL.changePct.toFixed(2)}% · ${cur}${lvl(topL.price)}` : "—"}
+                />
+                <StatCard
+                  title={vixIt?.label || "Volatility"}
+                  value={vixQ?.price != null ? lvl(vixQ.price) : "—"}
+                  sub={
+                    vixQ?.changePct != null ? (
+                      <span className={vixQ.changePct >= 0 ? "text-rose-600" : "text-emerald-600"}>
+                        {vixQ.changePct >= 0 ? "+" : ""}{vixQ.changePct.toFixed(2)}% · fear gauge
+                      </span>
+                    ) : "fear gauge"
+                  }
+                />
+              </motion.div>
 
-              {/* advance / decline of the top constituents */}
-              <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-4">
-                <div className="flex flex-wrap items-center justify-between gap-2 mb-2.5">
-                  <h3 className="text-[12px] font-black uppercase tracking-wider text-slate-500">
-                    Advance / Decline · top {m.stocks.length} {m.title} stocks
-                  </h3>
-                  <div className="flex items-center gap-3 text-[12px] font-black tabular-nums">
-                    <span className="text-emerald-600">{adv} up</span>
-                    <span className="text-slate-400">{unch} flat</span>
-                    <span className="text-rose-600">{dec} down</span>
+              {/* Top Movers — the day's biggest gainers & losers. Actionable and
+                  unique to the dashboard (the ticker can't show this). */}
+              <motion.div
+                className="grid grid-cols-1 lg:grid-cols-2 gap-3"
+                initial={{ opacity: 0, y: 16 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.4, delay: 0.15, ease: "easeOut" }}
+              >
+                {([
+                  { title: "Top Gainers", list: top5G, up: true },
+                  { title: "Top Losers", list: top5L, up: false },
+                ] as const).map((col) => (
+                  <div key={col.title} className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+                    <div className="px-4 py-2.5 border-b border-slate-100 flex items-center gap-2">
+                      {col.up ? <TrendingUp className="w-4 h-4 text-emerald-600" /> : <TrendingDown className="w-4 h-4 text-rose-600" />}
+                      <h3 className="text-[12px] font-black uppercase tracking-wider text-slate-500">{col.title}</h3>
+                      <span className="ml-auto text-[10.5px] font-bold text-slate-400">{universeLabel}</span>
+                    </div>
+                    <div className="divide-y divide-slate-50">
+                      {col.list.length ? (
+                        col.list.map((r: any, i: number) => {
+                          const rup = (r.changePct ?? 0) >= 0;
+                          return (
+                            <Link
+                              key={r.symbol || i}
+                              href={`/analyze?symbol=${encodeURIComponent(r.symbol)}`}
+                              className="flex items-center justify-between gap-3 px-4 py-2.5 hover:bg-slate-50/70 transition group"
+                            >
+                              <div className="flex items-center gap-2.5 min-w-0">
+                                <span className="text-[11px] font-black text-slate-300 tabular-nums w-4 shrink-0">{i + 1}</span>
+                                <div className="min-w-0">
+                                  <div className="text-[13px] font-black text-slate-900 truncate group-hover:text-indigo-600">{cleanSym(r.symbol)}</div>
+                                  {r.name && <div className="text-[11px] text-slate-400 font-bold truncate">{r.name}</div>}
+                                </div>
+                              </div>
+                              <div className="text-right shrink-0">
+                                <div className="text-[13px] font-black text-slate-900 tabular-nums">{cur}{lvl(r.price)}</div>
+                                <div className={`text-[11px] font-bold tabular-nums ${rup ? "text-emerald-600" : "text-rose-600"}`}>
+                                  {rup ? "+" : ""}{r.changePct.toFixed(2)}%
+                                </div>
+                              </div>
+                            </Link>
+                          );
+                        })
+                      ) : (
+                        <div className="px-4 py-8 text-center text-[12px] text-slate-400 font-medium">Loading movers…</div>
+                      )}
+                    </div>
                   </div>
-                </div>
-                <div className="flex h-3 rounded-full overflow-hidden bg-slate-100">
-                  <div className="bg-emerald-500" style={{ width: `${(adv / total) * 100}%` }} title={`${adv} advancing`} />
-                  <div className="bg-slate-300" style={{ width: `${(unch / total) * 100}%` }} title={`${unch} unchanged`} />
-                  <div className="bg-rose-500" style={{ width: `${(dec / total) * 100}%` }} title={`${dec} declining`} />
-                </div>
-                <p className="text-[11px] text-slate-400 mt-2">
-                  Breadth of the market&apos;s biggest names right now — {adv} of {rows.length} are up on the day.
-                </p>
-              </div>
+                ))}
+              </motion.div>
 
-              {/* top constituents table */}
-              <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+              {/* top constituents — proper columns so the row's width is used:
+                  Rank · Company · CMP · Market Cap · Change% */}
+              <motion.div
+                initial={{ opacity: 0, y: 16 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.4, delay: 0.32, ease: "easeOut" }}
+                className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden"
+              >
                 <div className="px-4 py-3 border-b border-slate-100 flex items-center justify-between">
                   <h3 className="text-[13px] font-black text-slate-800">
-                    Top 10 {m.title} companies
+                    Top 10 {m.title} companies · by market cap
                   </h3>
                   <span className="text-[11px] text-slate-400 font-bold">tap to analyse</span>
+                </div>
+                {/* column header (hidden on phones — the card layout stacks) */}
+                <div className="hidden sm:grid grid-cols-[2.5rem_1.8fr_1.2fr_1.2fr_1fr_1.25rem] items-center gap-4 px-4 py-2 border-b border-slate-100 bg-slate-50/60 text-[10.5px] font-black uppercase tracking-wider text-slate-400">
+                  <span>#</span>
+                  <span>Company</span>
+                  <span className="text-right">CMP</span>
+                  <span className="text-right">Market Cap</span>
+                  <span className="text-right">Change</span>
+                  <span />
                 </div>
                 <div className="divide-y divide-slate-50">
                   {m.stocks.map((s, i) => {
                     const q = mktQuotes[s.symbol];
                     const up = (q?.changePct ?? 0) >= 0;
                     const cur = q?.currency === "INR" ? "₹" : "$";
+                    const cmp = q?.price != null ? `${cur}${Number(q.price).toLocaleString(undefined, { maximumFractionDigits: 2 })}` : mktLoading ? "…" : "—";
                     return (
                       <Link
                         key={s.symbol}
                         href={`/analyze?symbol=${encodeURIComponent(s.symbol)}`}
-                        className="flex items-center gap-3 px-4 py-2.5 hover:bg-slate-50/70 transition group"
+                        className="grid grid-cols-[2rem_1fr_auto_1rem] sm:grid-cols-[2.5rem_1.8fr_1.2fr_1.2fr_1fr_1.25rem] items-center gap-4 px-4 py-2.5 hover:bg-slate-50/70 transition group"
                       >
-                        <span className="w-5 text-[12px] font-black text-slate-300 tabular-nums">{i + 1}</span>
-                        <div className="flex-1 min-w-0">
+                        <span className="text-[12px] font-black text-slate-300 tabular-nums">{i + 1}</span>
+                        <div className="min-w-0">
                           <div className="text-[13.5px] font-black text-slate-900 truncate group-hover:text-indigo-600">
                             {s.label}
                           </div>
                           <div className="text-[11px] text-slate-400 font-bold">{s.symbol.replace(".NS", "")}</div>
                         </div>
-                        <div className="text-right">
-                          <div className="text-[13.5px] font-black text-slate-900 tabular-nums">
-                            {q?.price != null ? `${cur}${Number(q.price).toLocaleString(undefined, { maximumFractionDigits: 2 })}` : mktLoading ? "…" : "—"}
-                          </div>
+
+                        {/* CMP — its own column on sm+, stacked into the price cell on mobile */}
+                        <div className="text-right sm:hidden">
+                          <div className="text-[13.5px] font-black text-slate-900 tabular-nums">{cmp}</div>
                           {q?.changePct != null && (
                             <div className={`text-[11.5px] font-black tabular-nums ${up ? "text-emerald-600" : "text-rose-600"}`}>
                               {up ? "+" : ""}{q.changePct.toFixed(2)}%
                             </div>
                           )}
+                          {q?.marketCap ? <div className="text-[10.5px] text-slate-400 font-bold">{fmtCap(q.marketCap, cur)}</div> : null}
                         </div>
+
+                        <div className="hidden sm:block text-right text-[13.5px] font-black text-slate-900 tabular-nums">{cmp}</div>
+                        <div className="hidden sm:block text-right text-[12.5px] font-bold text-slate-500 tabular-nums">
+                          {q?.marketCap ? fmtCap(q.marketCap, cur) : "—"}
+                        </div>
+                        <div className={`hidden sm:block text-right text-[13px] font-black tabular-nums ${up ? "text-emerald-600" : "text-rose-600"}`}>
+                          {q?.changePct != null ? `${up ? "+" : ""}${q.changePct.toFixed(2)}%` : "—"}
+                        </div>
+
                         <ChevronRight className="w-4 h-4 text-slate-300 group-hover:text-indigo-500 shrink-0" />
                       </Link>
                     );
                   })}
                 </div>
-              </div>
+              </motion.div>
             </div>
           );
         })()}
 
         {/* crypto — always visible, both markets share it */}
         <div>
-          <div className="flex items-center gap-3 mb-3">
-            <h2 className="text-[11px] font-black uppercase tracking-widest flex items-center gap-1.5 text-amber-600">
-              <span className="text-sm leading-none">🪙</span> Crypto
-            </h2>
-            <div className="flex-1 h-px bg-slate-200" />
+          <div className="flex items-center gap-3 mb-4">
+            <span className="shrink-0 w-9 h-9 rounded-xl bg-gradient-to-br from-amber-400 to-orange-500 text-white grid place-items-center shadow-sm">
+              <Bitcoin className="w-5 h-5" strokeWidth={2.5} />
+            </span>
+            <div className="min-w-0">
+              <h2 className="text-xl font-black text-slate-900 tracking-tight leading-none">Crypto</h2>
+              <p className="text-[12px] font-semibold text-slate-400 mt-0.5">Live prices · 24h trend</p>
+            </div>
+            <div className="flex-1 h-px bg-slate-200 ml-2" />
           </div>
-          <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-3 sm:gap-4">
-            {CRYPTO.map((it) => (
-              <IndexCard key={it.symbol} it={it} q={mktQuotes[it.symbol]} loading={mktLoading} money />
-            ))}
+
+          {/* Compact list — one row per coin, with a 24h sparkline */}
+          <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+            <div className="hidden sm:flex items-center gap-3 px-4 py-2 border-b border-slate-100 bg-slate-50/60 text-[10px] font-black uppercase tracking-wider text-slate-400">
+              <span className="w-8" />
+              <span className="flex-1">Coin</span>
+              <span className="w-28 text-right">Price</span>
+              <span className="w-20 text-right">24h</span>
+              <span className="w-20 text-right hidden md:block">Trend</span>
+            </div>
+            <div className="divide-y divide-slate-50">
+              {CRYPTO.map((c) => {
+                const s = cryptoSpark[c.symbol];
+                const q = mktQuotes[c.symbol];
+                const price = s?.price ?? q?.price ?? null;
+                const pct = s?.changePct ?? q?.changePct ?? null;
+                const up = (pct ?? 0) >= 0;
+                const dp = price != null && price < 10 ? 4 : 2;
+                return (
+                  <Link
+                    key={c.symbol}
+                    href={`/charts?symbol=${encodeURIComponent(c.symbol)}`}
+                    className="flex items-center gap-3 px-4 py-2.5 hover:bg-slate-50/70 transition group"
+                  >
+                    <span className={`shrink-0 w-8 h-8 rounded-full bg-gradient-to-br ${c.grad} text-white grid place-items-center text-[14px] font-black shadow-sm`}>
+                      {c.glyph}
+                    </span>
+                    <div className="flex-1 min-w-0">
+                      <div className="text-[13px] font-black text-slate-900 leading-tight group-hover:text-indigo-600">{c.ticker}</div>
+                      <div className="text-[11px] font-bold text-slate-400 truncate">{c.label}</div>
+                    </div>
+                    <div className="w-24 sm:w-28 text-right text-[14px] font-black text-slate-900 tabular-nums">
+                      {price != null ? `$${price.toLocaleString(undefined, { minimumFractionDigits: dp, maximumFractionDigits: dp })}` : mktLoading ? "…" : "—"}
+                    </div>
+                    <div className={`w-16 sm:w-20 text-right text-[12.5px] font-black tabular-nums ${up ? "text-emerald-600" : "text-rose-600"}`}>
+                      {pct != null ? `${up ? "+" : ""}${pct.toFixed(2)}%` : "—"}
+                    </div>
+                    <div className="w-20 justify-end hidden md:flex">
+                      <Sparkline data={s?.series || []} up={up} />
+                    </div>
+                  </Link>
+                );
+              })}
+            </div>
           </div>
         </div>
       </div>
@@ -515,7 +775,7 @@ export default function Dashboard() {
                         </td>
                         <td className="py-3">
                           <span
-                            className={`text-xs font-bold px-2 py-0.5 rounded-md ${s.change?.startsWith("-") ? "bg-rose-50 text-rose-600 border-rose-100" : "bg-emerald-50 text-emerald-600 border-emerald-100"} border`}
+                            className={`text-xs font-bold px-2 py-0.5 rounded-md ${String(s.change ?? "").startsWith("-") ? "bg-rose-50 text-rose-600 border-rose-100" : "bg-emerald-50 text-emerald-600 border-emerald-100"} border`}
                           >
                             {s.change || "N/A"}
                           </span>
@@ -628,6 +888,20 @@ export default function Dashboard() {
  * One market card — an index level or a crypto price.
  * `money` prefixes a currency symbol (crypto has a real price, an index is a level).
  */
+
+// Compact market-cap: ₹ in Lakh Cr / Cr, $ in T / B.
+function fmtCap(n: number, cur: string): string {
+  if (!n || n <= 0) return '';
+  if (cur === '₹') {
+    const cr = n / 1e7; // 1 crore = 10^7
+    if (cr >= 1e5) return `₹${(cr / 1e5).toFixed(2)}L Cr`;
+    return `₹${Math.round(cr).toLocaleString('en-IN')} Cr`;
+  }
+  if (n >= 1e12) return `$${(n / 1e12).toFixed(2)}T`;
+  if (n >= 1e9) return `$${(n / 1e9).toFixed(1)}B`;
+  return `$${(n / 1e6).toFixed(0)}M`;
+}
+
 function IndexCard({
   it,
   q,
@@ -651,13 +925,25 @@ function IndexCard({
   return (
     <Link
       href={`/charts?symbol=${encodeURIComponent(it.symbol)}`}
-      className="group bg-white rounded-xl border border-slate-200 p-3.5 shadow-sm hover:shadow-md hover:border-indigo-200 hover:-translate-y-0.5 transition-all"
+      className="group relative bg-white rounded-xl border border-slate-200 p-3 shadow-sm hover:shadow-md hover:border-indigo-200 transition-all overflow-hidden"
     >
-      <div className="flex items-center justify-between gap-1.5 mb-2">
-        <span className="text-[10px] font-black text-slate-400 tracking-wider uppercase truncate">{it.label}</span>
+      {/* direction accent along the top edge */}
+      <div className={`absolute inset-x-0 top-0 h-[2px] ${up ? "bg-emerald-400/80" : "bg-rose-400/80"}`} />
+
+      <div className="flex items-center justify-between gap-2 mb-1.5">
+        <div className="flex items-center gap-1.5 min-w-0">
+          <span
+            className={`shrink-0 w-6 h-6 rounded-md grid place-items-center ${
+              up ? "bg-emerald-50 text-emerald-600" : "bg-rose-50 text-rose-600"
+            }`}
+          >
+            {up ? <TrendingUp className="w-3.5 h-3.5" strokeWidth={2.5} /> : <TrendingDown className="w-3.5 h-3.5" strokeWidth={2.5} />}
+          </span>
+          <span className="text-[10px] font-black text-slate-500 tracking-wide uppercase truncate">{it.label}</span>
+        </div>
         {q?.changePct != null && (
           <span
-            className={`shrink-0 text-[10px] font-black px-1.5 py-0.5 rounded ${
+            className={`shrink-0 text-[10.5px] font-black px-1.5 py-0.5 rounded-full ${
               up ? "text-emerald-700 bg-emerald-50" : "text-rose-700 bg-rose-50"
             }`}
           >
@@ -666,8 +952,9 @@ function IndexCard({
           </span>
         )}
       </div>
+
       <div className="flex items-baseline gap-1.5 flex-wrap">
-        <span className="text-[21px] leading-none font-black text-slate-900 tabular-nums">
+        <span className="text-[18px] leading-none font-black text-slate-900 tabular-nums">
           {q?.price != null ? `${money ? cur : ""}${lvl(q.price, money && q.price < 10 ? 4 : 2)}` : loading ? "…" : "—"}
         </span>
         {q?.change != null && (
@@ -677,8 +964,193 @@ function IndexCard({
           </span>
         )}
       </div>
+
       {pos != null && (
-        <div className="mt-3">
+        <div className="mt-2.5">
+          <div className="relative h-1 rounded-full bg-slate-100 overflow-hidden">
+            <div
+              className={`absolute inset-y-0 left-0 rounded-full ${
+                up ? "bg-gradient-to-r from-emerald-300 to-emerald-500" : "bg-gradient-to-r from-rose-300 to-rose-500"
+              }`}
+              style={{ width: `${pos}%` }}
+            />
+          </div>
+          <div
+            className={`relative -mt-[7px] w-2.5 h-2.5 rounded-full bg-white shadow-sm ${up ? "ring-2 ring-emerald-500" : "ring-2 ring-rose-500"}`}
+            style={{ marginLeft: `calc(${pos}% - 5px)` }}
+          />
+          <div className="flex justify-between text-[9.5px] font-bold text-slate-400 mt-0.5 tabular-nums">
+            <span>L {lvl(lo, 0)}</span>
+            <span>H {lvl(hi, 0)}</span>
+          </div>
+        </div>
+      )}
+    </Link>
+  );
+}
+
+// Tiny inline SVG sparkline — normalised polyline, no axes, coloured by trend.
+function Sparkline({ data, up }: { data: number[]; up: boolean }) {
+  const w = 64, h = 22;
+  if (!data || data.length < 2) return <div style={{ width: w, height: h }} />;
+  const min = Math.min(...data), max = Math.max(...data);
+  const span = max - min || 1;
+  const pts = data
+    .map((v, i) => {
+      const x = (i / (data.length - 1)) * w;
+      const y = h - ((v - min) / span) * (h - 3) - 1.5;
+      return `${x.toFixed(1)},${y.toFixed(1)}`;
+    })
+    .join(" ");
+  const stroke = up ? "#34d399" : "#f87171";
+  return (
+    <svg width={w} height={h} viewBox={`0 0 ${w} ${h}`} className="shrink-0" preserveAspectRatio="none">
+      <polyline points={pts} fill="none" stroke={stroke} strokeWidth={1.5} strokeLinejoin="round" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+// Circular progress ring (breadth %) — the reference's donut, done in SVG.
+function DonutRing({ pct, label }: { pct: number; label: string }) {
+  const size = 44, r = 17, c = 2 * Math.PI * r, mid = size / 2;
+  const p = Math.max(0, Math.min(100, pct));
+  const tone = p >= 55 ? "#10b981" : p >= 45 ? "#f59e0b" : "#f43f5e";
+  return (
+    <div className="relative shrink-0" style={{ width: size, height: size }}>
+      <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} className="-rotate-90">
+        <circle cx={mid} cy={mid} r={r} fill="none" stroke="#eef1f6" strokeWidth={5} />
+        <circle
+          cx={mid} cy={mid} r={r} fill="none" stroke={tone} strokeWidth={5} strokeLinecap="round"
+          strokeDasharray={c} strokeDashoffset={c - (p / 100) * c}
+        />
+      </svg>
+      <div className="absolute inset-0 grid place-items-center">
+        <span className="text-[10.5px] font-black text-slate-900 tabular-nums">{label}</span>
+      </div>
+    </div>
+  );
+}
+
+// One KPI summary tile for the top stat row.
+function StatCard({
+  title, value, sub, tone = "slate", right,
+}: { title: string; value: React.ReactNode; sub?: React.ReactNode; tone?: "slate" | "emerald" | "rose"; right?: React.ReactNode }) {
+  const valTone = tone === "emerald" ? "text-emerald-600" : tone === "rose" ? "text-rose-600" : "text-slate-900";
+  return (
+    <div className="bg-white rounded-xl border border-slate-200 shadow-sm px-3.5 py-3 flex items-center justify-between gap-2">
+      <div className="min-w-0">
+        <div className="text-[10px] font-black uppercase tracking-wider text-slate-400 truncate">{title}</div>
+        <div className={`text-[16px] font-black tabular-nums mt-0.5 truncate ${valTone}`}>{value}</div>
+        {sub && <div className="text-[11px] font-bold text-slate-400 mt-0.5 truncate">{sub}</div>}
+      </div>
+      {right}
+    </div>
+  );
+}
+
+const cleanSym = (s: string) => String(s || "").replace(/^\^/, "").replace(/\.(NS|BO)$/i, "");
+
+/**
+ * Professional dark ticker strip — headline instruments with live price,
+ * day change and a mini sparkline. Sits at the very top of the dashboard.
+ */
+function TickerStrip({ spark }: { spark: Record<string, any> }) {
+  const fmtPx = (n: number, cur: string) => {
+    const d = n < 10 ? 4 : n < 1000 ? 2 : 2;
+    return `${cur === "INR" ? "₹" : cur === "USD" ? "$" : ""}${n.toLocaleString(undefined, { minimumFractionDigits: d, maximumFractionDigits: d })}`;
+  };
+  return (
+    <div className="rounded-2xl bg-slate-900 border border-slate-800 shadow-sm overflow-hidden">
+      <div className="flex gap-0 overflow-x-auto no-scrollbar divide-x divide-white/10">
+        {TICKER.map((t) => {
+          const s = spark[t.symbol];
+          const price = s?.price;
+          const pct = s?.changePct;
+          const up = (pct ?? 0) >= 0;
+          return (
+            <div key={t.symbol} className="flex items-center gap-3 px-4 py-2.5 shrink-0 min-w-[190px]">
+              <div className="min-w-0">
+                <div className="text-[10px] font-black uppercase tracking-wider text-slate-400 truncate">{t.label}</div>
+                <div className="flex items-baseline gap-1.5">
+                  <span className="text-[15px] font-black text-white tabular-nums">
+                    {price != null ? fmtPx(price, s?.currency || "") : "—"}
+                  </span>
+                  {pct != null && (
+                    <span className={`text-[11px] font-black tabular-nums ${up ? "text-emerald-400" : "text-rose-400"}`}>
+                      {up ? "+" : ""}{pct.toFixed(2)}%
+                    </span>
+                  )}
+                </div>
+              </div>
+              <Sparkline data={s?.series || []} up={up} />
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+/**
+ * Crypto price card — its own identity vs. the plain index cards:
+ * a coloured coin badge, the coin name + ticker, live price and 24h range.
+ */
+function CryptoCard({
+  it,
+  q,
+  loading,
+}: {
+  it: { symbol: string; label: string; ticker: string; glyph: string; grad: string };
+  q: any;
+  loading: boolean;
+}) {
+  const up = (q?.changePct ?? 0) >= 0;
+  const lvl = (n: any, d = 2) =>
+    n == null ? "—" : Number(n).toLocaleString(undefined, { minimumFractionDigits: d, maximumFractionDigits: d });
+  const lo = q?.dayLow, hi = q?.dayHigh, px = q?.price;
+  const pos =
+    lo != null && hi != null && px != null && hi > lo
+      ? Math.min(96, Math.max(4, ((px - lo) / (hi - lo)) * 100))
+      : null;
+  const dp = q?.price != null && q.price < 10 ? 4 : 2;
+  return (
+    <Link
+      href={`/charts?symbol=${encodeURIComponent(it.symbol)}`}
+      className="group bg-white rounded-xl border border-slate-200 p-3 shadow-sm hover:shadow-md hover:border-indigo-200 transition-all"
+    >
+      <div className="flex items-center justify-between gap-2 mb-2">
+        <div className="flex items-center gap-2 min-w-0">
+          <span
+            className={`shrink-0 w-7 h-7 rounded-full bg-gradient-to-br ${it.grad} text-white grid place-items-center text-[14px] font-black shadow-sm`}
+          >
+            {it.glyph}
+          </span>
+          <span className="text-[13px] font-black text-slate-900 tracking-wide truncate" title={it.label}>{it.ticker}</span>
+        </div>
+        {q?.changePct != null && (
+          <span
+            className={`shrink-0 text-[10.5px] font-black px-1.5 py-0.5 rounded ${
+              up ? "text-emerald-700 bg-emerald-50" : "text-rose-700 bg-rose-50"
+            }`}
+          >
+            {up ? "+" : ""}
+            {q.changePct.toFixed(2)}%
+          </span>
+        )}
+      </div>
+      <div className="flex items-baseline gap-1.5 flex-wrap">
+        <span className="text-[18px] leading-none font-black text-slate-900 tabular-nums">
+          {q?.price != null ? `$${lvl(q.price, dp)}` : loading ? "…" : "—"}
+        </span>
+        {q?.change != null && (
+          <span className={`text-[11px] font-bold tabular-nums ${up ? "text-emerald-600" : "text-rose-600"}`}>
+            {up ? "+" : ""}
+            {lvl(q.change, Math.abs(q.change) < 10 ? 4 : 2)}
+          </span>
+        )}
+      </div>
+      {pos != null && (
+        <div className="mt-2.5">
           <div className="relative h-1 rounded-full bg-slate-100">
             <div
               className={`absolute inset-y-0 left-0 rounded-full ${up ? "bg-emerald-400" : "bg-rose-400"}`}
@@ -691,9 +1163,9 @@ function IndexCard({
               style={{ left: `${pos}%` }}
             />
           </div>
-          <div className="flex justify-between text-[9px] font-bold text-slate-300 mt-1.5 tabular-nums">
-            <span>{lvl(lo, 0)}</span>
-            <span>{lvl(hi, 0)}</span>
+          <div className="flex justify-between text-[9.5px] font-bold text-slate-300 mt-1 tabular-nums">
+            <span>{lvl(lo, dp === 4 ? 4 : 0)}</span>
+            <span>{lvl(hi, dp === 4 ? 4 : 0)}</span>
           </div>
         </div>
       )}

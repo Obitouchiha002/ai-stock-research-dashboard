@@ -31,7 +31,7 @@ export function GlobalProvider({ children }: { children: React.ReactNode }) {
   };
   const [shouldRefresh, setShouldRefresh] = useState(0);
   const [theme, setThemeState] = useState<"light" | "dark">("light");
-  const [profileName, setProfileName] = useState<string>("John Doe");
+  const [profileName, setProfileName] = useState<string>("");
   const [profilePhoto, setProfilePhoto] = useState<string>("");
 
   useEffect(() => {

@@ -252,6 +252,17 @@ function AnalyzeContent() {
 
   // UI states
   const [activeTab, setActiveTab] = useState("overview");
+  // 15 tabs overwhelmed a normal user — show the 6 core ones, tuck the rest
+  // behind a "More" dropdown (same progressive-disclosure idea as the sidebar).
+  const [moreTabOpen, setMoreTabOpen] = useState(false);
+  const TAB_LABELS: Record<string, string> = {
+    overview: "Overview", "top-down": "Top Down", chart: "Chart", technical: "Technical",
+    fundamentals: "Fundamentals", valuation: "Valuation", momentum: "Momentum",
+    evaluation: "Evaluation", analytics: "Analytics", research: "Research", news: "News",
+    risk: "Risk", scorecard: "Scorecard", "ai-report": "AI Report", notes: "Notes",
+  };
+  const PRIMARY_TABS = ["overview", "chart", "technical", "momentum", "analytics", "risk"];
+  const MORE_TABS = ["fundamentals", "valuation", "scorecard", "news", "ai-report", "top-down", "evaluation", "research", "notes"];
   const [chartType, setChartType] = useState("Area");
   const [pdfGenerating, setPdfGenerating] = useState(false);
   // Momentum module: captured when the Momentum tab loads, reused in the PDF.
@@ -286,6 +297,8 @@ function AnalyzeContent() {
   const [patData, setPatData] = useState<any | null>(null);
   const [patInterval, setPatInterval] = useState<"1d" | "1wk">("1d");
   const [patView, setPatView] = useState<"today" | "window" | "chart" | "history">("today");
+  // Technical tab is huge — show one section at a time as a card, no long scroll.
+  const [techView, setTechView] = useState<"indicators" | "levels" | "strength" | "candle">("indicators");
   const [patLoading, setPatLoading] = useState(false);
   // Pivot-based support & resistance levels
   const [lvlData, setLvlData] = useState<any | null>(null);
@@ -1739,38 +1752,57 @@ function AnalyzeContent() {
             </div>
 
             <div className="flex flex-wrap items-center justify-between gap-3 mt-5 pt-4 sm:pt-5 border-t border-slate-100">
-              <div className="flex gap-1 sm:gap-2 overflow-x-auto no-scrollbar w-full sm:w-auto">
-                {[
-                  "overview",
-                  "top-down",
-                  "chart",
-                  "technical",
-                  "fundamentals",
-                  "valuation",
-                  "momentum",
-                  "evaluation",
-                  "analytics",
-                  "research",
-                  "news",
-                  "risk",
-                  "scorecard",
-                  "ai-report",
-                  "notes",
-                ].map((tab) => (
+              <div className="flex items-center gap-1.5 w-full sm:w-auto min-w-0">
+                <div className="flex gap-1 sm:gap-1.5 overflow-x-auto no-scrollbar min-w-0">
+                  {PRIMARY_TABS.map((tab) => (
+                    <button
+                      key={tab}
+                      onClick={() => setActiveTab(tab)}
+                      className={`px-3.5 py-2 text-[14px] font-bold rounded-lg transition-colors relative whitespace-nowrap ${activeTab === tab ? "text-indigo-700 bg-indigo-50" : "text-slate-500 hover:text-slate-800 hover:bg-slate-50"}`}
+                    >
+                      {TAB_LABELS[tab]}
+                      {activeTab === tab && (
+                        <motion.div
+                          layoutId="activetab"
+                          className="absolute bottom-0 left-0 right-0 h-0.5 bg-indigo-600 rounded-t-full"
+                        />
+                      )}
+                    </button>
+                  ))}
+                </div>
+                {/* More — the remaining deep-dive tabs, one click away */}
+                <div className="relative shrink-0">
                   <button
-                    key={tab}
-                    onClick={() => setActiveTab(tab)}
-                    className={`px-3 py-1.5 text-xs font-bold rounded-lg capitalize transition-colors relative whitespace-nowrap ${activeTab === tab ? "text-indigo-700 bg-indigo-50" : "text-slate-500 hover:text-slate-800 hover:bg-slate-50"}`}
+                    onClick={() => setMoreTabOpen((o) => !o)}
+                    className={`flex items-center gap-1 px-3.5 py-2 text-[14px] font-bold rounded-lg transition-colors whitespace-nowrap ${
+                      MORE_TABS.includes(activeTab) ? "text-indigo-700 bg-indigo-50" : "text-slate-500 hover:text-slate-800 hover:bg-slate-50"
+                    }`}
                   >
-                    {tab.replace("-", " ")}
-                    {activeTab === tab && (
-                      <motion.div
-                        layoutId="activetab"
-                        className="absolute bottom-0 left-0 right-0 h-0.5 bg-indigo-600 rounded-t-full"
-                      />
-                    )}
+                    {MORE_TABS.includes(activeTab) ? TAB_LABELS[activeTab] : "More"}
+                    <ChevronDown className={`w-4 h-4 transition-transform ${moreTabOpen ? "rotate-180" : ""}`} />
                   </button>
-                ))}
+                  {moreTabOpen && (
+                    <>
+                      <div className="fixed inset-0 z-30" onClick={() => setMoreTabOpen(false)} />
+                      <div className="absolute right-0 sm:left-0 top-full mt-2 z-40 w-56 bg-white rounded-2xl shadow-xl border border-slate-200 p-1.5 max-h-[65vh] overflow-y-auto">
+                        {MORE_TABS.map((tab) => (
+                          <button
+                            key={tab}
+                            onClick={() => {
+                              setActiveTab(tab);
+                              setMoreTabOpen(false);
+                            }}
+                            className={`w-full text-left px-4 py-2.5 text-[14px] font-bold rounded-lg transition-colors ${
+                              activeTab === tab ? "text-indigo-700 bg-indigo-50" : "text-slate-600 hover:bg-slate-50 hover:text-slate-900"
+                            }`}
+                          >
+                            {TAB_LABELS[tab]}
+                          </button>
+                        ))}
+                      </div>
+                    </>
+                  )}
+                </div>
               </div>
               <div className="hidden sm:flex gap-2 print:hidden">
                 <button
@@ -3206,28 +3238,97 @@ function AnalyzeContent() {
                 {/* TECHNICAL TAB */}
                 {activeTab === "technical" && (
                   <div className="space-y-6">
-                    <div className="flex items-center justify-between bg-white p-5 rounded-2xl border border-slate-200 shadow-sm">
-                      <div>
-                        <span className="text-slate-500 font-bold uppercase tracking-wider text-xs">
+                    {/* Compact score header — always on top */}
+                    <div className="flex items-center justify-between gap-3 bg-white px-4 py-3 rounded-xl border border-slate-200 shadow-sm">
+                      <div className="min-w-0">
+                        <span className="text-slate-400 font-black uppercase tracking-wider text-[10.5px]">
                           Technical Assessment
                         </span>
-                        <div className="text-xl font-bold text-slate-800 mt-1">
+                        <div className="text-[15px] font-black text-slate-800 leading-snug mt-0.5 truncate">
                           {data.technical.summary}
                         </div>
                       </div>
-                      <div className="text-right">
-                        <div className="text-3xl font-black text-indigo-600 font-mono tracking-tighter">
+                      <div className="shrink-0 flex items-baseline gap-0.5">
+                        <span className="text-2xl font-black text-indigo-600 font-mono tracking-tighter tabular-nums">
                           {data.technical.score}
-                          <span className="text-base text-slate-400">/25</span>
-                        </div>
+                        </span>
+                        <span className="text-[13px] font-bold text-slate-400">/25</span>
                       </div>
                     </div>
 
-                    {/* ---- SUPPORT & RESISTANCE ----
-                         Full width and laid out horizontally. Side by side with
-                         Relative Strength it left a tall empty column: S&R is a
-                         four-row table, RS is a chart plus a six-column table,
-                         so no grid row could ever fit both without dead space. */}
+                    {/* Section picker as premium cards — tap one to open its
+                        detail below. Fills the width and reads far richer than
+                        a row of plain pills. */}
+                    <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+                      {([
+                        { id: "indicators", title: "Indicators", desc: "RSI, MACD, moving averages & trend at a glance", icon: Activity, tint: "bg-indigo-50 text-indigo-600" },
+                        { id: "levels", title: "Support / Resistance", desc: "Key price levels the stock has turned at", icon: BarChart2, tint: "bg-rose-50 text-rose-600" },
+                        { id: "strength", title: "Price Strength", desc: "Performance vs its benchmark & peers", icon: TrendingUp, tint: "bg-teal-50 text-teal-600" },
+                        { id: "candle", title: "Candle Read", desc: "Today's candle & classical chart patterns", icon: CandlestickChart, tint: "bg-violet-50 text-violet-600" },
+                      ] as const).map((c) => {
+                        const Icon = c.icon;
+                        const active = techView === c.id;
+                        return (
+                          <button
+                            key={c.id}
+                            onClick={() => setTechView(c.id)}
+                            className={`group text-left rounded-2xl border p-4 transition-all ${
+                              active
+                                ? "border-indigo-300 bg-indigo-50/50 ring-1 ring-indigo-200 shadow-sm"
+                                : "border-slate-200 bg-white hover:border-indigo-200 hover:shadow-md hover:-translate-y-0.5"
+                            }`}
+                          >
+                            <div className="flex items-center justify-between">
+                              <span className={`w-10 h-10 rounded-xl grid place-items-center ${c.tint}`}>
+                                <Icon className="w-5 h-5" strokeWidth={2.4} />
+                              </span>
+                              <ChevronRight className={`w-4 h-4 transition-colors ${active ? "text-indigo-500" : "text-slate-300 group-hover:text-indigo-400"}`} />
+                            </div>
+                            <div className="mt-3 text-[15px] font-black text-slate-900 leading-tight">{c.title}</div>
+                            <p className="text-[11.5px] text-slate-500 mt-1 leading-snug">{c.desc}</p>
+                          </button>
+                        );
+                      })}
+                    </div>
+
+                    {techView === "indicators" && (
+                    <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-4 sm:p-5">
+                      <h3 className="text-[12px] font-black uppercase tracking-wider text-slate-400 mb-3">Key indicators</h3>
+                      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2.5">
+                      {([
+                        { icon: Activity, tint: "bg-indigo-50 text-indigo-600", label: "RSI (14)", value: data.technical.rsi, data: { title: "RSI (14)", value: data.technical.rsi, meaning: "Relative Strength Index measures momentum.", interpretation: "Above 70 is overbought, below 30 is oversold.", whyMatters: "Helps identify potential reversal points." } },
+                        { icon: LineChart, tint: "bg-violet-50 text-violet-600", label: "MACD", value: data.technical.macd, data: { title: "MACD", value: data.technical.macd, meaning: "Moving Average Convergence Divergence." } },
+                        { icon: TrendingUp, tint: "bg-sky-50 text-sky-600", label: "50 DMA", value: data.technical.dma50, data: { title: "50 DMA", value: data.technical.dma50, meaning: "50-day simple moving average.", whyMatters: "Represents medium-term trend line." } },
+                        { icon: TrendingUp, tint: "bg-blue-50 text-blue-600", label: "200 DMA", value: data.technical.dma200, data: { title: "200 DMA", value: data.technical.dma200, meaning: "200-day simple moving average.", whyMatters: "Represents long-term trend line." } },
+                        { icon: BarChart2, tint: "bg-amber-50 text-amber-600", label: "Volume Signal", value: data.technical.volumeView, data: { title: "Volume Signal", value: data.technical.volumeView, meaning: "Trading volume relative to recent average.", whyMatters: "Confirms price moves. High volume up-move is bullish." } },
+                        { icon: Zap, tint: "bg-emerald-50 text-emerald-600", label: "Trend Status", value: data.technical.trend, data: { title: "Trend Status", value: data.technical.trend, meaning: "Overall direction based on moving averages." } },
+                      ] as const).map((m, i) => {
+                        const Icon = m.icon;
+                        return (
+                          <button
+                            key={i}
+                            onClick={() => openDrawer(m.data)}
+                            className="group text-left flex items-center gap-2.5 rounded-xl border border-slate-200 bg-slate-50/50 px-3 py-2.5 hover:bg-white hover:border-indigo-300 hover:shadow-md transition"
+                          >
+                            <span className={`shrink-0 w-9 h-9 rounded-lg grid place-items-center ${m.tint}`}>
+                              <Icon className="w-[18px] h-[18px]" strokeWidth={2.4} />
+                            </span>
+                            <div className="min-w-0">
+                              <div className="text-[10px] font-black uppercase tracking-wider text-slate-400 truncate">
+                                {m.label}
+                              </div>
+                              <div className="text-[15px] font-black text-slate-900 leading-[1.15] line-clamp-2 group-hover:text-indigo-700 transition-colors">
+                                {m.value || "N/A"}
+                              </div>
+                            </div>
+                          </button>
+                        );
+                      })}
+                    </div>
+                    </div>
+                    )}
+
+                    {techView === "levels" && (
                     <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
                       <div className="px-5 py-4 border-b border-slate-100">
                         <h3 className="text-base font-black text-slate-800 flex items-center gap-2">
@@ -3306,8 +3407,9 @@ function AnalyzeContent() {
                       )}
                     </div>
 
-                    {/* ---- RELATIVE STRENGTH (full width — the chart and the
-                         six-column table both need the room) ---- */}
+                    )}
+
+                    {techView === "strength" && (
                     <div>
 
                       {/* Price Strength — stock vs benchmark and vs any peers */}
@@ -3650,7 +3752,10 @@ function AnalyzeContent() {
                       </div>
                     </div>
 
+                    )}
+
                     {/* ---- CANDLE READ: today, recent window, historical base rates ---- */}
+                    {techView === "candle" && (
                     <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
                       <div className="flex flex-wrap items-center justify-between gap-3 px-5 py-4 border-b border-slate-100">
                         <div>
@@ -4040,128 +4145,128 @@ function AnalyzeContent() {
                                     {ch.patterns.map((p: any, i: number) => {
                                       const tone =
                                         p.bias === "Bullish"
-                                          ? { card: "border-emerald-200 bg-emerald-50/40", chip: "bg-emerald-100 text-emerald-800", txt: "text-emerald-700" }
+                                          ? { rail: "bg-emerald-500", chip: "bg-emerald-100 text-emerald-800", banner: "bg-emerald-50 text-emerald-800 border-emerald-100", txt: "text-emerald-700", bar: "bg-emerald-500" }
                                           : p.bias === "Bearish"
-                                            ? { card: "border-rose-200 bg-rose-50/40", chip: "bg-rose-100 text-rose-800", txt: "text-rose-700" }
-                                            : { card: "border-slate-200 bg-slate-50/60", chip: "bg-slate-200 text-slate-700", txt: "text-slate-600" };
+                                            ? { rail: "bg-rose-500", chip: "bg-rose-100 text-rose-800", banner: "bg-rose-50 text-rose-800 border-rose-100", txt: "text-rose-700", bar: "bg-rose-500" }
+                                            : { rail: "bg-slate-400", chip: "bg-slate-200 text-slate-700", banner: "bg-slate-50 text-slate-700 border-slate-200", txt: "text-slate-600", bar: "bg-slate-400" };
                                       return (
-                                        <div key={i} className={`rounded-xl border p-4 ${tone.card}`}>
-                                          <div className="flex flex-wrap items-start justify-between gap-3 mb-2">
-                                            <div className="flex flex-wrap items-center gap-2">
-                                              <span className="text-[16px] font-black text-slate-900">{p.name}</span>
-                                              <span className={`px-2 py-0.5 rounded-md text-[11px] font-black ${tone.chip}`}>
-                                                {p.bias}
-                                              </span>
-                                              <span
-                                                className={`px-2 py-0.5 rounded-md text-[11px] font-black ${
-                                                  p.status === "Confirmed"
-                                                    ? "bg-indigo-100 text-indigo-800"
-                                                    : "bg-amber-100 text-amber-800"
-                                                }`}
-                                              >
-                                                {p.status === "Confirmed" ? "Broke out" : "Not broken out yet"}
-                                              </span>
-                                            </div>
-                                            {/* Dates are how a reader locates the pattern on the chart —
-                                                they were the smallest text on the card. */}
-                                            <div className="text-right shrink-0">
-                                              <div className="text-[14px] font-black text-slate-700 tabular-nums">
-                                                {p.from} → {p.to}
-                                              </div>
-                                              <div className="text-[12px] font-bold text-slate-400 tabular-nums">
-                                                {p.bars} bars
-                                                {p.brokeOn ? ` · broke ${p.brokeOn}` : ""}
-                                              </div>
-                                            </div>
-                                          </div>
+                                        <div key={i} className="relative overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+                                          {/* left accent rail keyed to the bias */}
+                                          <div className={`absolute inset-y-0 left-0 w-1.5 ${tone.rail}`} />
 
-                                          {/* One plain sentence saying what this
-                                              pattern is actually telling you now,
-                                              before any jargon. */}
-                                          <div className={`rounded-lg px-3.5 py-2.5 mb-2.5 ${tone.chip}`}>
-                                            <span className="text-[13.5px] font-black">
-                                              {p.status === "Confirmed"
-                                                ? p.after10dPct != null
-                                                  ? `Price closed ${p.bias === "Bullish" ? "above" : "below"} ${p.breakLevel.toFixed(2)} on ${p.brokeOn}, and over the next 10 bars it moved ${p.after10dPct >= 0 ? "+" : ""}${p.after10dPct.toFixed(1)}%.`
-                                                  : `Price closed ${p.bias === "Bullish" ? "above" : "below"} ${p.breakLevel.toFixed(2)} on ${p.brokeOn} — too recent to say what followed.`
-                                                : `The shape is complete but price has not closed ${p.bias === "Bullish" ? "above" : "below"} ${p.breakLevel.toFixed(2)} yet, so nothing is confirmed.`}
-                                            </span>
-                                          </div>
-
-                                          <p className="text-[13.5px] text-slate-700 leading-relaxed">{p.meaning}</p>
-
-                                          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-3 pt-3 border-t border-slate-200/70">
-                                            <div>
-                                              <div className="text-[11px] font-bold uppercase tracking-wide text-slate-500">
-                                                {p.breakLabel}
-                                              </div>
-                                              <div className="text-[16px] font-black text-slate-900 tabular-nums">
-                                                {p.breakLevel.toFixed(2)}
-                                              </div>
-                                            </div>
-                                            <div>
-                                              <div className="text-[11px] font-bold uppercase tracking-wide text-slate-500">
-                                                Measured move
-                                              </div>
-                                              <div className={`text-[16px] font-black tabular-nums ${tone.txt}`}>
-                                                {p.target != null ? p.target.toFixed(2) : "—"}
-                                              </div>
-                                            </div>
-                                            <div>
-                                              <div className="text-[11px] font-bold uppercase tracking-wide text-slate-500">
-                                                Shape quality
-                                              </div>
-                                              <div className="flex items-center gap-2 mt-1">
-                                                <div className="flex-1 h-2 bg-slate-200 rounded-full overflow-hidden">
-                                                  <div
-                                                    className={`h-full rounded-full ${
-                                                      p.quality >= 70 ? "bg-emerald-500" : p.quality >= 45 ? "bg-amber-500" : "bg-slate-400"
-                                                    }`}
-                                                    style={{ width: `${Math.max(0, Math.min(100, p.quality))}%` }}
-                                                  />
-                                                </div>
-                                                <span className="text-[13px] font-black text-slate-700 tabular-nums">
-                                                  {p.quality}
+                                          <div className="pl-5 pr-4 py-4 space-y-3.5">
+                                            {/* Header — pattern name + status pills on the left, timeline on the right */}
+                                            <div className="flex flex-wrap items-start justify-between gap-3">
+                                              <div className="flex flex-wrap items-center gap-2">
+                                                <span className="text-[17px] font-black text-slate-900 tracking-tight">{p.name}</span>
+                                                <span className={`px-2 py-0.5 rounded-full text-[11px] font-black ${tone.chip}`}>
+                                                  {p.bias}
+                                                </span>
+                                                <span
+                                                  className={`px-2 py-0.5 rounded-full text-[11px] font-black ${
+                                                    p.status === "Confirmed"
+                                                      ? "bg-indigo-100 text-indigo-800"
+                                                      : "bg-amber-100 text-amber-800"
+                                                  }`}
+                                                >
+                                                  {p.status === "Confirmed" ? "Broke out" : "Forming"}
                                                 </span>
                                               </div>
-                                            </div>
-                                            <div>
-                                              <div className="text-[11px] font-bold uppercase tracking-wide text-slate-500">
-                                                {p.brokeOn ? "What followed (10 bars)" : "Broke out on"}
+                                              <div className="text-right shrink-0">
+                                                <div className="text-[13px] font-black text-slate-600 tabular-nums">
+                                                  {p.from} → {p.to}
+                                                </div>
+                                                <div className="text-[11px] font-bold text-slate-400 tabular-nums">
+                                                  {p.bars} bars{p.brokeOn ? ` · broke ${p.brokeOn}` : ""}
+                                                </div>
                                               </div>
-                                              <div className="text-[16px] font-black tabular-nums">
-                                                {p.after10dPct != null ? (
-                                                  <span className={p.after10dPct >= 0 ? "text-emerald-600" : "text-rose-600"}>
-                                                    {p.after10dPct >= 0 ? "+" : ""}
-                                                    {p.after10dPct.toFixed(1)}%
-                                                  </span>
-                                                ) : p.brokeOn ? (
-                                                  <span className="text-slate-500 text-[13px]">too recent</span>
-                                                ) : (
-                                                  <span className="text-slate-400 text-[13px]">—</span>
-                                                )}
-                                              </div>
-                                              {p.brokeOn && (
-                                                <div className="text-[11px] text-slate-400 tabular-nums">broke {p.brokeOn}</div>
-                                              )}
                                             </div>
-                                          </div>
 
-                                          <div className="flex flex-wrap items-center gap-1.5 mt-3">
-                                            <span className="text-[11px] font-bold uppercase tracking-wide text-slate-400 mr-1">
-                                              Swing points
-                                            </span>
-                                            {p.points.map((pt: any, j: number) => (
-                                              <span
-                                                key={j}
-                                                className={`px-2 py-0.5 rounded-md text-[11px] font-bold tabular-nums ${
-                                                  pt.kind === "H" ? "bg-rose-100 text-rose-700" : "bg-emerald-100 text-emerald-700"
-                                                }`}
-                                                title={pt.date}
-                                              >
-                                                {pt.kind} {pt.price.toFixed(2)}
+                                            {/* Plain-language verdict — the hero line */}
+                                            <div className={`rounded-xl border px-3.5 py-2.5 ${tone.banner}`}>
+                                              <span className="text-[13.5px] font-black leading-snug">
+                                                {p.status === "Confirmed"
+                                                  ? p.after10dPct != null
+                                                    ? `Price closed ${p.bias === "Bullish" ? "above" : "below"} ${p.breakLevel.toFixed(2)} on ${p.brokeOn}, and over the next 10 bars it moved ${p.after10dPct >= 0 ? "+" : ""}${p.after10dPct.toFixed(1)}%.`
+                                                    : `Price closed ${p.bias === "Bullish" ? "above" : "below"} ${p.breakLevel.toFixed(2)} on ${p.brokeOn} — too recent to say what followed.`
+                                                  : `The shape is complete but price has not closed ${p.bias === "Bullish" ? "above" : "below"} ${p.breakLevel.toFixed(2)} yet, so nothing is confirmed.`}
                                               </span>
-                                            ))}
+                                            </div>
+
+                                            <p className="text-[13px] text-slate-600 leading-relaxed">{p.meaning}</p>
+
+                                            {/* Metrics as four discrete stat tiles — read as cards, not drifting numbers */}
+                                            <div className="grid grid-cols-2 lg:grid-cols-4 gap-2.5">
+                                              <div className="rounded-xl border border-slate-200 bg-slate-50/70 px-3 py-2.5">
+                                                <div className="text-[10.5px] font-bold uppercase tracking-wide text-slate-500 truncate">
+                                                  {p.breakLabel}
+                                                </div>
+                                                <div className="text-[17px] font-black text-slate-900 tabular-nums mt-0.5">
+                                                  {p.breakLevel.toFixed(2)}
+                                                </div>
+                                              </div>
+                                              <div className="rounded-xl border border-slate-200 bg-slate-50/70 px-3 py-2.5">
+                                                <div className="text-[10.5px] font-bold uppercase tracking-wide text-slate-500">
+                                                  Measured move
+                                                </div>
+                                                <div className={`text-[17px] font-black tabular-nums mt-0.5 ${tone.txt}`}>
+                                                  {p.target != null ? p.target.toFixed(2) : "—"}
+                                                </div>
+                                              </div>
+                                              <div className="rounded-xl border border-slate-200 bg-slate-50/70 px-3 py-2.5">
+                                                <div className="text-[10.5px] font-bold uppercase tracking-wide text-slate-500">
+                                                  Shape quality
+                                                </div>
+                                                <div className="flex items-center gap-2 mt-1.5">
+                                                  <div className="flex-1 h-2 bg-slate-200 rounded-full overflow-hidden">
+                                                    <div
+                                                      className={`h-full rounded-full ${
+                                                        p.quality >= 70 ? "bg-emerald-500" : p.quality >= 45 ? "bg-amber-500" : "bg-slate-400"
+                                                      }`}
+                                                      style={{ width: `${Math.max(0, Math.min(100, p.quality))}%` }}
+                                                    />
+                                                  </div>
+                                                  <span className="text-[13px] font-black text-slate-700 tabular-nums">
+                                                    {p.quality}
+                                                  </span>
+                                                </div>
+                                              </div>
+                                              <div className="rounded-xl border border-slate-200 bg-slate-50/70 px-3 py-2.5">
+                                                <div className="text-[10.5px] font-bold uppercase tracking-wide text-slate-500 truncate">
+                                                  {p.brokeOn ? "What followed (10 bars)" : "Broke out on"}
+                                                </div>
+                                                <div className="text-[17px] font-black tabular-nums mt-0.5">
+                                                  {p.after10dPct != null ? (
+                                                    <span className={p.after10dPct >= 0 ? "text-emerald-600" : "text-rose-600"}>
+                                                      {p.after10dPct >= 0 ? "+" : ""}
+                                                      {p.after10dPct.toFixed(1)}%
+                                                    </span>
+                                                  ) : p.brokeOn ? (
+                                                    <span className="text-slate-500 text-[13px]">too recent</span>
+                                                  ) : (
+                                                    <span className="text-slate-400 text-[13px]">—</span>
+                                                  )}
+                                                </div>
+                                              </div>
+                                            </div>
+
+                                            {/* Swing points footer */}
+                                            <div className="flex flex-wrap items-center gap-1.5 pt-1">
+                                              <span className="text-[10.5px] font-bold uppercase tracking-wide text-slate-400 mr-1">
+                                                Swing points
+                                              </span>
+                                              {p.points.map((pt: any, j: number) => (
+                                                <span
+                                                  key={j}
+                                                  className={`px-2 py-0.5 rounded-md text-[11px] font-bold tabular-nums ${
+                                                    pt.kind === "H" ? "bg-rose-100 text-rose-700" : "bg-emerald-100 text-emerald-700"
+                                                  }`}
+                                                  title={pt.date}
+                                                >
+                                                  {pt.kind} {pt.price.toFixed(2)}
+                                                </span>
+                                              ))}
+                                            </div>
                                           </div>
                                         </div>
                                       );
@@ -4271,91 +4376,7 @@ function AnalyzeContent() {
                         guaranteed prediction. Always verify data independently.
                       </div>
                     </div>
-                    <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-4">
-                      <MetricCard
-                        title="RSI (14)"
-                        value={data.technical.rsi}
-                        onClickData={{
-                          title: "RSI (14)",
-                          value: data.technical.rsi,
-                          meaning: "Relative Strength Index measures momentum.",
-                          interpretation:
-                            "Above 70 is overbought, below 30 is oversold.",
-                          whyMatters:
-                            "Helps identify potential reversal points.",
-                        }}
-                      />
-                      <MetricCard
-                        title="MACD"
-                        value={data.technical.macd}
-                        onClickData={{
-                          title: "MACD",
-                          value: data.technical.macd,
-                          meaning: "Moving Average Convergence Divergence.",
-                        }}
-                      />
-                      <MetricCard
-                        title="50 DMA"
-                        value={data.technical.dma50}
-                        onClickData={{
-                          title: "50 DMA",
-                          value: data.technical.dma50,
-                          meaning: "50-day simple moving average.",
-                          whyMatters: "Represents medium-term trend line.",
-                        }}
-                      />
-                      <MetricCard
-                        title="200 DMA"
-                        value={data.technical.dma200}
-                        onClickData={{
-                          title: "200 DMA",
-                          value: data.technical.dma200,
-                          meaning: "200-day simple moving average.",
-                          whyMatters: "Represents long-term trend line.",
-                        }}
-                      />
-                      <MetricCard
-                        title="Support 1"
-                        value={data.technical.support}
-                        onClickData={{
-                          title: "Support Level",
-                          value: data.technical.support,
-                          meaning:
-                            "Level where price historically stops falling.",
-                        }}
-                      />
-                      <MetricCard
-                        title="Resistance 1"
-                        value={data.technical.resistance}
-                        onClickData={{
-                          title: "Resistance Level",
-                          value: data.technical.resistance,
-                          meaning:
-                            "Level where price historically stops rising.",
-                        }}
-                      />
-                      <MetricCard
-                        title="Volume Signal"
-                        value={data.technical.volumeView}
-                        onClickData={{
-                          title: "Volume Signal",
-                          value: data.technical.volumeView,
-                          meaning: "Trading volume relative to recent average.",
-                          whyMatters:
-                            "Confirms price moves. High volume up-move is bullish.",
-                        }}
-                      />
-                      <MetricCard
-                        title="Trend Status"
-                        value={data.technical.trend}
-                        onClickData={{
-                          title: "Trend Status",
-                          value: data.technical.trend,
-                          meaning:
-                            "Overall direction based on moving averages.",
-                        }}
-                      />
-                    </div>
+                    )}
                   </div>
                 )}
 

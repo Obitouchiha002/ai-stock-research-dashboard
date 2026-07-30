@@ -37,7 +37,7 @@ export default function ScreenerPage() {
       <div className="flex flex-col md:flex-row md:items-center justify-between mb-8 gap-4">
         <div>
           <h1 className="text-3xl font-black text-slate-900 tracking-tight flex items-center gap-2">
-            <Filter className="w-8 h-8 text-indigo-600" /> Screener (MVP)
+            <Filter className="w-8 h-8 text-indigo-600" /> Screener
           </h1>
           <p className="text-slate-500 mt-1 font-medium">
             Filter through your locally analyzed, saved, and watched stocks.

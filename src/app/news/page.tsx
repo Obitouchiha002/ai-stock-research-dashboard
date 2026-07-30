@@ -198,34 +198,49 @@ export default function NewsPage() {
       ) : (
         <>
           {message && <div className="mb-3 text-xs text-amber-600 font-medium">{message}</div>}
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
             {news.map((n, i) => {
               const sm = sentimentMeta[n.sentiment] || sentimentMeta.Neutral;
+              // A single coloured left accent conveys sentiment at a glance —
+              // clearer than a row of four competing badges.
+              const accent =
+                n.sentiment === "Positive" ? "border-l-emerald-500"
+                : n.sentiment === "Negative" ? "border-l-rose-500"
+                : "border-l-slate-300";
               return (
                 <a
                   key={i}
                   href={n.url}
                   target="_blank"
                   rel="noreferrer"
-                  className="bg-white border border-slate-200 rounded-2xl p-5 hover:shadow-md hover:border-indigo-200 transition group flex flex-col"
+                  className={`bg-white border border-slate-200 border-l-4 ${accent} rounded-xl p-4 sm:p-5 hover:shadow-md hover:border-indigo-200 transition group flex flex-col`}
                 >
-                  <div className="flex items-center gap-2 mb-2 flex-wrap">
-                    {n.symbol && (
-                      <span className="text-[10px] font-bold px-2 py-0.5 bg-indigo-50 text-indigo-700 rounded uppercase tracking-wider">
-                        {n.symbol}
-                      </span>
-                    )}
-                    <span className={`text-[10px] font-bold px-2 py-0.5 rounded border inline-flex items-center gap-1 ${sm.color}`}>
-                      <sm.Icon className="w-3 h-3" /> {n.sentiment}
-                    </span>
-                    <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-slate-100 text-slate-600">{n.category}</span>
-                    <span className={`text-[10px] font-bold px-2 py-0.5 rounded ${impactColor[n.impact]}`}>{n.impact}</span>
-                  </div>
-                  <h3 className="font-bold text-slate-900 leading-snug mb-3 group-hover:text-indigo-600 transition line-clamp-3">
+                  {/* headline first — it's what the reader is here for */}
+                  <h3 className="text-[15px] sm:text-[16px] font-black text-slate-900 leading-snug group-hover:text-indigo-600 transition line-clamp-3">
                     {n.title}
                   </h3>
-                  <div className="mt-auto pt-3 border-t border-slate-100 flex items-center justify-between">
-                    <span className="text-xs font-semibold text-slate-500 truncate pr-2">
+
+                  {/* one meta row: sentiment + symbol/category, muted */}
+                  <div className="flex flex-wrap items-center gap-1.5 mt-2.5">
+                    <span className={`text-[11px] font-black inline-flex items-center gap-1 ${sm.color.split(" ").filter((c: string) => c.startsWith("text-")).join(" ") || "text-slate-500"}`}>
+                      <sm.Icon className="w-3.5 h-3.5" /> {n.sentiment}
+                    </span>
+                    {n.symbol && (
+                      <>
+                        <span className="text-slate-300">·</span>
+                        <span className="text-[11px] font-black text-indigo-600 uppercase tracking-wide">{n.symbol}</span>
+                      </>
+                    )}
+                    {n.category && (
+                      <>
+                        <span className="text-slate-300">·</span>
+                        <span className="text-[11px] font-bold text-slate-400">{n.category}</span>
+                      </>
+                    )}
+                  </div>
+
+                  <div className="mt-auto pt-3 flex items-center justify-between text-[12px]">
+                    <span className="font-bold text-slate-500 truncate pr-2">
                       {n.source}{n.timeAgo ? ` · ${n.timeAgo}` : ""}
                     </span>
                     <ExternalLink className="w-4 h-4 text-slate-300 group-hover:text-indigo-500 transition shrink-0" />

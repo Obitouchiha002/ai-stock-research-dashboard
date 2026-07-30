@@ -4,6 +4,7 @@ import React, { useState, useEffect, Suspense } from "react";
 import Link from "next/link";
 import GlobalNotes from "@/components/GlobalNotes";
 import VoiceTyping from "@/components/VoiceTyping";
+import PriceAlertMonitor from "@/components/PriceAlertMonitor";
 import { usePathname, useRouter } from "next/navigation";
 import {
   LayoutDashboard,
@@ -30,6 +31,8 @@ import {
   Settings,
   ChevronLeft,
   ChevronRight,
+  ChevronDown,
+  LayoutGrid,
   Search,
   RefreshCw,
   Moon,
@@ -49,6 +52,24 @@ import {
   getAlerts,
 } from "@/lib/storage";
 
+// Headline indices for the dark topbar ticker — switches with the market.
+const TICKER_INDIA = [
+  { symbol: "^NSEI", label: "NIFTY 50" },
+  { symbol: "^BSESN", label: "SENSEX" },
+  { symbol: "^NSEBANK", label: "BANK NIFTY" },
+  { symbol: "NIFTY_MIDCAP_100.NS", label: "NIFTY MIDCAP" },
+  { symbol: "^CNXSC", label: "NIFTY SMALLCAP" },
+  { symbol: "^INDIAVIX", label: "INDIA VIX" },
+];
+const TICKER_US = [
+  { symbol: "^DJI", label: "DOW" },
+  { symbol: "^GSPC", label: "S&P 500" },
+  { symbol: "^IXIC", label: "NASDAQ" },
+  { symbol: "^RUT", label: "RUSSELL 2K" },
+  { symbol: "DX-Y.NYB", label: "DOLLAR" },
+  { symbol: "^VIX", label: "VIX" },
+];
+
 // Phone bottom bar — the five most-used destinations.
 const BOTTOM_TABS = [
   { name: "Home", href: "/dashboard", icon: LayoutDashboard },
@@ -58,56 +79,52 @@ const BOTTOM_TABS = [
   { name: "Portfolio", href: "/portfolio", icon: Briefcase },
 ];
 
-// Grouped into sections so a long list reads cleanly instead of one flat wall.
-const NAV_GROUPS = [
+// The short, everyday primary nav — what a normal user actually opens daily.
+// Everything advanced lives one click away under "More tools" so the rail
+// reads as ~7 items instead of an overwhelming wall of 22.
+const PRIMARY_NAV = [
+  { name: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
+  { name: "Analyze Stock", href: "/analyze", icon: Activity },
+  { name: "Chart Analytics", href: "/charts", icon: CandlestickChart },
+  { name: "Markets", href: "/markets", icon: Globe },
+  { name: "Watchlist", href: "/watchlist", icon: Star },
+  { name: "Portfolio", href: "/portfolio", icon: Briefcase },
+  { name: "Market News", href: "/news", icon: Newspaper },
+];
+
+// Power-user destinations, still grouped, revealed under "More tools".
+const MORE_GROUPS = [
   {
-    label: "Research",
+    label: "Research tools",
     items: [
-      { name: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
-      { name: "Analyze Stock", href: "/analyze", icon: Activity },
-      { name: "Chart Analytics", href: "/charts", icon: CandlestickChart },
-      { name: "Markets", href: "/markets", icon: Globe },
       { name: "Screener", href: "/screener", icon: Filter },
       { name: "Compare Stocks", href: "/compare", icon: ArrowLeftRight },
-    ],
-  },
-  {
-    label: "My Stocks",
-    items: [
-      { name: "Watchlist", href: "/watchlist", icon: Star },
-      { name: "Portfolio", href: "/portfolio", icon: Briefcase },
-      { name: "Trend Alerts", href: "/trend-alerts", icon: TrendingUp },
-      { name: "Alerts", href: "/alerts", icon: Bell },
-    ],
-  },
-  {
-    label: "Insights",
-    items: [
-      { name: "Market News", href: "/news", icon: Newspaper },
-      { name: "Daily Digest", href: "/digest", icon: CalendarClock },
       { name: "AI Research Chat", href: "/ai-chat", icon: MessageSquare },
       { name: "Document Research", href: "/research", icon: ScanSearch },
     ],
   },
   {
-    label: "Import & Notes",
+    label: "Alerts & digest",
+    items: [
+      { name: "Trend Alerts", href: "/trend-alerts", icon: TrendingUp },
+      { name: "Price Alerts", href: "/alerts", icon: Bell },
+      { name: "Daily Digest", href: "/digest", icon: CalendarClock },
+    ],
+  },
+  {
+    label: "Import & notes",
     items: [
       { name: "Import Report", href: "/import", icon: Upload },
       { name: "Import Excel", href: "/sheets", icon: FileSpreadsheet },
       { name: "Prompt Library", href: "/prompts", icon: BookMarked },
       { name: "Master Notes", href: "/notes", icon: StickyNote },
       { name: "Saved Reports", href: "/reports", icon: FileText },
-    ],
-  },
-  {
-    label: "System",
-    items: [
       { name: "AI Usage", href: "/ai-usage", icon: Gauge },
-      { name: "Settings", href: "/settings", icon: Settings },
-      { name: "QA / Diagnostics", href: "/qa", icon: CheckSquare },
     ],
   },
 ];
+
+const MORE_HREFS = MORE_GROUPS.flatMap((g) => g.items.map((i) => i.href));
 
 export function AppShell({ children }: { children: React.ReactNode }) {
   const [isCollapsed, setIsCollapsed] = useState(false);
@@ -125,9 +142,80 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     [],
   );
   const [searchFocused, setSearchFocused] = useState(false);
+  // Dark topbar: live index ticker + IST clock / market-open status.
+  const [ticker, setTicker] = useState<Record<string, any>>({});
+  const [istTime, setIstTime] = useState("");
+  const [marketOpen, setMarketOpen] = useState(false);
+
+  // Live ticker for the topbar — India or US set, switches with the market.
+  const tickerList = market === "US" ? TICKER_US : TICKER_INDIA;
+  const tickerSymbols = tickerList.map((t) => t.symbol).join(",");
+  useEffect(() => {
+    let cancelled = false;
+    const load = async () => {
+      try {
+        const res = await fetch("/api/quotes", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ symbols: tickerSymbols.split(",") }),
+        });
+        const j = await res.json();
+        if (!cancelled && j.quotes && Object.keys(j.quotes).length) setTicker(j.quotes);
+      } catch {
+        /* keep last values */
+      }
+    };
+    load();
+    const id = setInterval(load, 30000);
+    return () => { cancelled = true; clearInterval(id); };
+  }, [tickerSymbols]);
+
+  // IST clock + NSE/BSE open status (Mon–Fri, 09:15–15:30 IST; holidays aside).
+  useEffect(() => {
+    const tick = () => {
+      const ist = new Date(new Date().toLocaleString("en-US", { timeZone: "Asia/Kolkata" }));
+      const mins = ist.getHours() * 60 + ist.getMinutes();
+      const day = ist.getDay();
+      setIstTime(ist.toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit", hour12: false }));
+      setMarketOpen(day >= 1 && day <= 5 && mins >= 555 && mins <= 930);
+    };
+    tick();
+    const id = setInterval(tick, 30000);
+    return () => clearInterval(id);
+  }, []);
 
   const pathname = usePathname();
   const router = useRouter();
+
+  const isItemActive = (href: string) =>
+    pathname === href ||
+    (pathname === "/" && href === "/dashboard") ||
+    (pathname || "").startsWith(`${href}/`);
+
+  // "More tools" starts open only if the current page lives inside it, so the
+  // active item is always visible without forcing the whole list open.
+  const inMore = MORE_HREFS.some((h) => isItemActive(h));
+  const [moreOpen, setMoreOpen] = useState(inMore);
+  useEffect(() => {
+    if (inMore) setMoreOpen(true);
+  }, [inMore]);
+
+  const renderNavItem = (item: { name: string; href: string; icon: any }) => {
+    const isActive = isItemActive(item.href);
+    return (
+      <Link
+        key={item.name}
+        href={item.href}
+        className={`flex items-center group gap-3 px-3 py-2.5 rounded-xl transition-all ${isActive ? "bg-white/10 text-white font-bold" : "text-slate-300 font-medium hover:bg-white/5 hover:text-white"}`}
+        title={isCollapsed ? item.name : undefined}
+      >
+        <item.icon
+          className={`w-5 h-5 flex-shrink-0 ${isActive ? "text-amber-400" : "text-slate-400 group-hover:text-slate-200"}`}
+        />
+        {(!isCollapsed || mobileOpen) && <span className="truncate">{item.name}</span>}
+      </Link>
+    );
+  };
 
   // Close the mobile drawer whenever the route changes.
   useEffect(() => {
@@ -218,36 +306,36 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         />
       )}
 
-      {/* Sidebar — off-canvas drawer on phones, static rail on desktop */}
+      {/* Sidebar — dark navy rail (broker-grade). Off-canvas on phones. */}
       <aside
-        className={`fixed inset-y-0 left-0 z-50 w-64 flex-shrink-0 border-r border-slate-200 bg-white flex flex-col
+        className={`fixed inset-y-0 left-0 z-50 w-64 flex-shrink-0 border-r border-white/5 bg-gradient-to-b from-[#0d1638] to-[#0a1029] text-slate-300 flex flex-col
           transform transition-transform duration-300 md:static md:z-auto md:translate-x-0 md:transition-all
           ${mobileOpen ? "translate-x-0" : "-translate-x-full"}
           ${isCollapsed ? "md:w-20" : "md:w-64"}`}
       >
-        <div className="h-16 flex items-center justify-between px-4 border-b border-slate-200">
+        <div className="h-16 flex items-center justify-between px-4 border-b border-white/5">
           {(!isCollapsed || mobileOpen) && (
-            <div className="flex items-center gap-2 overflow-hidden">
-              <div className="bg-indigo-600 p-1.5 rounded-lg flex-shrink-0">
-                <Activity className="w-5 h-5 text-white" />
+            <div className="flex items-center gap-2.5 overflow-hidden">
+              <div className="w-9 h-9 rounded-xl flex-shrink-0 grid place-items-center bg-gradient-to-br from-amber-400 to-orange-500 shadow-sm shadow-amber-500/30">
+                <CandlestickChart className="w-5 h-5 text-white" strokeWidth={2.5} />
               </div>
-              <span className="font-bold text-lg text-slate-900 tracking-tight whitespace-nowrap md:inline">
-                StockAnalytix
+              <span className="text-[19px] font-black text-white tracking-tight whitespace-nowrap md:inline">
+                Stock<span className="text-amber-400">Analytix</span>
               </span>
             </div>
           )}
           {isCollapsed && !mobileOpen && (
             <div
-              className="bg-indigo-600 p-1.5 rounded-lg mx-auto flex-shrink-0 cursor-pointer hidden md:block"
+              className="w-9 h-9 rounded-xl grid place-items-center bg-gradient-to-br from-amber-400 to-orange-500 shadow-sm shadow-amber-500/30 mx-auto flex-shrink-0 cursor-pointer hidden md:grid"
               onClick={() => setIsCollapsed(false)}
             >
-              <Activity className="w-5 h-5 text-white" />
+              <CandlestickChart className="w-5 h-5 text-white" strokeWidth={2.5} />
             </div>
           )}
           {/* desktop collapse */}
           <button
             onClick={() => setIsCollapsed(!isCollapsed)}
-            className="p-1 rounded-md text-slate-400 hover:bg-slate-100 hidden md:block"
+            className="p-1 rounded-md text-slate-400 hover:bg-white/10 hover:text-white hidden md:block"
           >
             {isCollapsed ? (
               <ChevronRight className="w-5 h-5" />
@@ -258,75 +346,155 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           {/* mobile close */}
           <button
             onClick={() => setMobileOpen(false)}
-            className="p-1 rounded-md text-slate-400 hover:bg-slate-100 md:hidden"
+            className="p-1 rounded-md text-slate-400 hover:bg-white/10 hover:text-white md:hidden"
             aria-label="Close menu"
           >
             <X className="w-5 h-5" />
           </button>
         </div>
 
-        <nav className="flex-1 overflow-y-auto py-4 px-3 hide-scrollbar">
-          {NAV_GROUPS.map((group, gi) => (
-            <div key={group.label} className={gi > 0 ? "mt-5" : ""}>
-              {/* Section header (or a thin divider when the rail is collapsed) */}
-              {isCollapsed && !mobileOpen ? (
-                gi > 0 && <div className="mx-2 mb-2 border-t border-slate-100" />
-              ) : (
-                <div className="px-3 mb-1.5 text-[10px] font-bold uppercase tracking-wider text-slate-400">
-                  {group.label}
+        <nav className="flex-1 flex flex-col overflow-y-auto py-4 px-3 hide-scrollbar">
+          {/* Primary action — the one thing this app is for */}
+          <Link
+            href="/analyze"
+            title={isCollapsed && !mobileOpen ? "New Analysis" : undefined}
+            className={`mb-3 flex items-center justify-center gap-2 rounded-xl bg-indigo-600 text-white font-bold shadow-sm shadow-indigo-600/25 hover:bg-indigo-700 transition-all ${
+              isCollapsed && !mobileOpen ? "w-11 h-11 mx-auto" : "px-4 py-2.5"
+            }`}
+          >
+            <Activity className="w-5 h-5 flex-shrink-0" strokeWidth={2.5} />
+            {(!isCollapsed || mobileOpen) && <span>New Analysis</span>}
+          </Link>
+
+          {/* Everyday essentials — always visible */}
+          <div className="space-y-1">{PRIMARY_NAV.map(renderNavItem)}</div>
+
+          {!isCollapsed || mobileOpen ? (
+            /* Expanded rail: one tidy "More tools" toggle hides the advanced set */
+            <div className="mt-4">
+              <button
+                onClick={() => setMoreOpen((o) => !o)}
+                className="w-full flex items-center justify-between gap-3 px-3 py-2.5 rounded-xl text-slate-400 font-bold hover:bg-white/5 hover:text-white transition-all"
+              >
+                <span className="flex items-center gap-3">
+                  <LayoutGrid className="w-5 h-5 flex-shrink-0 text-slate-400" />
+                  <span>More tools</span>
+                </span>
+                <ChevronDown className={`w-4 h-4 transition-transform ${moreOpen ? "rotate-180" : ""}`} />
+              </button>
+              {moreOpen && (
+                <div className="mt-1.5 space-y-4">
+                  {MORE_GROUPS.map((group) => (
+                    <div key={group.label}>
+                      <div className="px-3 mb-1.5 text-[10px] font-bold uppercase tracking-wider text-slate-500">
+                        {group.label}
+                      </div>
+                      <div className="space-y-1">{group.items.map(renderNavItem)}</div>
+                    </div>
+                  ))}
                 </div>
               )}
-              <div className="space-y-1">
-                {group.items.map((item) => {
-                  const isActive =
-                    pathname === item.href ||
-                    (pathname === "/" && item.href === "/dashboard") ||
-                    (pathname || "").startsWith(`${item.href}/`);
-                  return (
-                    <Link
-                      key={item.name}
-                      href={item.href}
-                      className={`flex items-center group gap-3 px-3 py-2.5 rounded-xl transition-all ${isActive ? "bg-indigo-50 text-indigo-600 font-bold" : "text-slate-600 font-medium hover:bg-slate-100 hover:text-slate-900"}`}
-                      title={isCollapsed ? item.name : undefined}
-                    >
-                      <item.icon
-                        className={`w-5 h-5 flex-shrink-0 ${isActive ? "text-indigo-600" : "text-slate-400 group-hover:text-slate-600"}`}
-                      />
-                      {(!isCollapsed || mobileOpen) && <span className="truncate">{item.name}</span>}
-                    </Link>
-                  );
-                })}
-              </div>
             </div>
-          ))}
+          ) : (
+            /* Collapsed icon rail: advanced items sit below a divider as icons */
+            <div className="mt-3 pt-3 border-t border-white/10 space-y-1">
+              {MORE_GROUPS.flatMap((g) => g.items).map(renderNavItem)}
+            </div>
+          )}
+
+          {/* Spacer pushes the feature card to the bottom so the rail never
+              looks half-empty. */}
+          <div className="flex-1 min-h-[16px]" />
+
+          {(!isCollapsed || mobileOpen) && (
+            <Link
+              href="/ai-chat"
+              className="group block rounded-2xl bg-gradient-to-br from-indigo-500 to-violet-600 p-4 text-white shadow-sm shadow-indigo-500/25"
+            >
+              <div className="flex items-center gap-2">
+                <MessageSquare className="w-4 h-4" strokeWidth={2.5} />
+                <span className="text-[13px] font-black">AI Research Chat</span>
+              </div>
+              <p className="text-[11px] text-indigo-100 mt-1.5 leading-snug">
+                Ask anything about a stock and get a researched, no-hype answer.
+              </p>
+              <span className="mt-3 inline-flex items-center gap-1 text-[11px] font-black bg-white/15 group-hover:bg-white/25 rounded-lg px-2.5 py-1.5 transition-colors">
+                Try it <ChevronRight className="w-3 h-3" />
+              </span>
+            </Link>
+          )}
         </nav>
+
+        {/* Pinned footer — market status + settings anchor the bottom */}
+        <div className="border-t border-white/5 p-3 space-y-1">
+          {(!isCollapsed || mobileOpen) && (
+            <div className="mb-2 rounded-xl bg-white/5 border border-white/5 px-3 py-2.5">
+              <div className="flex items-center justify-between">
+                <span className="text-[11px] font-black uppercase tracking-wider text-slate-400">Market Status</span>
+                <span className={`inline-flex items-center gap-1 text-[11px] font-black ${marketOpen ? "text-emerald-400" : "text-slate-400"}`}>
+                  <span className={`w-1.5 h-1.5 rounded-full ${marketOpen ? "bg-emerald-400" : "bg-slate-500"}`} />
+                  {marketOpen ? "Open" : "Closed"}
+                </span>
+              </div>
+              <div className="text-[11px] font-bold text-slate-500 mt-1 tabular-nums">NSE · BSE · {istTime} IST</div>
+            </div>
+          )}
+          {renderNavItem({ name: "Settings", href: "/settings", icon: Settings })}
+        </div>
       </aside>
 
       {/* Main Content Area */}
       <div className="flex-1 flex flex-col w-full overflow-hidden">
         {/* Top Navbar */}
-        <header className="h-16 border-b border-slate-200 bg-white flex items-center justify-between px-4 sm:px-6 w-full gap-4">
+        <header className="h-16 border-b border-white/5 bg-gradient-to-r from-[#0d1638] to-[#0a1029] flex items-center gap-3 px-3 sm:px-5 w-full">
           <button
             onClick={() => setMobileOpen(true)}
-            className="p-2 -ml-1 rounded-lg text-slate-600 hover:bg-slate-100 md:hidden"
+            className="p-2 -ml-1 rounded-lg text-slate-300 hover:bg-white/10 hover:text-white md:hidden"
             aria-label="Open menu"
           >
             <Menu className="w-6 h-6" />
           </button>
 
-          <div className="flex-1 max-w-md relative hidden sm:block z-50">
+          {/* Live index ticker — headline instruments, click to chart */}
+          <div className="hidden md:flex flex-1 min-w-0 items-stretch overflow-x-auto no-scrollbar divide-x divide-white/10">
+            {tickerList.map((t) => {
+              const q = ticker[t.symbol];
+              const up = (q?.changePct ?? 0) >= 0;
+              return (
+                <Link
+                  key={t.symbol}
+                  href={`/charts?symbol=${encodeURIComponent(t.symbol)}`}
+                  className="flex flex-col justify-center px-3.5 shrink-0 hover:bg-white/5 transition-colors"
+                >
+                  <span className="text-[9.5px] font-bold uppercase tracking-wider text-slate-400 leading-none">{t.label}</span>
+                  <span className="flex items-baseline gap-1.5 mt-1 leading-none">
+                    <span className="text-[13px] font-black text-white tabular-nums">
+                      {q?.price != null ? Number(q.price).toLocaleString(undefined, { maximumFractionDigits: 2 }) : "—"}
+                    </span>
+                    {q?.changePct != null && (
+                      <span className={`text-[10.5px] font-bold tabular-nums ${up ? "text-emerald-400" : "text-rose-400"}`}>
+                        {up ? "+" : ""}{q.changePct.toFixed(2)}%
+                      </span>
+                    )}
+                  </span>
+                </Link>
+              );
+            })}
+          </div>
+
+          <div className="relative w-40 lg:w-56 shrink-0 hidden sm:block z-50 ml-auto md:ml-0">
             <form onSubmit={handleSearchSubmit}>
               <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
               <input
                 type="text"
-                placeholder="Global stock search e.g. AAPL..."
+                placeholder="Search stocks…"
                 value={searchQuery}
                 onChange={(e) => handleSearchChange(e.target.value)}
                 onFocus={() => {
                   if (searchQuery) setSearchFocused(true);
                 }}
                 onBlur={() => setTimeout(() => setSearchFocused(false), 200)}
-                className="w-full bg-slate-100 border border-transparent focus:bg-white focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200 text-sm rounded-full pl-10 pr-4 py-2 transition-all outline-none"
+                className="w-full bg-white/10 border border-white/10 text-white placeholder:text-slate-400 focus:bg-white/15 focus:border-white/20 focus:ring-2 focus:ring-white/10 text-sm rounded-full pl-10 pr-4 py-2 transition-all outline-none"
               />
             </form>
             {searchFocused && searchResults.length > 0 && (
@@ -361,39 +529,11 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             )}
           </div>
 
-          <div className="flex items-center gap-2 sm:gap-4 ml-auto">
-            {/* Market Selector */}
-            <div className="hidden lg:flex items-center gap-1 bg-slate-50 border border-slate-200 rounded-lg p-1">
-              {["US", "NSE", "BSE"].map((m) => (
-                <button
-                  key={m}
-                  onClick={() => setMarket(m)}
-                  className={`px-3 py-1 text-xs font-bold rounded-md ${market === m ? "bg-white shadow-sm text-slate-900" : "text-slate-500 hover:text-slate-700"}`}
-                >
-                  {m}
-                </button>
-              ))}
-            </div>
-
-            {/* Timeframe Selector */}
-            {pathname?.includes("analyze") && (
-              <div className="hidden lg:flex items-center gap-1 bg-slate-50 border border-slate-200 rounded-lg p-1">
-                {["1M", "3M", "6M", "1Y", "3Y"].map((t) => (
-                  <button
-                    key={t}
-                    onClick={() => setTimeframe(t)}
-                    className={`px-2 py-1 text-xs font-bold rounded-md ${timeframe === t ? "bg-white shadow-sm text-slate-900" : "text-slate-500 hover:text-slate-700"}`}
-                  >
-                    {t}
-                  </button>
-                ))}
-              </div>
-            )}
-
+          <div className="flex items-center gap-1 sm:gap-1.5 ml-auto md:ml-2 shrink-0">
             <button
               onClick={handleRefresh}
               disabled={refreshing}
-              className="p-2 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-full transition-colors disabled:opacity-60"
+              className="p-2 text-slate-300 hover:text-white hover:bg-white/10 rounded-full transition-colors disabled:opacity-60"
               title="Refresh Data"
             >
               <RefreshCw className={`w-4 h-4 ${refreshing ? "animate-spin" : ""}`} />
@@ -401,7 +541,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             <div className="relative">
               <button
                 onClick={() => setNotifsOpen(!notifsOpen)}
-                className="relative p-2 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-full transition-colors"
+                className="relative p-2 text-slate-300 hover:text-white hover:bg-white/10 rounded-full transition-colors"
                 title="Notifications"
               >
                 <Bell className="w-4 h-4" />
@@ -485,7 +625,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
             <button
               onClick={toggleTheme}
-              className="hidden sm:block p-2 text-slate-400 hover:text-amber-500 hover:bg-amber-50 rounded-full transition-colors"
+              className="hidden sm:block p-2 text-slate-300 hover:text-amber-400 hover:bg-white/10 rounded-full transition-colors"
               title="Theme"
             >
               {theme === "light" ? (
@@ -499,14 +639,12 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             <div className="relative">
               <button
                 onClick={() => setProfileOpen(!profileOpen)}
-                className="w-8 h-8 rounded-full bg-indigo-100 flex items-center justify-center text-indigo-700 font-bold border border-indigo-200 hover:ring-2 ring-offset-1 ring-indigo-500 overflow-hidden"
+                className="w-8 h-8 rounded-full bg-gradient-to-br from-amber-400 to-orange-500 flex items-center justify-center text-white font-bold hover:ring-2 ring-offset-2 ring-offset-[#0a1029] ring-amber-400/60 overflow-hidden shrink-0"
               >
                 {profilePhoto ? (
                   <img src={profilePhoto} alt={profileName} className="w-8 h-8 object-cover rounded-full" />
                 ) : (
-                  <div className="w-8 h-8 flex items-center justify-center bg-indigo-100">
-                    <span className="text-xs font-bold text-indigo-700">{profileName.split(" ").map((n,i)=> i===0? n[0]:"")}</span>
-                  </div>
+                  <span className="text-xs font-black text-white">{(profileName || "U").charAt(0).toUpperCase()}</span>
                 )}
               </button>
 
@@ -517,32 +655,33 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                     onClick={() => setProfileOpen(false)}
                   ></div>
                   <div className="absolute right-0 mt-2 w-64 bg-white rounded-2xl shadow-xl border border-slate-200 z-50 overflow-hidden">
-                    <div className="p-4 border-b border-slate-100">
-                      <div className="font-bold text-slate-900">{profileName}</div>
-                      <div className="text-xs text-slate-500 mb-2">
-                        {profilePhoto ? "Profile photo set" : "No photo"}
+                    <div className="p-4 border-b border-slate-100 flex items-center gap-3">
+                      <div className="w-10 h-10 rounded-full bg-indigo-100 flex items-center justify-center overflow-hidden shrink-0">
+                        {profilePhoto ? (
+                          <img src={profilePhoto} alt={profileName} className="w-10 h-10 object-cover rounded-full" />
+                        ) : (
+                          <span className="text-sm font-black text-indigo-700">{(profileName || "U").charAt(0)}</span>
+                        )}
                       </div>
-                      <div className="inline-block px-2 py-0.5 bg-gradient-to-r from-amber-200 to-amber-400 text-amber-900 text-[10px] font-black rounded-full uppercase tracking-wider">
-                        Pro Plan
-                      </div>
-                    </div>
-                    <div className="p-4 border-b border-slate-100 bg-slate-50">
-                      <div className="flex justify-between items-center mb-1">
-                        <span className="text-xs font-semibold text-slate-500">
-                          API Usage
-                        </span>
-                        <span className="text-xs font-bold text-slate-700">
-                          4,520 / 10k
-                        </span>
-                      </div>
-                      <div className="w-full bg-slate-200 rounded-full h-1.5">
-                        <div
-                          className="bg-indigo-500 h-1.5 rounded-full"
-                          style={{ width: "45%" }}
-                        ></div>
+                      <div className="min-w-0">
+                        <div className="font-bold text-slate-900 truncate">{profileName || "Your profile"}</div>
+                        <Link
+                          href="/settings"
+                          onClick={() => setProfileOpen(false)}
+                          className="text-xs font-semibold text-indigo-600 hover:underline"
+                        >
+                          Edit profile
+                        </Link>
                       </div>
                     </div>
                     <div className="p-2">
+                      <Link
+                        href="/ai-usage"
+                        onClick={() => setProfileOpen(false)}
+                        className="block px-4 py-2 text-sm text-slate-700 font-medium hover:bg-slate-50 rounded-lg"
+                      >
+                        AI Usage
+                      </Link>
                       <Link
                         href="/settings"
                         onClick={() => setProfileOpen(false)}
@@ -594,6 +733,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         <GlobalNotes />
         <VoiceTyping />
       </Suspense>
+      {/* Background watcher — fires notifications when price hits a set level */}
+      <PriceAlertMonitor />
     </div>
   );
 }

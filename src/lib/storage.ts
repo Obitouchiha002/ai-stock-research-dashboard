@@ -232,6 +232,58 @@ export const deleteAlert = (id: string) => {
   );
 };
 
+// PRICE-LEVEL ALERTS
+// A watch on one stock with the user's own levels (stop-loss, supports,
+// resistances, target). A background monitor notifies when the live price
+// reaches any level. These reflect the user's OWN plan — never buy/sell advice.
+export type AlertLevelKey = "sl" | "s1" | "r1" | "r2" | "target";
+export interface PriceAlert {
+  id: string;
+  symbol: string;
+  name?: string;
+  refPrice?: number | null; // CMP when the alert was created
+  levels: Partial<Record<AlertLevelKey, number | null>>;
+  triggered: Partial<Record<AlertLevelKey, boolean>>;
+  fromPortfolio?: boolean;
+  createdAt: number;
+  status: "active" | "paused";
+}
+export const getPriceAlerts = (): PriceAlert[] =>
+  getParsedContext<PriceAlert[]>("sa_price_alerts", []);
+export const savePriceAlert = (alert: Partial<PriceAlert>) => {
+  const current = getPriceAlerts();
+  if (alert.id) {
+    const i = current.findIndex((a) => a.id === alert.id);
+    if (i >= 0) current[i] = { ...current[i], ...alert } as PriceAlert;
+    else current.push(alert as PriceAlert);
+  } else {
+    current.push({
+      symbol: "",
+      levels: {},
+      triggered: {},
+      status: "active",
+      ...alert,
+      id: Date.now().toString(),
+      createdAt: Date.now(),
+    } as PriceAlert);
+  }
+  setContext("sa_price_alerts", current);
+};
+export const deletePriceAlert = (id: string) => {
+  setContext(
+    "sa_price_alerts",
+    getPriceAlerts().filter((a) => a.id !== id),
+  );
+};
+export const updatePriceAlert = (id: string, patch: Partial<PriceAlert>) => {
+  const current = getPriceAlerts();
+  const i = current.findIndex((a) => a.id === id);
+  if (i >= 0) {
+    current[i] = { ...current[i], ...patch };
+    setContext("sa_price_alerts", current);
+  }
+};
+
 // PORTFOLIO
 // Holdings are grouped by market so US ($) and Indian (₹) positions total up
 // separately with the right currency.
@@ -480,7 +532,7 @@ export const getSettings = () =>
     profile: "Short-term Investor",
     riskTolerance: "Moderate",
     theme: "light",
-    profileName: "John Doe",
+    profileName: "",
     profilePhoto: "",
     notifications: true,
     autoSave: false,
@@ -587,7 +639,9 @@ export const addNotification = (notification: any) => {
   let current = getNotifications();
   current.unshift({
     ...notification,
-    id: Date.now().toString(),
+    // Random suffix so several notifications fired in the same millisecond
+    // (e.g. two levels crossing at once) never collide on id.
+    id: Date.now().toString() + Math.random().toString(36).slice(2, 7),
     createdAt: Date.now(),
     read: false,
   });

@@ -23,6 +23,7 @@ import {
   X,
 } from "lucide-react";
 import { getNotesForSymbol, saveNote, deleteNote } from "@/lib/storage";
+import StockNotes from "@/components/StockNotes";
 
 const RANGES = [
   { key: "1mo", label: "1M" },
@@ -58,6 +59,8 @@ export default function ChartsPage() {
   const [fs, setFs] = useState(false);
   const [showNotes, setShowNotes] = useState(false);
   const [ohlc, setOhlc] = useState<any>(null);
+  const [rsiHover, setRsiHover] = useState<any>(null);
+  const [adxHover, setAdxHover] = useState<any>(null);
 
   // search
   const [query, setQuery] = useState("");
@@ -208,6 +211,11 @@ export default function ChartsPage() {
       rs.createPriceLine({ price: 70, color: "#e11d48", lineWidth: 1, lineStyle: 2, axisLabelVisible: true, title: "70" } as any);
       rs.createPriceLine({ price: 50, color: "#cbd5e1", lineWidth: 1, lineStyle: 3, axisLabelVisible: true, title: "50" } as any);
       rs.createPriceLine({ price: 30, color: "#16a34a", lineWidth: 1, lineStyle: 2, axisLabelVisible: true, title: "30" } as any);
+      rc.subscribeCrosshairMove((param) => {
+        const rv: any = param.seriesData?.get(rs);
+        const sv: any = param.seriesData?.get(rsig);
+        setRsiHover(rv?.value != null ? { rsi: rv.value, signal: sv?.value } : null);
+      });
       rc.timeScale().fitContent();
       rsiChartRef.current = rc;
     }
@@ -229,6 +237,12 @@ export default function ChartsPage() {
       const as = ac.addLineSeries({ color: "#4f46e5", lineWidth: 3, priceLineVisible: false, lastValueVisible: true });
       as.setData(candles.filter((c) => c.adx != null).map((c) => ({ time: c.time, value: c.adx })) as any);
       as.createPriceLine({ price: 25, color: "#94a3b8", lineWidth: 1, lineStyle: 2, axisLabelVisible: true, title: "25" } as any);
+      ac.subscribeCrosshairMove((param) => {
+        const av: any = param.seriesData?.get(as);
+        const pv: any = param.seriesData?.get(pdi);
+        const mv: any = param.seriesData?.get(mdi);
+        setAdxHover(av?.value != null || pv?.value != null ? { adx: av?.value, pdi: pv?.value, mdi: mv?.value } : null);
+      });
       ac.timeScale().fitContent();
       adxChartRef.current = ac;
     }
@@ -488,7 +502,13 @@ export default function ChartsPage() {
                   <span className="text-amber-500 font-bold">— signal</span>
                   <span className="text-slate-400 font-medium">30 / 50 / 70</span>
                 </div>
-                <div ref={rsiElRef} className="w-full h-[120px]" />
+                <div className="relative">
+                  <div className="absolute top-1 left-2 z-10 flex gap-3 text-[11px] font-bold bg-white/85 backdrop-blur px-2 py-0.5 rounded pointer-events-none">
+                    <span className="text-slate-400">RSI <span className="text-violet-700">{rsiHover?.rsi != null ? rsiHover.rsi.toFixed(1) : "—"}</span></span>
+                    <span className="text-slate-400">Signal <span className="text-amber-600">{rsiHover?.signal != null ? rsiHover.signal.toFixed(1) : "—"}</span></span>
+                  </div>
+                  <div ref={rsiElRef} className="w-full h-[120px]" />
+                </div>
               </div>
             )}
 
@@ -501,7 +521,14 @@ export default function ChartsPage() {
                   <span className="text-red-500">−DI</span>
                   <span className="text-slate-400 font-medium">25 = trend</span>
                 </div>
-                <div ref={adxElRef} className="w-full h-[130px]" />
+                <div className="relative">
+                  <div className="absolute top-1 left-2 z-10 flex gap-3 text-[11px] font-bold bg-white/85 backdrop-blur px-2 py-0.5 rounded pointer-events-none">
+                    <span className="text-slate-400">ADX <span className="text-indigo-700">{adxHover?.adx != null ? adxHover.adx.toFixed(1) : "—"}</span></span>
+                    <span className="text-slate-400">+DI <span className="text-emerald-600">{adxHover?.pdi != null ? adxHover.pdi.toFixed(1) : "—"}</span></span>
+                    <span className="text-slate-400">−DI <span className="text-rose-600">{adxHover?.mdi != null ? adxHover.mdi.toFixed(1) : "—"}</span></span>
+                  </div>
+                  <div ref={adxElRef} className="w-full h-[130px]" />
+                </div>
               </div>
             )}
           </div>
@@ -509,8 +536,8 @@ export default function ChartsPage() {
 
         {/* Notes column (collapsible, hidden in fullscreen) */}
         {showNotes && !fs && (
-          <div className="bg-white border border-slate-200 shadow-sm rounded-2xl p-4 xl:sticky xl:top-4">
-            <div className="flex items-center justify-between mb-3">
+          <div className="bg-white border border-slate-200 shadow-sm rounded-2xl p-3 xl:sticky xl:top-4">
+            <div className="flex items-center justify-between mb-2 px-1">
               <h3 className="text-sm font-black text-slate-800 flex items-center gap-2">
                 <StickyNote className="w-4 h-4 text-indigo-600" /> Notes on {symbol}
               </h3>
@@ -518,35 +545,8 @@ export default function ChartsPage() {
                 <X className="w-4 h-4" />
               </button>
             </div>
-            <textarea
-              value={noteText}
-              onChange={(e) => setNoteText(e.target.value)}
-              onKeyDown={(e) => { if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) addNote(); }}
-              rows={2}
-              placeholder="Write a chart note… (⌘/Ctrl+Enter)"
-              className="w-full mb-2 px-3 py-2 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 outline-none resize-none"
-            />
-            <button onClick={addNote} disabled={!noteText.trim()}
-              className="w-full mb-4 px-3 py-2 bg-indigo-600 text-white rounded-lg text-sm font-bold hover:bg-indigo-700 disabled:opacity-50 flex items-center justify-center gap-2">
-              <Plus className="w-4 h-4" /> Add Note
-            </button>
-            <div className="space-y-2 max-h-[46vh] overflow-y-auto">
-              {notes.length === 0 ? (
-                <p className="text-xs text-slate-400 text-center py-6">No notes yet for {symbol}.</p>
-              ) : (
-                notes.map((n) => (
-                  <div key={n.id} className="group bg-slate-50 border border-slate-100 rounded-lg p-2.5">
-                    <div className="flex items-start justify-between gap-2">
-                      <p className="text-sm text-slate-700 whitespace-pre-wrap flex-1">{n.text}</p>
-                      <button onClick={() => removeNote(n.id)} className="text-slate-300 hover:text-rose-600 transition md:opacity-0 md:group-hover:opacity-100">
-                        <Trash2 className="w-3.5 h-3.5" />
-                      </button>
-                    </div>
-                    <div className="text-[10px] text-slate-400 mt-1">{new Date(n.createdAt).toLocaleString()}</div>
-                  </div>
-                ))
-              )}
-            </div>
+            {/* full notes tool — text + voice recording + topic + category */}
+            <StockNotes symbol={symbol} stockName={meta?.name || symbol} />
           </div>
         )}
       </div>

@@ -1,178 +1,391 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
-import { Bell, Plus, Trash2, CheckCircle2 } from "lucide-react";
-import { getAlerts, saveAlert, deleteAlert } from "@/lib/storage";
+import React, { useState, useEffect, useCallback } from "react";
+import Link from "next/link";
+import {
+  Bell,
+  BellRing,
+  Plus,
+  Trash2,
+  Briefcase,
+  X,
+  ShieldAlert,
+  Target,
+  TrendingUp,
+  TrendingDown,
+  Check,
+} from "lucide-react";
+import {
+  getPriceAlerts,
+  savePriceAlert,
+  deletePriceAlert,
+  updatePriceAlert,
+  getPortfolio,
+  type PriceAlert,
+  type AlertLevelKey,
+} from "@/lib/storage";
+
+// The five levels a user can set, with how each reads and its accent.
+const LEVEL_DEFS: {
+  key: AlertLevelKey;
+  label: string;
+  hint: string;
+  side: "below" | "above";
+  tint: string;
+  chip: string;
+  Icon: any;
+}[] = [
+  { key: "sl", label: "Stop-Loss", hint: "your exit level", side: "below", tint: "text-rose-600", chip: "bg-rose-50 text-rose-700 border-rose-200", Icon: ShieldAlert },
+  { key: "s1", label: "Support", hint: "buyers stepped in", side: "below", tint: "text-emerald-600", chip: "bg-emerald-50 text-emerald-700 border-emerald-200", Icon: TrendingDown },
+  { key: "r1", label: "Resistance R1", hint: "first ceiling", side: "above", tint: "text-amber-600", chip: "bg-amber-50 text-amber-700 border-amber-200", Icon: TrendingUp },
+  { key: "r2", label: "Resistance R2", hint: "next ceiling", side: "above", tint: "text-orange-600", chip: "bg-orange-50 text-orange-700 border-orange-200", Icon: TrendingUp },
+  { key: "target", label: "Target", hint: "your objective", side: "above", tint: "text-indigo-600", chip: "bg-indigo-50 text-indigo-700 border-indigo-200", Icon: Target },
+];
+
+const num = (v: any): number | null => {
+  const n = parseFloat(v);
+  return Number.isFinite(n) ? n : null;
+};
+const fmt = (n: number, cur = "") =>
+  `${cur}${Number(n).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+
+const emptyForm = { symbol: "", sl: "", s1: "", r1: "", r2: "", target: "", fromPortfolio: false };
 
 export default function AlertsPage() {
-  const [alerts, setAlerts] = useState<any[]>([]);
-  const [showAdd, setShowAdd] = useState(false);
-  const [form, setForm] = useState({
-    symbol: "",
-    type: "Price Above",
-    value: "",
-    notes: "",
-  });
+  const [alerts, setAlerts] = useState<PriceAlert[]>([]);
+  const [portfolio, setPortfolio] = useState<any[]>([]);
+  const [quotes, setQuotes] = useState<Record<string, any>>({});
+  const [showForm, setShowForm] = useState(false);
+  const [form, setForm] = useState({ ...emptyForm });
+  const [formCmp, setFormCmp] = useState<{ price: number; cur: string } | null>(null);
+  const [notifPerm, setNotifPerm] = useState<string>("default");
+
+  const reload = () => setAlerts(getPriceAlerts());
 
   useEffect(() => {
-    setAlerts(getAlerts());
+    reload();
+    setPortfolio(getPortfolio());
+    if (typeof Notification !== "undefined") setNotifPerm(Notification.permission);
   }, []);
 
-  const handleAdd = (e: React.FormEvent) => {
-    e.preventDefault();
-    saveAlert({ ...form, symbol: form.symbol.toUpperCase() });
-    setAlerts(getAlerts());
-    setShowAdd(false);
-    setForm({ symbol: "", type: "Price Above", value: "", notes: "" });
+  // Live quotes for every alerted symbol — powers CMP + distance + status.
+  const symbols = Array.from(new Set(alerts.map((a) => a.symbol).filter(Boolean)));
+  const symbolsKey = symbols.join(",");
+  const loadQuotes = useCallback(async () => {
+    if (!symbolsKey) return;
+    try {
+      const res = await fetch("/api/quotes", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ symbols: symbolsKey.split(",") }),
+      });
+      const j = await res.json();
+      setQuotes(j.quotes || {});
+    } catch {
+      /* keep last */
+    }
+  }, [symbolsKey]);
+
+  useEffect(() => {
+    loadQuotes();
+    const i = setInterval(loadQuotes, 30000);
+    // Reflect monitor-fired triggers coming from the background.
+    const r = setInterval(reload, 20000);
+    return () => {
+      clearInterval(i);
+      clearInterval(r);
+    };
+  }, [loadQuotes]);
+
+  // Fetch the live price for the symbol being entered, to anchor the levels.
+  const fetchFormCmp = useCallback(async (sym: string) => {
+    const s = sym.trim().toUpperCase();
+    if (!s) return setFormCmp(null);
+    try {
+      const res = await fetch("/api/quotes", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ symbols: [s] }),
+      });
+      const j = await res.json();
+      const q = j.quotes?.[s];
+      if (q?.price != null) setFormCmp({ price: q.price, cur: q.currency === "INR" ? "₹" : "$" });
+      else setFormCmp(null);
+    } catch {
+      setFormCmp(null);
+    }
+  }, []);
+
+  const openForm = (prefill?: { symbol: string; refPrice?: number; fromPortfolio?: boolean }) => {
+    setForm({ ...emptyForm, symbol: prefill?.symbol || "", fromPortfolio: !!prefill?.fromPortfolio });
+    setFormCmp(null);
+    setShowForm(true);
+    if (prefill?.symbol) fetchFormCmp(prefill.symbol);
   };
 
-  const handleRemove = (id: string) => {
-    deleteAlert(id);
-    setAlerts(getAlerts());
+  const handleSave = (e: React.FormEvent) => {
+    e.preventDefault();
+    const levels = { sl: num(form.sl), s1: num(form.s1), r1: num(form.r1), r2: num(form.r2), target: num(form.target) };
+    if (!form.symbol.trim() || !Object.values(levels).some((v) => v != null)) return;
+    savePriceAlert({
+      symbol: form.symbol.trim().toUpperCase(),
+      refPrice: formCmp?.price ?? null,
+      levels,
+      triggered: {},
+      fromPortfolio: form.fromPortfolio,
+    });
+    setShowForm(false);
+    setForm({ ...emptyForm });
+    setFormCmp(null);
+    reload();
   };
+
+  const handleDelete = (id: string) => {
+    deletePriceAlert(id);
+    reload();
+  };
+  const rearm = (a: PriceAlert) => {
+    updatePriceAlert(a.id, { triggered: {} });
+    reload();
+  };
+
+  const requestNotif = async () => {
+    if (typeof Notification === "undefined") return;
+    const p = await Notification.requestPermission();
+    setNotifPerm(p);
+  };
+
+  // Portfolio symbols not already alerted — quick-link chips.
+  const linkable = portfolio.filter((h) => !alerts.some((a) => a.symbol === h.symbol));
 
   return (
     <div className="max-w-screen-2xl mx-auto px-4 py-8">
-      <div className="flex flex-col md:flex-row md:items-center justify-between mb-8 gap-4">
+      <div className="flex flex-col md:flex-row md:items-center justify-between mb-6 gap-4">
         <div>
           <h1 className="text-3xl font-black text-slate-900 tracking-tight flex items-center gap-2">
-            <Bell className="w-8 h-8 text-indigo-600" /> Alerts
+            <Bell className="w-8 h-8 text-indigo-600" /> Price Alerts
           </h1>
           <p className="text-slate-500 mt-1 font-medium">
-            Set price and metric alerts.
+            Set your own levels — stop-loss, support, resistance, target. We watch the live price and
+            ping you the moment it reaches one.
           </p>
         </div>
-        <button
-          onClick={() => setShowAdd(!showAdd)}
-          className="px-4 py-2 bg-indigo-600 text-white rounded-lg text-sm font-bold hover:bg-indigo-700 flex items-center gap-2 transition"
-        >
-          <Plus className="w-4 h-4" /> Create Alert
-        </button>
+        <div className="flex gap-2">
+          {notifPerm !== "granted" && (
+            <button
+              onClick={requestNotif}
+              className="px-3.5 py-2 bg-white border border-slate-200 text-slate-600 rounded-xl text-sm font-bold hover:bg-slate-50 flex items-center gap-1.5 transition"
+              title="Get instant pop-up alerts even when the tab is in the background"
+            >
+              <BellRing className="w-4 h-4" /> Enable pop-ups
+            </button>
+          )}
+          <button
+            onClick={() => openForm()}
+            className="px-4 py-2 bg-indigo-600 text-white rounded-xl text-sm font-bold hover:bg-indigo-700 flex items-center gap-2 transition shadow-sm shadow-indigo-600/25"
+          >
+            <Plus className="w-4 h-4" /> New Alert
+          </button>
+        </div>
       </div>
 
-      {showAdd && (
-        <form
-          onSubmit={handleAdd}
-          className="bg-white border border-slate-200 p-6 rounded-2xl mb-8 flex flex-col gap-4 max-w-2xl shadow-sm"
-        >
-          <h3 className="font-bold text-slate-800">New Alert</h3>
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="block text-xs font-bold text-slate-500 uppercase mb-1">
-                Symbol
-              </label>
-              <input
-                required
-                type="text"
-                placeholder="AAPL"
-                value={form.symbol}
-                onChange={(e) => setForm({ ...form, symbol: e.target.value })}
-                className="w-full px-4 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-indigo-500 font-bold"
-              />
-            </div>
-            <div>
-              <label className="block text-xs font-bold text-slate-500 uppercase mb-1">
-                Attribute
-              </label>
-              <select
-                value={form.type}
-                onChange={(e) => setForm({ ...form, type: e.target.value })}
-                className="w-full px-4 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-indigo-500 font-bold"
+      {/* Link from portfolio */}
+      {linkable.length > 0 && (
+        <div className="bg-white border border-slate-200 rounded-2xl p-4 mb-6 shadow-sm">
+          <div className="flex items-center gap-2 mb-3">
+            <Briefcase className="w-4 h-4 text-indigo-600" />
+            <span className="text-[12px] font-black uppercase tracking-wider text-slate-500">
+              Add from your portfolio
+            </span>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            {linkable.map((h) => (
+              <button
+                key={h.id}
+                onClick={() => openForm({ symbol: h.symbol, refPrice: h.buyPrice, fromPortfolio: true })}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-50 border border-slate-200 text-[13px] font-bold text-slate-700 hover:border-indigo-300 hover:text-indigo-700 transition"
               >
-                <option>Price Above</option>
-                <option>Price Below</option>
-                <option>Final Score Above</option>
-                <option>Risk Level</option>
-              </select>
-            </div>
-            <div>
-              <label className="block text-xs font-bold text-slate-500 uppercase mb-1">
-                Target Value
-              </label>
+                <Plus className="w-3.5 h-3.5" /> {h.symbol}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Create form */}
+      {showForm && (
+        <form onSubmit={handleSave} className="bg-white border border-slate-200 p-5 sm:p-6 rounded-2xl mb-6 shadow-sm">
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="font-black text-slate-800 text-lg">New price alert</h3>
+            <button type="button" onClick={() => setShowForm(false)} className="p-1.5 text-slate-400 hover:bg-slate-100 rounded-lg">
+              <X className="w-5 h-5" />
+            </button>
+          </div>
+
+          <div className="flex flex-col sm:flex-row sm:items-end gap-3 mb-5">
+            <div className="flex-1">
+              <label className="block text-[11px] font-black text-slate-500 uppercase tracking-wider mb-1">Symbol</label>
               <input
                 required
                 type="text"
-                placeholder="150"
-                value={form.value}
-                onChange={(e) => setForm({ ...form, value: e.target.value })}
-                className="w-full px-4 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-indigo-500 font-bold"
+                placeholder="AAPL, RELIANCE.NS"
+                value={form.symbol}
+                onChange={(e) => setForm({ ...form, symbol: e.target.value.toUpperCase() })}
+                onBlur={(e) => fetchFormCmp(e.target.value)}
+                className="w-full px-4 py-2.5 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-400 font-bold outline-none"
               />
             </div>
-            <div>
-              <label className="block text-xs font-bold text-slate-500 uppercase mb-1">
-                Notes (Optional)
-              </label>
-              <input
-                type="text"
-                placeholder="Buy point..."
-                value={form.notes}
-                onChange={(e) => setForm({ ...form, notes: e.target.value })}
-                className="w-full px-4 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-indigo-500 font-medium"
-              />
+            <div className="shrink-0 rounded-xl bg-slate-50 border border-slate-200 px-4 py-2.5 min-w-[130px]">
+              <div className="text-[10px] font-black text-slate-400 uppercase tracking-wider">Current price</div>
+              <div className="text-lg font-black text-slate-900 tabular-nums">
+                {formCmp ? fmt(formCmp.price, formCmp.cur) : "—"}
+              </div>
             </div>
           </div>
 
-          <div className="flex gap-2 justify-end mt-2">
-            <button
-              type="button"
-              onClick={() => setShowAdd(false)}
-              className="px-4 py-2 bg-slate-100 text-slate-600 rounded-lg font-bold hover:bg-slate-200"
-            >
-              Cancel
-            </button>
-            <button
-              type="submit"
-              className="px-6 py-2 bg-indigo-600 text-white rounded-lg font-bold hover:bg-indigo-700"
-            >
-              Save
-            </button>
+          <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
+            {LEVEL_DEFS.map((lv) => (
+              <div key={lv.key}>
+                <label className={`block text-[11px] font-black uppercase tracking-wider mb-1 ${lv.tint}`}>
+                  {lv.label}
+                </label>
+                <input
+                  type="number"
+                  step="any"
+                  inputMode="decimal"
+                  placeholder={lv.side === "below" ? "below CMP" : "above CMP"}
+                  value={(form as any)[lv.key]}
+                  onChange={(e) => setForm({ ...form, [lv.key]: e.target.value })}
+                  className="w-full px-3 py-2.5 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-400 font-bold tabular-nums outline-none"
+                />
+                <div className="text-[10.5px] text-slate-400 mt-1">{lv.hint}</div>
+              </div>
+            ))}
+          </div>
+
+          <div className="flex items-center justify-between gap-3 mt-5">
+            <p className="text-[11.5px] text-slate-400 italic">
+              Fill any levels you care about. We notify on a reach — this is your plan, not buy/sell advice.
+            </p>
+            <div className="flex gap-2 shrink-0">
+              <button type="button" onClick={() => setShowForm(false)} className="px-4 py-2 bg-slate-100 text-slate-600 rounded-xl font-bold hover:bg-slate-200">
+                Cancel
+              </button>
+              <button type="submit" className="px-6 py-2 bg-indigo-600 text-white rounded-xl font-bold hover:bg-indigo-700">
+                Save alert
+              </button>
+            </div>
           </div>
         </form>
       )}
 
+      {/* Alert list */}
       {alerts.length === 0 ? (
-        <div className="bg-white border border-slate-200 rounded-2xl p-16 text-center text-slate-500 font-medium shadow-sm">
-          No alerts configured.
+        <div className="bg-white border border-slate-200 rounded-2xl p-12 text-center shadow-sm">
+          <Bell className="w-10 h-10 text-slate-300 mx-auto mb-3" />
+          <p className="text-slate-600 font-bold">No alerts yet</p>
+          <p className="text-slate-400 text-sm mt-1">
+            Add a stock and set your levels — or pull one straight from your portfolio above.
+          </p>
         </div>
       ) : (
-        <div className="grid gap-4">
-          {alerts.map((a: any) => (
-            <div
-              key={a.id}
-              className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex items-center justify-between hover:border-indigo-200 transition"
-            >
-              <div className="flex items-center gap-4">
-                <div className="w-12 h-12 bg-indigo-50 rounded-lg flex items-center justify-center text-indigo-600">
-                  <Bell className="w-6 h-6" />
-                </div>
-                <div>
-                  <div className="font-black text-lg text-slate-900">
-                    {a.symbol}
+        <div className="grid gap-4 lg:grid-cols-2">
+          {alerts.map((a) => {
+            const q = quotes[a.symbol];
+            const price = q?.price ?? null;
+            const cur = q?.currency === "INR" ? "₹" : "$";
+            const up = (q?.changePct ?? 0) >= 0;
+            const setLevels = LEVEL_DEFS.filter((lv) => a.levels?.[lv.key] != null);
+            return (
+              <div key={a.id} className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+                <div className="flex items-center justify-between gap-3 px-5 py-4 border-b border-slate-100">
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-2">
+                      <span className="text-[17px] font-black text-slate-900">{a.symbol}</span>
+                      {a.fromPortfolio && (
+                        <span className="inline-flex items-center gap-1 text-[10px] font-black text-indigo-600 bg-indigo-50 px-1.5 py-0.5 rounded">
+                          <Briefcase className="w-3 h-3" /> Portfolio
+                        </span>
+                      )}
+                    </div>
+                    <div className="flex items-baseline gap-2 mt-0.5">
+                      <span className="text-[15px] font-black text-slate-900 tabular-nums">
+                        {price != null ? fmt(price, cur) : "…"}
+                      </span>
+                      {q?.changePct != null && (
+                        <span className={`text-[12px] font-bold tabular-nums ${up ? "text-emerald-600" : "text-rose-600"}`}>
+                          {up ? "+" : ""}{q.changePct.toFixed(2)}%
+                        </span>
+                      )}
+                    </div>
                   </div>
-                  <div className="text-sm font-semibold text-slate-500">
-                    {a.type} {a.value}
+                  <div className="flex items-center gap-1.5 shrink-0">
+                    <Link
+                      href={`/charts?symbol=${encodeURIComponent(a.symbol)}`}
+                      className="px-2.5 py-1.5 text-[12px] font-bold text-slate-500 hover:text-indigo-700 hover:bg-slate-50 rounded-lg transition"
+                    >
+                      Chart
+                    </Link>
+                    <button
+                      onClick={() => handleDelete(a.id)}
+                      className="p-2 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition"
+                      title="Delete alert"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
                   </div>
-                  {a.notes && (
-                    <div className="text-xs text-slate-400 mt-1">{a.notes}</div>
-                  )}
                 </div>
+
+                <div className="p-3.5 grid grid-cols-2 sm:grid-cols-3 gap-2.5">
+                  {setLevels.map((lv) => {
+                    const val = a.levels[lv.key] as number;
+                    const hit = a.triggered?.[lv.key];
+                    const dist = price != null && price !== 0 ? ((val - price) / price) * 100 : null;
+                    const Icon = lv.Icon;
+                    return (
+                      <div
+                        key={lv.key}
+                        className={`rounded-xl border px-3 py-2.5 ${hit ? "border-slate-300 bg-slate-50" : lv.chip}`}
+                      >
+                        <div className="flex items-center justify-between">
+                          <span className={`inline-flex items-center gap-1 text-[10px] font-black uppercase tracking-wide ${hit ? "text-slate-500" : lv.tint}`}>
+                            <Icon className="w-3 h-3" /> {lv.label}
+                          </span>
+                          {hit && (
+                            <span className="inline-flex items-center gap-0.5 text-[9.5px] font-black text-slate-500">
+                              <Check className="w-3 h-3" /> hit
+                            </span>
+                          )}
+                        </div>
+                        <div className="text-[15px] font-black text-slate-900 tabular-nums mt-0.5">{fmt(val)}</div>
+                        {dist != null && !hit && (
+                          <div className="text-[10.5px] font-bold text-slate-400 tabular-nums">
+                            {dist >= 0 ? "+" : ""}{dist.toFixed(1)}% away
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+
+                {Object.values(a.triggered || {}).some(Boolean) && (
+                  <div className="px-5 py-2.5 bg-slate-50 border-t border-slate-100 flex items-center justify-between">
+                    <span className="text-[11.5px] text-slate-500">Some levels were reached.</span>
+                    <button onClick={() => rearm(a)} className="text-[12px] font-black text-indigo-600 hover:underline">
+                      Re-arm
+                    </button>
+                  </div>
+                )}
               </div>
-              <div className="flex items-center gap-4">
-                <span className="text-xs font-bold px-2 py-1 bg-slate-100 text-slate-600 rounded uppercase tracking-widest">
-                  {a.status}
-                </span>
-                <button
-                  onClick={() => handleRemove(a.id)}
-                  className="p-2 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition"
-                  title="Delete"
-                >
-                  <Trash2 className="w-5 h-5" />
-                </button>
-              </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       )}
+
+      <p className="mt-6 text-[12px] text-slate-400 italic">
+        Alerts fire when the live price reaches a level you set — reflecting your own plan. Prices via Yahoo
+        Finance (may be delayed ~15 min). Research support only. Not buy/sell advice.
+      </p>
     </div>
   );
 }
