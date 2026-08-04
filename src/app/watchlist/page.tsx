@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import {
   Bookmark,
@@ -12,6 +12,8 @@ import {
   RefreshCw,
   Layers,
   X,
+  FileSpreadsheet,
+  Loader2,
 } from "lucide-react";
 import {
   getWatchlist,
@@ -26,7 +28,13 @@ import {
   SUBCAT_TITLES,
   type WatchlistCategory,
 } from "@/lib/storage";
-import { resolveHolding, fetchQuotes } from "@/lib/excelImport";
+import {
+  resolveHolding,
+  fetchQuotes,
+  resolveCommodity,
+  resolveCrypto,
+  parseWorkbook,
+} from "@/lib/excelImport";
 
 const CATEGORY_META: Record<
   string,
@@ -45,10 +53,62 @@ const CATEGORY_META: Record<
 
 const isIndia = (cat: string) => cat === "Indian Stocks";
 
+// Colour tags a user can put on a watchlist row (their own meaning — e.g.
+// green = buy zone, red = avoid, yellow = watch). Clicking a colour highlights
+// the whole row (left bar + a matching background tint) so it stands out.
+// Three colour marks with a plain meaning each.
+const MARK_COLORS: { key: string; dot: string; bar: string; row: string; label: string }[] = [
+  { key: "green", dot: "bg-emerald-500", bar: "border-l-emerald-500", row: "bg-emerald-100/80", label: "Uptrend" },
+  { key: "red", dot: "bg-rose-500", bar: "border-l-rose-500", row: "bg-rose-100/80", label: "Downtrend" },
+  { key: "yellow", dot: "bg-amber-400", bar: "border-l-amber-400", row: "bg-amber-100/80", label: "Sideways" },
+];
+const barClass = (color?: string) => {
+  const c = MARK_COLORS.find((x) => x.key === color);
+  return c ? `border-l-4 ${c.bar} ${c.row}` : "border-l-4 border-l-transparent";
+};
+
+function ColorDots({ value, onPick }: { value?: string; onPick: (c: string) => void }) {
+  return (
+    <div className="flex items-center gap-1">
+      {MARK_COLORS.map((c) => (
+        <button
+          key={c.key}
+          onClick={(e) => { e.preventDefault(); e.stopPropagation(); onPick(value === c.key ? "" : c.key); }}
+          title={value === c.key ? `${c.label} (click to clear)` : `Mark ${c.label}`}
+          className={`w-3.5 h-3.5 rounded-full ${c.dot} transition ${value === c.key ? "ring-2 ring-offset-1 ring-slate-500 scale-110" : "opacity-70 hover:opacity-100"}`}
+        />
+      ))}
+    </div>
+  );
+}
+
+const curOf = (q: any, cat: string) =>
+  q?.currency === "INR" || isIndia(cat) ? "₹" : q?.currency === "USD" ? "$" : "";
+
 function fmtPrice(q: any, cat: string) {
   if (!q || q.price == null) return "—";
-  const cur = q.currency === "INR" || isIndia(cat) ? "₹" : q.currency === "USD" ? "$" : "";
-  return `${cur}${Number(q.price).toLocaleString(undefined, { maximumFractionDigits: 2 })}`;
+  return `${curOf(q, cat)}${Number(q.price).toLocaleString(undefined, { maximumFractionDigits: 2 })}`;
+}
+
+// A plain price-like value (open / high / low / prev close).
+function fmtVal(v: any, q: any, cat: string) {
+  if (v == null) return "—";
+  return `${curOf(q, cat)}${Number(v).toLocaleString(undefined, { maximumFractionDigits: 2 })}`;
+}
+
+// Market cap — Cr for Indian, T/B/M for the rest.
+function fmtCap(v: any, q: any, cat: string) {
+  if (!v) return "—";
+  const cur = curOf(q, cat);
+  if (cur === "₹") {
+    const cr = v / 1e7;
+    if (cr >= 1e5) return `${cur}${(cr / 1e5).toFixed(2)}L Cr`;
+    return `${cur}${cr.toLocaleString(undefined, { maximumFractionDigits: 0 })} Cr`;
+  }
+  if (v >= 1e12) return `${cur}${(v / 1e12).toFixed(2)}T`;
+  if (v >= 1e9) return `${cur}${(v / 1e9).toFixed(2)}B`;
+  if (v >= 1e6) return `${cur}${(v / 1e6).toFixed(1)}M`;
+  return `${cur}${v}`;
 }
 
 export default function WatchlistPage() {
@@ -69,11 +129,36 @@ export default function WatchlistPage() {
   const [addText, setAddText] = useState("");
   const [adding, setAdding] = useState(false);
 
+  // Excel/CSV import
+  const fileRef = useRef<HTMLInputElement>(null);
+  const [importing, setImporting] = useState(false);
+  const [importMsg, setImportMsg] = useState<{ kind: "ok" | "err"; text: string } | null>(null);
+
   const reload = () => {
     setWatchlist(getWatchlist());
     setSubcats(getWatchlistSubcats());
   };
+
+  // One-time heal: fix commodity/crypto rows saved with a non-Yahoo symbol
+  // (e.g. "XAGUSD" -> "SI=F", "BITCOIN" -> "BTC-USD") so their live price loads.
+  const healSymbols = () => {
+    let changed = false;
+    getWatchlist().forEach((item: any) => {
+      const sym = String(item.symbol || "");
+      let fixed = sym;
+      if (item.category === "Commodities") fixed = resolveCommodity(sym);
+      else if (item.category === "Crypto") fixed = resolveCrypto(sym);
+      if (fixed && fixed !== sym) {
+        removeFromWatchlist(sym, item.category);
+        saveToWatchlist({ ...item, symbol: fixed });
+        changed = true;
+      }
+    });
+    return changed;
+  };
+
   useEffect(() => {
+    healSymbols();
     reload();
   }, []);
 
@@ -141,6 +226,12 @@ export default function WatchlistPage() {
     reload();
   };
 
+  // Set (or clear) the personal colour mark on a row.
+  const setColor = (item: any, color: string) => {
+    saveToWatchlist({ ...item, color });
+    reload();
+  };
+
   const handleBulkAdd = async () => {
     const inputs = addText
       .split(/[\s,;\n]+/)
@@ -160,6 +251,11 @@ export default function WatchlistPage() {
 
       const resolved = await Promise.all(
         inputs.map(async (input) => {
+          // Commodities/Crypto have their own name->symbol maps (Silver -> SI=F,
+          // Bitcoin -> BTC-USD); only true equity lists need the search lookup.
+          if (addCat === "Commodities") return { symbol: resolveCommodity(input), market: addCat };
+          if (addCat === "Crypto") return { symbol: resolveCrypto(input), market: addCat };
+          if (!isMarketList) return { symbol: input.toUpperCase(), market: addCat };
           const { symbol, market } = await resolveHolding({ symbol: input, stockName: input }, hint);
           return { symbol: (symbol || input).toUpperCase(), market };
         }),
@@ -184,6 +280,64 @@ export default function WatchlistPage() {
       reload();
     } finally {
       setAdding(false);
+    }
+  };
+
+  // Import an Excel/CSV of tickers/names into a watchlist. Any layout works —
+  // the parser finds the name/symbol column. Rows import into the currently
+  // selected category; on the "All" tab, Indian/US auto-sort by detected market.
+  const handleImportFile = async (file: File) => {
+    setImportMsg(null);
+    setImporting(true);
+    try {
+      const buf = await file.arrayBuffer();
+      const sheets = parseWorkbook(buf);
+      const rows = sheets.flatMap((s) => s.rows).filter((r) => r.stockName || r.symbol);
+      if (rows.length === 0) {
+        setImportMsg({ kind: "err", text: "No stocks found. File needs a Name or Symbol column." });
+        return;
+      }
+
+      // Where do imported rows land? The active category (if one is selected),
+      // else auto-detect per row.
+      const target: string | null =
+        active !== "All" && (WATCHLIST_CATEGORIES as readonly string[]).includes(active) ? active : null;
+
+      const resolved = await Promise.all(
+        rows.map(async (r) => {
+          const input = (r.symbol || r.stockName || "").trim();
+          if (target === "Commodities")
+            return { symbol: resolveCommodity(input), name: r.stockName || input, category: "Commodities" };
+          if (target === "Crypto")
+            return { symbol: resolveCrypto(input), name: r.stockName || input, category: "Crypto" };
+          if (target === "Custom")
+            return { symbol: input.toUpperCase(), name: r.stockName || input, category: "Custom" };
+          // Indian/US target, or All -> auto-detect the market from the symbol.
+          const hint =
+            target === "Indian Stocks" || target === "US Stocks"
+              ? (target as "Indian Stocks" | "US Stocks")
+              : undefined;
+          const { symbol, market } = await resolveHolding({ symbol: r.symbol, stockName: r.stockName }, hint);
+          return { symbol: (symbol || input).toUpperCase(), name: r.stockName || input, category: market as string };
+        }),
+      );
+
+      const clean = resolved.filter((r) => r.symbol);
+      const q = await fetchQuotes(clean.map((r) => r.symbol));
+      clean.forEach((r) => {
+        saveToWatchlist({
+          symbol: r.symbol,
+          name: q[r.symbol]?.name || r.name || r.symbol,
+          category: r.category as WatchlistCategory,
+        });
+      });
+      setQuotes((prev) => ({ ...prev, ...q }));
+      reload();
+      setImportMsg({ kind: "ok", text: `Imported ${clean.length} stock${clean.length === 1 ? "" : "s"} from ${file.name}.` });
+    } catch {
+      setImportMsg({ kind: "err", text: "Could not read that file. Supported: .xlsx, .xls, .csv" });
+    } finally {
+      setImporting(false);
     }
   };
 
@@ -234,6 +388,26 @@ export default function WatchlistPage() {
           >
             <RefreshCw className={`w-4 h-4 ${refreshing ? "animate-spin" : ""}`} /> Refresh
           </button>
+          <input
+            ref={fileRef}
+            type="file"
+            accept=".xlsx,.xls,.csv"
+            className="hidden"
+            onChange={(e) => {
+              const f = e.target.files?.[0];
+              if (f) handleImportFile(f);
+              e.target.value = "";
+            }}
+          />
+          <button
+            onClick={() => fileRef.current?.click()}
+            disabled={importing}
+            className="px-4 py-2 bg-white border border-slate-200 text-slate-600 rounded-lg text-sm font-bold hover:bg-slate-50 flex items-center gap-2 transition disabled:opacity-50"
+            title="Import an Excel/CSV of tickers or names"
+          >
+            {importing ? <Loader2 className="w-4 h-4 animate-spin" /> : <FileSpreadsheet className="w-4 h-4" />}
+            Import Excel
+          </button>
           <button
             onClick={() => setShowAdd((v) => !v)}
             className="px-4 py-2 bg-indigo-600 text-white rounded-lg text-sm font-bold hover:bg-indigo-700 flex items-center gap-2 transition"
@@ -242,6 +416,28 @@ export default function WatchlistPage() {
           </button>
         </div>
       </div>
+
+      {/* Import feedback */}
+      {importMsg && (
+        <div
+          className={`mb-4 rounded-xl px-4 py-3 text-sm font-medium flex items-center justify-between gap-3 ${
+            importMsg.kind === "ok"
+              ? "bg-emerald-50 text-emerald-700 border border-emerald-200"
+              : "bg-rose-50 text-rose-700 border border-rose-200"
+          }`}
+        >
+          <span>{importMsg.text}</span>
+          <button onClick={() => setImportMsg(null)} className="opacity-60 hover:opacity-100">
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+      )}
+      {active !== "All" && (
+        <p className="-mt-2 mb-4 text-[11px] text-slate-400 font-medium">
+          Import Excel → stocks currently selected <b>{active}</b> list mein jaayenge. Sabhi markets
+          auto-sort karne ke liye pehle <b>All</b> tab chuno.
+        </p>
+      )}
 
       {/* Quick Add — bulk paste many symbols into one list */}
       {showAdd && (
@@ -419,6 +615,17 @@ export default function WatchlistPage() {
         />
       </div>
 
+      {/* Colour-mark legend */}
+      <div className="flex items-center gap-3 mb-4 text-[11px] font-bold text-slate-400 flex-wrap">
+        <span className="uppercase tracking-wide">Mark:</span>
+        {MARK_COLORS.map((c) => (
+          <span key={c.key} className="inline-flex items-center gap-1.5">
+            <span className={`w-2.5 h-2.5 rounded-full ${c.dot}`} /> {c.label}
+          </span>
+        ))}
+        <span className="text-slate-300">— click a dot on a row to tag it</span>
+      </div>
+
       {/* Empty state */}
       {watchlist.length === 0 ? (
         <div className="bg-white border border-slate-200 rounded-2xl p-16 text-center">
@@ -443,7 +650,8 @@ export default function WatchlistPage() {
             const chg = q?.changePct;
             const up = typeof chg === "number" && chg >= 0;
             return (
-              <div key={`m-${item.symbol}-${item.category}-${idx}`} className="bg-white rounded-xl border border-slate-200 shadow-sm p-3 flex items-center gap-3">
+              <div key={`m-${item.symbol}-${item.category}-${idx}`} className={`bg-white rounded-xl border border-slate-200 shadow-sm p-3 flex items-center gap-2.5 ${barClass(item.color)}`}>
+                <div className="shrink-0"><ColorDots value={item.color} onPick={(c) => setColor(item, c)} /></div>
                 <Link href={`/analyze?symbol=${item.symbol}`} className="flex items-center gap-3 flex-1 min-w-0">
                   <div className="w-9 h-9 rounded-lg bg-indigo-50 border border-indigo-100 flex items-center justify-center font-bold text-indigo-700 text-[12px] shrink-0">
                     {item.symbol.substring(0, 2)}
@@ -483,6 +691,10 @@ export default function WatchlistPage() {
                   <th className="p-4 text-xs font-bold text-slate-500 uppercase tracking-widest whitespace-nowrap hidden sm:table-cell">List</th>
                   <th className="p-4 text-xs font-bold text-slate-500 uppercase tracking-widest whitespace-nowrap text-right">Price</th>
                   <th className="p-4 text-xs font-bold text-slate-500 uppercase tracking-widest whitespace-nowrap text-right">Change</th>
+                  <th className="p-4 text-xs font-bold text-slate-500 uppercase tracking-widest whitespace-nowrap text-right hidden md:table-cell">Day Range</th>
+                  <th className="p-4 text-xs font-bold text-slate-500 uppercase tracking-widest whitespace-nowrap text-right hidden lg:table-cell">Open</th>
+                  <th className="p-4 text-xs font-bold text-slate-500 uppercase tracking-widest whitespace-nowrap text-right hidden xl:table-cell">Prev Close</th>
+                  <th className="p-4 text-xs font-bold text-slate-500 uppercase tracking-widest whitespace-nowrap text-right hidden lg:table-cell">Mkt Cap</th>
                   <th className="p-4 text-xs font-bold text-slate-500 uppercase tracking-widest whitespace-nowrap text-right">Actions</th>
                 </tr>
               </thead>
@@ -492,9 +704,10 @@ export default function WatchlistPage() {
                   const chg = q?.changePct;
                   const up = typeof chg === "number" && chg >= 0;
                   return (
-                    <tr key={`${item.symbol}-${item.category}-${idx}`} className="border-b border-slate-100 hover:bg-slate-50 transition">
+                    <tr key={`${item.symbol}-${item.category}-${idx}`} className={`border-b border-slate-100 transition ${item.color ? "" : "hover:bg-slate-50"} ${barClass(item.color)}`}>
                       <td className="p-4">
                         <div className="flex items-center gap-3">
+                          <ColorDots value={item.color} onPick={(c) => setColor(item, c)} />
                           <div className="w-10 h-10 rounded-lg bg-indigo-50 border border-indigo-100 flex items-center justify-center font-bold text-indigo-700">
                             {item.symbol.substring(0, 2)}
                           </div>
@@ -530,6 +743,18 @@ export default function WatchlistPage() {
                           <span className="text-slate-400 text-sm">—</span>
                         )}
                       </td>
+                      <td className="p-4 text-right hidden md:table-cell whitespace-nowrap">
+                        {q?.dayLow != null && q?.dayHigh != null ? (
+                          <span className="text-[12px] tabular-nums">
+                            <span className="text-slate-400">{fmtVal(q.dayLow, q, item.category)}</span>
+                            <span className="text-slate-300"> – </span>
+                            <span className="text-slate-600">{fmtVal(q.dayHigh, q, item.category)}</span>
+                          </span>
+                        ) : <span className="text-slate-400 text-sm">—</span>}
+                      </td>
+                      <td className="p-4 text-right tabular-nums text-slate-600 text-sm hidden lg:table-cell">{fmtVal(q?.open, q, item.category)}</td>
+                      <td className="p-4 text-right tabular-nums text-slate-600 text-sm hidden xl:table-cell">{fmtVal(q?.prevClose, q, item.category)}</td>
+                      <td className="p-4 text-right tabular-nums text-slate-600 text-sm hidden lg:table-cell">{fmtCap(q?.marketCap, q, item.category)}</td>
                       <td className="p-4 text-right">
                         <div className="flex items-center justify-end gap-2">
                           <Link

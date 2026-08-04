@@ -32,6 +32,8 @@ const RANGES = [
   { key: "1y", label: "1Y" },
   { key: "2y", label: "2Y" },
   { key: "5y", label: "5Y" },
+  { key: "10y", label: "10Y" },
+  { key: "max", label: "Max" },
 ];
 const INTERVALS = [
   { key: "1h", label: "Hourly" },
@@ -437,7 +439,9 @@ export default function ChartsPage() {
                     setIntervalState(iv.key);
                     // Snap to a range that suits the interval so the view isn't
                     // over-dense (hourly/1y) or too sparse (monthly/1mo).
-                    const dr = ({ "1h": "1mo", "1d": "1y", "1wk": "2y", "1mo": "5y" } as Record<string, string>)[iv.key];
+                    // Monthly bars are meant for the long view — snap to the
+                    // full lifetime graph.
+                    const dr = ({ "1h": "1mo", "1d": "1y", "1wk": "2y", "1mo": "max" } as Record<string, string>)[iv.key];
                     if (dr) setRange(dr);
                   }}
                     className={`px-2.5 py-1 rounded-md text-xs font-bold transition ${interval === iv.key ? "bg-white text-indigo-600 shadow-sm" : "text-slate-500 hover:text-slate-800"}`}>

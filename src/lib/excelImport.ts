@@ -20,12 +20,17 @@ export type ParsedSheet = {
 
 const norm = (s: any) => String(s ?? "").toLowerCase().replace(/[^a-z0-9]/g, "");
 
+// Pattern-major: try each pattern across ALL headers before moving to the next
+// pattern. So a specific column ("Average Cost") is preferred over a generic one
+// ("Current Price") even when the generic column appears first in the sheet.
 function pickColumn(headers: string[], patterns: RegExp[], exclude: RegExp[] = []) {
-  for (let i = 0; i < headers.length; i++) {
-    const h = norm(headers[i]);
-    if (!h) continue;
-    if (exclude.some((r) => r.test(h))) continue;
-    if (patterns.some((r) => r.test(h))) return i;
+  for (const p of patterns) {
+    for (let i = 0; i < headers.length; i++) {
+      const h = norm(headers[i]);
+      if (!h) continue;
+      if (exclude.some((r) => r.test(h))) continue;
+      if (p.test(h)) return i;
+    }
   }
   return -1;
 }
@@ -42,29 +47,47 @@ export function parseWorksheet(ws: XLSX.WorkSheet): ExcelRow[] | null {
   const grid: any[][] = XLSX.utils.sheet_to_json(ws, { header: 1, defval: "" });
   if (!grid.length) return null;
 
+  // Pick the row with the MOST header-like cells (within the first 25), not just
+  // the first row that clears a threshold — broker exports (ICICI, Zerodha…)
+  // often have title/summary rows above the real table.
   let headerIdx = -1;
-  for (let i = 0; i < Math.min(grid.length, 15); i++) {
+  let bestHits = 0;
+  for (let i = 0; i < Math.min(grid.length, 25); i++) {
     const cells = grid[i].map(norm);
     const hits = cells.filter((c) =>
-      /name|stock|company|scrip|symbol|ticker|qty|quantity|shares|price|rate|value|amount/.test(c),
+      /name|stock|company|scrip|security|instrument|symbol|ticker|isin|qty|quantity|shares|units|holding|price|rate|value|amount|cost|avg|ltp|cmp/.test(
+        c,
+      ),
     ).length;
-    if (hits >= 2) {
+    if (hits > bestHits) {
+      bestHits = hits;
       headerIdx = i;
-      break;
     }
   }
-  if (headerIdx === -1) return null;
+  if (headerIdx === -1 || bestHits < 2) return null;
 
   const headers = grid[headerIdx].map((h) => String(h));
   const iName = pickColumn(
     headers,
-    [/name/, /stock/, /company/, /scrip/, /security/, /instrument/],
-    [/scripcode/, /symbolcode/],
+    [/companyname/, /stockname/, /securityname/, /scripname/, /^name$/, /name/, /company/, /stock/, /scrip/, /security/, /instrument/],
+    [/scripcode/, /symbolcode/, /isin/],
   );
-  const iSymbol = pickColumn(headers, [/^symbol$/, /symbol/, /ticker/, /nsecode/, /bsecode/, /scripcode/]);
-  const iQty = pickColumn(headers, [/qty/, /quantity/, /shares/, /units/, /holding/]);
-  const iPrice = pickColumn(headers, [/avgprice/, /buyprice/, /^price$/, /price/, /rate/, /cost/, /avg/]);
-  const iValue = pickColumn(headers, [/marketvalue/, /mktvalue/, /currentvalue/, /^value$/, /value/, /amount/]);
+  const iSymbol = pickColumn(headers, [
+    /^symbol$/, /tradingsymbol/, /nsesymbol/, /bsesymbol/, /nsecode/, /bsecode/, /symbol/, /ticker/, /scripcode/,
+  ]);
+  const iQty = pickColumn(headers, [
+    /^qty$/, /qtyavailable/, /holdingqty/, /netqty/, /qty/, /quantity/, /shares/, /units/, /^holding$/, /balance/,
+  ]);
+  // Prefer a purchase/average cost over a current/market price for buy price.
+  const iPrice = pickColumn(headers, [
+    /avgcost/, /averagecost/, /avgprice/, /averageprice/, /buyavg/, /buyprice/, /buyrate/, /costprice/, /purchaseprice/, /avgrate/, /^avg/, /^price$/, /price/, /rate/, /^cost/, /avg/,
+  ]);
+  // Prefer an at-cost / invested value: when there's no explicit price column,
+  // the caller divides this by qty to get the BUY price, so a current market
+  // value would set a wrong (today's) cost basis and hide real P&L.
+  const iValue = pickColumn(headers, [
+    /valueatcost/, /investedvalue/, /invested/, /costvalue/, /purchasevalue/, /buyvalue/, /marketvalue/, /mktvalue/, /currentvalue/, /^value$/, /value/, /amount/,
+  ]);
 
   const rows: ExcelRow[] = [];
   for (let r = headerIdx + 1; r < grid.length; r++) {
@@ -72,7 +95,10 @@ export function parseWorksheet(ws: XLSX.WorkSheet): ExcelRow[] | null {
     const stockName = String((iName >= 0 ? row[iName] : row[0]) ?? "").trim();
     const symbol = String((iSymbol >= 0 ? row[iSymbol] : "") ?? "").trim();
     if (!stockName && !symbol) continue;
-    if (/^(total|grand total|sum)/i.test(stockName)) continue;
+    // Skip subtotal/total rows in broker exports — but only exact total-labels,
+    // so a real company like "Total S.A." (norm "totalsa") is NOT dropped.
+    const nm = norm(stockName);
+    if (/^(grand|sub|net|sector|portfolio)?total$/.test(nm) || nm === "sum" || nm === "totalvalue") continue;
 
     const qty = iQty >= 0 ? toNum(row[iQty]) : null;
     const price = iPrice >= 0 ? toNum(row[iPrice]) : null;
@@ -109,6 +135,9 @@ export async function resolveSymbol(
 ): Promise<string> {
   let cand = (row.symbol || row.stockName || "").trim();
   if (!cand) return "";
+  // Futures (GC=F, SI=F) and indices (^NSEI) are already Yahoo symbols — never
+  // append .NS or run them through a name search.
+  if (cand.includes("=") || cand.startsWith("^")) return cand.toUpperCase();
   const looksTicker = /^[A-Za-z0-9.\-&]+$/.test(cand) && cand.length <= 14;
   if (looksTicker) {
     if (market === "Indian" && !cand.includes(".")) cand += ".NS";
@@ -144,6 +173,9 @@ export async function resolveHolding(
   const cand = (row.symbol || row.stockName || "").trim();
   if (!cand) return { symbol: "", market: "US Stocks" };
   const up = cand.toUpperCase();
+
+  // 0. futures / index symbols pass straight through (commodities, indices).
+  if (up.includes("=") || up.startsWith("^")) return { symbol: up, market: "US Stocks" };
 
   // 1. explicit Indian suffix
   if (/\.(NS|BO)$/i.test(up)) return { symbol: up, market: "Indian Stocks" };
@@ -187,8 +219,76 @@ export async function resolveHolding(
     /* ignore */
   }
 
-  // 6. fallback
+  // 6. fallback — honour the caller's hint so a transient search failure keeps
+  // an Indian import in the Indian tab (with a .NS suffix) instead of dumping
+  // everything into US with an un-priceable bare ticker.
+  if (hint === "Indian Stocks") {
+    return { symbol: up.includes(".") ? up : `${up}.NS`, market: "Indian Stocks" };
+  }
   return { symbol: up, market: "US Stocks" };
+}
+
+// Commodity names -> Yahoo futures symbols. Yahoo's name search returns ETFs or
+// futures inconsistently for "silver"/"gold", so map the common ones explicitly.
+export const COMMODITY_MAP: Record<string, string> = {
+  // Yahoo has no spot metal feed (XAGUSD=X etc. return nothing), so metals map
+  // to their liquid futures contracts.
+  GOLD: "GC=F", XAU: "GC=F",
+  SILVER: "SI=F", XAG: "SI=F",
+  PLATINUM: "PL=F", XPT: "PL=F",
+  PALLADIUM: "PA=F", XPD: "PA=F",
+  CRUDE: "CL=F", CRUDEOIL: "CL=F", OIL: "CL=F", WTI: "CL=F",
+  BRENT: "BZ=F",
+  NATURALGAS: "NG=F", NATGAS: "NG=F", GAS: "NG=F",
+  COPPER: "HG=F",
+  CORN: "ZC=F", WHEAT: "ZW=F", SOYBEAN: "ZS=F", SOYBEANS: "ZS=F",
+  SUGAR: "SB=F", COFFEE: "KC=F", COTTON: "CT=F", COCOA: "CC=F",
+  ALUMINIUM: "ALI=F", ALUMINUM: "ALI=F",
+};
+
+// Turn a commodity input into a Yahoo symbol. Already-valid symbols (SI=F, an
+// index, a -USD pair) pass through; a known name/pair maps to its futures
+// contract; anything else is assumed to already be a ticker.
+export function resolveCommodity(input: string): string {
+  const up = String(input || "").trim().toUpperCase();
+  if (!up) return "";
+  if (up.includes("=") || up.startsWith("^") || up.endsWith("-USD")) return up;
+  const key = up.replace(/[^A-Z]/g, "");
+  if (COMMODITY_MAP[key]) return COMMODITY_MAP[key];
+  // Spot-pair forms like XAGUSD / XAUUSD / GOLDUSD -> strip the trailing USD and
+  // retry against the map.
+  const noUsd = key.replace(/USD$/, "");
+  if (noUsd && COMMODITY_MAP[noUsd]) return COMMODITY_MAP[noUsd];
+  const stripped = key.replace(/FUTURES?|SPOT|COMEX|MCX|NYMEX/g, "");
+  if (COMMODITY_MAP[stripped]) return COMMODITY_MAP[stripped];
+  return up;
+}
+
+// Crypto names/tickers -> Yahoo "<COIN>-USD" pairs.
+export const CRYPTO_MAP: Record<string, string> = {
+  BITCOIN: "BTC-USD", BTC: "BTC-USD",
+  ETHEREUM: "ETH-USD", ETHER: "ETH-USD", ETH: "ETH-USD",
+  SOLANA: "SOL-USD", SOL: "SOL-USD",
+  RIPPLE: "XRP-USD", XRP: "XRP-USD",
+  DOGECOIN: "DOGE-USD", DOGE: "DOGE-USD",
+  CARDANO: "ADA-USD", ADA: "ADA-USD",
+  BNB: "BNB-USD", BINANCECOIN: "BNB-USD",
+  POLYGON: "MATIC-USD", MATIC: "MATIC-USD",
+  LITECOIN: "LTC-USD", LTC: "LTC-USD",
+  TRON: "TRX-USD", TRX: "TRX-USD",
+  POLKADOT: "DOT-USD", DOT: "DOT-USD",
+  AVALANCHE: "AVAX-USD", AVAX: "AVAX-USD",
+};
+
+export function resolveCrypto(input: string): string {
+  const up = String(input || "").trim().toUpperCase();
+  if (!up) return "";
+  if (up.endsWith("-USD") || up.includes("=")) return up;
+  const key = up.replace(/[^A-Z0-9]/g, "");
+  if (CRYPTO_MAP[key]) return CRYPTO_MAP[key];
+  // Strip spaces/punctuation so a stray "BTC USD" doesn't become an invalid
+  // "BTC USD-USD"; unknown coins still get the -USD pair form.
+  return `${key || up}-USD`;
 }
 
 export async function fetchQuotes(symbols: string[]): Promise<Record<string, any>> {

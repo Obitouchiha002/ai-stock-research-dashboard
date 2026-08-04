@@ -96,12 +96,44 @@ const BREADTH = {
     "ADANIPORTS.NS","COALINDIA.NS","GRASIM.NS","HDFCLIFE.NS","SBILIFE.NS","BAJAJFINSV.NS","BAJAJ-AUTO.NS",
     "EICHERMOT.NS","HEROMOTOCO.NS","DRREDDY.NS","CIPLA.NS","DIVISLAB.NS","BRITANNIA.NS","TATACONSUM.NS",
     "INDUSINDBK.NS","APOLLOHOSP.NS","BPCL.NS","HINDALCO.NS","UPL.NS","SHREECEM.NS",
+    // broader Nifty 100 / 200 sample — bad symbols auto-filter out
+    "DABUR.NS","GODREJCP.NS","PIDILITIND.NS","HAVELLS.NS","SIEMENS.NS","ABB.NS","DLF.NS","GAIL.NS","IOC.NS",
+    "VEDL.NS","AMBUJACEM.NS","ACC.NS","BANKBARODA.NS","PNB.NS","CANBK.NS","ZOMATO.NS","DMART.NS","NAUKRI.NS",
+    "PAGEIND.NS","BERGEPAINT.NS","MARICO.NS","COLPAL.NS","BIOCON.NS","LUPIN.NS","AUROPHARMA.NS","TORNTPHARM.NS",
+    "ICICIPRULI.NS","ICICIGI.NS","MUTHOOTFIN.NS","CHOLAFIN.NS","TATAPOWER.NS","ADANIGREEN.NS","ADANIPOWER.NS",
+    "JINDALSTEL.NS","SAIL.NS","NMDC.NS","HINDZINC.NS","NATIONALUM.NS","IDFCFIRSTB.NS","FEDERALBNK.NS",
+    "BANDHANBNK.NS","AUBANK.NS","INDIGO.NS","TRENT.NS","BEL.NS","HAL.NS","BHEL.NS","IRCTC.NS","POLYCAB.NS",
+    "LTIM.NS","PERSISTENT.NS","MPHASIS.NS","OFSS.NS","TVSMOTOR.NS","ASHOKLEY.NS","MRF.NS","SRF.NS","PEL.NS",
+    "RECLTD.NS","PFC.NS","IRFC.NS","BOSCHLTD.NS","CUMMINSIND.NS","ALKEM.NS","MAXHEALTH.NS","FORTIS.NS",
+    "UBL.NS","VBL.NS","TATACOMM.NS","PETRONET.NS","IGL.NS","TATACHEM.NS","ZYDUSLIFE.NS",
+    // wider Nifty 200 sample — unresolved tickers auto-filter
+    "GODREJPROP.NS","OBEROIRLTY.NS","PRESTIGE.NS","PHOENIXLTD.NS","LODHA.NS","MOTHERSON.NS","BHARATFORG.NS",
+    "ESCORTS.NS","EXIDEIND.NS","TIINDIA.NS","JUBLFOOD.NS","DIXON.NS","VOLTAS.NS","CROMPTON.NS","PATANJALI.NS",
+    "TATAELXSI.NS","COFORGE.NS","KPITTECH.NS","LTTS.NS","SUPREMEIND.NS","ASTRAL.NS","APLAPOLLO.NS","JSWENERGY.NS",
+    "TORNTPOWER.NS","NHPC.NS","SJVN.NS","OIL.NS","MFSL.NS","LICI.NS","HDFCAMC.NS","SBICARD.NS","BAJAJHLDNG.NS",
+    "INDHOTEL.NS","GMRAIRPORT.NS","CONCOR.NS","BDL.NS","MAZDOCK.NS","RVNL.NS","IREDA.NS","POWERINDIA.NS",
+    "SOLARINDS.NS","CGPOWER.NS","KALYANKJIL.NS","IDBI.NS","YESBANK.NS","INDUSTOWER.NS","GAIL.NS","HINDPETRO.NS",
+    "MANKIND.NS","GLAND.NS","LAURUSLABS.NS","NAM-INDIA.NS",
   ],
   us: [
     "AAPL","MSFT","NVDA","GOOGL","AMZN","META","TSLA","AVGO","BRK-B","JPM","LLY","V","XOM","UNH","MA",
     "JNJ","PG","HD","COST","MRK","ABBV","CVX","CRM","WMT","BAC","KO","PEP","ADBE","NFLX","AMD","TMO",
     "MCD","CSCO","ACN","ABT","LIN","DHR","INTC","WFC","DIS","QCOM","VZ","TXN","PM","INTU","AMGN","IBM",
     "CAT","GE","NOW",
+    // broader S&P 500 sample — bad symbols auto-filter out
+    "ORCL","DELL","MU","AMAT","LRCX","KLAC","ADI","PANW","SNPS","CDNS","FTNT","ANET","MRVL","NXPI","MCHP",
+    "PYPL","SHOP","UBER","ABNB","BKNG","MAR","SBUX","NKE","LOW","TJX","TGT","DG","DLTR","CL","KMB","GIS",
+    "KHC","MDLZ","MO","HSY","STZ","MNST","GM","F","BA","HON","RTX","LMT","GD","NOC","DE","MMM","EMR","ETN",
+    "ITW","UNP","UPS","FDX","CSX","NSC","DAL","UAL","LUV","PFE","MRNA","BMY","GILD","VRTX","REGN","ZTS",
+    "ISRG","SYK","BSX","MDT","CI","CVS","ELV","SPGI","MCO","ICE","CME","BLK","GS","MS","C","USB","PNC",
+    "TFC","SCHW","AXP","COF","MET","PRU","AIG","TRV","PGR","ALL","CB","AON","MMC","DUK","SO","NEE","AEP",
+    "T","TMUS","CMCSA","CHTR","WBD","EA","TTWO",
+    // wider S&P 500 sample — unresolved tickers auto-filter
+    "ORLY","AZO","ROST","ULTA","YUM","CMG","DPZ","APH","TEL","GLW","KEYS","ROP","FICO","IT","CTSH","WDAY",
+    "SNOW","CRWD","ZS","DDOG","NET","MDB","HUBS","PLTR","COIN","HOOD","SOFI","RBLX","U","CHWY","ETSY","EBAY",
+    "PCAR","FAST","GWW","URI","PWR","VMC","MLM","NUE","STLD","FCX","NEM","DOW","DD","LYB","PPG","SHW","ECL",
+    "APD","IFF","ALB","CMI","APTV","GM","F","DAL","UAL","LUV","MAR","HLT","BKNG","EXPE","ADP","PAYX","FIS",
+    "FISV","GPN","MSCI","NDAQ","CBOE","TROW","AMP","DFS","SYF","KEY","CFG","HBAN","FITB","RF","MTB",
   ],
 };
 
@@ -177,7 +209,7 @@ export default function Dashboard() {
       }
     };
     load();
-    const id = setInterval(load, 30000);
+    const id = setInterval(load, 45000);
     return () => { cancelled = true; clearInterval(id); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [mktTab]);
@@ -261,7 +293,7 @@ export default function Dashboard() {
       let symbols: string[] = [];
       try {
         const wl = JSON.parse(localStorage.getItem("sa_watchlist") || "[]");
-        const pf = JSON.parse(localStorage.getItem("sa_holdings") || "[]");
+        const pf = JSON.parse(localStorage.getItem("sa_portfolio") || "[]");
         symbols = Array.from(
           new Set([
             ...wl.map((w: any) => w?.symbol),
@@ -363,7 +395,7 @@ export default function Dashboard() {
           const rows: any[] = breadthRows.length
             ? breadthRows
             : m.stocks.map((s) => mktQuotes[s.symbol]).filter((q) => q?.ok && Number.isFinite(q.changePct));
-          const universeLabel = mktTab === "india" ? "Nifty large-caps" : "S&P 500 large-caps";
+          const universeLabel = mktTab === "india" ? "Nifty stocks" : "S&P 500 stocks";
           const adv = rows.filter((q) => q.changePct > 0).length;
           const dec = rows.filter((q) => q.changePct < 0).length;
           const unch = rows.length - adv - dec;
@@ -386,8 +418,53 @@ export default function Dashboard() {
 
           return (
             <div key={mktTab} className="space-y-5">
-              {/* KPI row — breadth + the day's extremes + volatility. No index
-                  dupes (the topbar ticker already shows every index live). */}
+              {/* Section heading above the snapshot */}
+              <div className="flex items-center gap-3">
+                <div className="flex items-center gap-2.5">
+                  <span className="w-9 h-9 rounded-xl bg-indigo-50 text-indigo-600 grid place-items-center shadow-sm">
+                    <BarChart3 className="w-5 h-5" strokeWidth={2.5} />
+                  </span>
+                  <div className="min-w-0">
+                    <h2 className="text-xl font-black text-slate-900 tracking-tight leading-none">Market Overview</h2>
+                    <p className="text-[12px] font-semibold text-slate-400 mt-0.5">{m.title} · breadth, movers &amp; volatility</p>
+                  </div>
+                </div>
+                <div className="flex-1 h-px bg-slate-200 ml-2" />
+              </div>
+
+              {/* Headline index boxes — the market's key indices, live */}
+              <motion.div
+                className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-7 gap-3"
+                initial={{ opacity: 0, y: 12 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.4, ease: "easeOut" }}
+              >
+                {m.indices.map((it) => {
+                  const q = mktQuotes[it.symbol];
+                  const up = (q?.changePct ?? 0) >= 0;
+                  return (
+                    <Link
+                      key={it.symbol}
+                      href={`/charts?symbol=${encodeURIComponent(it.symbol)}`}
+                      className="bg-white rounded-xl border border-slate-200 shadow-sm px-3.5 py-2.5 hover:border-indigo-200 hover:shadow-md transition-all"
+                    >
+                      <div className="text-[10px] font-black uppercase tracking-wider text-slate-400 truncate">{it.label}</div>
+                      <div className="flex items-baseline gap-1.5 mt-1">
+                        <span className="text-[15px] font-black text-slate-900 tabular-nums">
+                          {q?.price != null ? Number(q.price).toLocaleString(undefined, { maximumFractionDigits: 2 }) : mktLoading ? "…" : "—"}
+                        </span>
+                        {q?.changePct != null && (
+                          <span className={`text-[11px] font-bold tabular-nums ${up ? "text-emerald-600" : "text-rose-600"}`}>
+                            {up ? "+" : ""}{q.changePct.toFixed(2)}%
+                          </span>
+                        )}
+                      </div>
+                    </Link>
+                  );
+                })}
+              </motion.div>
+
+              {/* KPI row — breadth + the day's extremes + volatility */}
               <motion.div
                 className="grid grid-cols-2 xl:grid-cols-4 gap-3"
                 initial={{ opacity: 0, y: 12 }}
@@ -405,14 +482,14 @@ export default function Dashboard() {
                       <TrendingDown className="w-3.5 h-3.5 text-rose-500" />
                     </span>
                   }
-                  sub={`of ${total} large-caps${breadthRows.length ? "" : " · loading…"}`}
+                  sub={`of ${total} stocks${breadthRows.length ? "" : " · loading…"}`}
                   right={<DonutRing pct={breadthPct} label={`${Math.round(breadthPct)}%`} />}
                 />
                 <StatCard
                   title="Top Gainer"
                   value={topG ? cleanSym(topG.symbol) : "—"}
                   tone="emerald"
-                  sub={topG ? `+${topG.changePct.toFixed(2)}% · ${cur}${lvl(topG.price)}` : "—"}
+                  sub={topG ? `${topG.changePct >= 0 ? "+" : ""}${topG.changePct.toFixed(2)}% · ${cur}${lvl(topG.price)}` : "—"}
                 />
                 <StatCard
                   title="Top Loser"
@@ -446,9 +523,9 @@ export default function Dashboard() {
                   { title: "Top Losers", list: top5L, up: false },
                 ] as const).map((col) => (
                   <div key={col.title} className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
-                    <div className="px-4 py-2.5 border-b border-slate-100 flex items-center gap-2">
+                    <div className="px-4 py-3 border-b-2 border-slate-100 bg-slate-50/50 flex items-center gap-2">
                       {col.up ? <TrendingUp className="w-4 h-4 text-emerald-600" /> : <TrendingDown className="w-4 h-4 text-rose-600" />}
-                      <h3 className="text-[12px] font-black uppercase tracking-wider text-slate-500">{col.title}</h3>
+                      <h3 className="text-[13.5px] font-black tracking-tight text-slate-800">{col.title}</h3>
                       <span className="ml-auto text-[10.5px] font-bold text-slate-400">{universeLabel}</span>
                     </div>
                     <div className="divide-y divide-slate-50">
@@ -493,14 +570,14 @@ export default function Dashboard() {
                 transition={{ duration: 0.4, delay: 0.32, ease: "easeOut" }}
                 className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden"
               >
-                <div className="px-4 py-3 border-b border-slate-100 flex items-center justify-between">
-                  <h3 className="text-[13px] font-black text-slate-800">
+                <div className="px-4 py-3.5 border-b border-slate-100 flex items-center justify-between">
+                  <h3 className="text-[16px] font-black text-slate-900 tracking-tight">
                     Top 10 {m.title} companies · by market cap
                   </h3>
-                  <span className="text-[11px] text-slate-400 font-bold">tap to analyse</span>
+                  <span className="text-[11px] text-indigo-500 font-black">tap to analyse →</span>
                 </div>
                 {/* column header (hidden on phones — the card layout stacks) */}
-                <div className="hidden sm:grid grid-cols-[2.5rem_1.8fr_1.2fr_1.2fr_1fr_1.25rem] items-center gap-4 px-4 py-2 border-b border-slate-100 bg-slate-50/60 text-[10.5px] font-black uppercase tracking-wider text-slate-400">
+                <div className="hidden sm:grid grid-cols-[2.5rem_1.8fr_1.2fr_1.2fr_1fr_1.25rem] items-center gap-4 px-4 py-2.5 border-b-2 border-slate-100 bg-slate-50 text-[12px] font-black uppercase tracking-wide text-slate-600">
                   <span>#</span>
                   <span>Company</span>
                   <span className="text-right">CMP</span>
@@ -572,7 +649,7 @@ export default function Dashboard() {
 
           {/* Compact list — one row per coin, with a 24h sparkline */}
           <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
-            <div className="hidden sm:flex items-center gap-3 px-4 py-2 border-b border-slate-100 bg-slate-50/60 text-[10px] font-black uppercase tracking-wider text-slate-400">
+            <div className="hidden sm:flex items-center gap-3 px-4 py-2.5 border-b-2 border-slate-100 bg-slate-50 text-[12px] font-black uppercase tracking-wide text-slate-600">
               <span className="w-8" />
               <span className="flex-1">Coin</span>
               <span className="w-28 text-right">Price</span>

@@ -11,8 +11,59 @@ import {
   addCustomMarketToGroup,
   removeCustomMarketFromGroup,
   removeCustomMarketSymbol,
+  getMarketMarks,
+  setMarketMark,
 } from "@/lib/storage";
-import { resolveHolding } from "@/lib/excelImport";
+import { resolveHolding, resolveCommodity, resolveCrypto } from "@/lib/excelImport";
+
+// Manual trend tag the user can set per row (their own read, not the AI trend).
+const TREND_OPTS = [
+  { v: "", label: "Mark…", cls: "text-slate-400 border-slate-200 bg-white" },
+  { v: "up", label: "↑ Uptrend", cls: "text-emerald-700 border-emerald-300 bg-emerald-50" },
+  { v: "down", label: "↓ Downtrend", cls: "text-rose-700 border-rose-300 bg-rose-50" },
+  { v: "side", label: "→ Sideways", cls: "text-amber-700 border-amber-300 bg-amber-50" },
+];
+function TrendSelect({ value, onChange }: { value?: string; onChange: (v: string) => void }) {
+  const cur = TREND_OPTS.find((o) => o.v === (value || "")) || TREND_OPTS[0];
+  return (
+    <select value={value || ""} onChange={(e) => onChange(e.target.value)}
+      className={`text-[11px] font-bold rounded-lg border px-2 py-1 outline-none cursor-pointer focus:ring-2 focus:ring-indigo-200 ${cur.cls}`}>
+      {TREND_OPTS.map((o) => <option key={o.v} value={o.v}>{o.label}</option>)}
+    </select>
+  );
+}
+
+// Common index names -> Yahoo symbols, so a user can type "NIFTY" / "DOW"
+// instead of remembering the caret ticker.
+const INDEX_ALIAS: Record<string, string> = {
+  NIFTY: "^NSEI", NIFTY50: "^NSEI", NSEI: "^NSEI",
+  SENSEX: "^BSESN", BSESN: "^BSESN",
+  BANKNIFTY: "^NSEBANK", NIFTYBANK: "^NSEBANK",
+  INDIAVIX: "^INDIAVIX",
+  DOW: "^DJI", DOWJONES: "^DJI", DJIA: "^DJI",
+  SP500: "^GSPC", SANDP500: "^GSPC", SPX: "^GSPC",
+  NASDAQ: "^IXIC", NASDAQ100: "^NDX",
+  RUSSELL: "^RUT", RUSSELL2000: "^RUT",
+  VIX: "^VIX", FTSE: "^FTSE", FTSE100: "^FTSE",
+  NIKKEI: "^N225", NIKKEI225: "^N225",
+  DAX: "^GDAXI", HANGSENG: "^HSI", HSI: "^HSI", CAC: "^FCHI", CAC40: "^FCHI",
+};
+
+// Resolve a typed symbol/name to a Yahoo symbol, using the open tab to pick the
+// right resolver (commodities/crypto have their own name maps; index names map
+// to caret tickers; equity tabs pass a market hint).
+async function resolveForMarket(raw: string, tab: string): Promise<string> {
+  const up = raw.trim().toUpperCase();
+  if (!up) return "";
+  if (up.includes("=") || up.startsWith("^") || up.endsWith("-USD")) return up;
+  const alias = INDEX_ALIAS[up.replace(/[^A-Z0-9]/g, "")];
+  if (alias) return alias;
+  if (tab === "comm") return resolveCommodity(raw);
+  if (tab === "crypto") return resolveCrypto(raw);
+  const hint = tab === "in" ? "Indian Stocks" : tab === "us" ? "US Stocks" : undefined;
+  const { symbol } = await resolveHolding({ symbol: raw, stockName: raw }, hint as any);
+  return (symbol || raw).toUpperCase();
+}
 
 type Item = { symbol: string; label: string };
 
@@ -147,6 +198,7 @@ export default function MarketsPage() {
   const [tab, setTab] = useState("us");
   // user's own symbols ("Custom" tab)
   const [custom, setCustom] = useState<{ symbol: string; label: string }[]>([]);
+  const [marks, setMarks] = useState<Record<string, string>>({});
   // Per-tab custom symbols the user added into any group.
   const [customByGroup, setCustomByGroup] = useState<Record<string, { symbol: string; label: string }[]>>({});
   const [addInput, setAddInput] = useState("");
@@ -182,9 +234,15 @@ export default function MarketsPage() {
     }
   }, []);
 
+  const markTrend = (sym: string, val: string) => {
+    setMarketMark(sym, val);
+    setMarks(getMarketMarks());
+  };
+
   useEffect(() => {
     setCustom(getCustomMarketSymbols());
     setCustomByGroup(getCustomMarketByGroup());
+    setMarks(getMarketMarks());
     // Only fetch if the cache is missing or stale — otherwise show it instantly.
     const fresh = Object.keys(mktCache.quotes).length > 0 && Date.now() - mktCache.at < MKT_TTL;
     if (!fresh) load();
@@ -201,8 +259,7 @@ export default function MarketsPage() {
     if (!raw) return;
     setAdding(true);
     try {
-      const { symbol } = await resolveHolding({ symbol: raw, stockName: raw });
-      const sym = (symbol || raw).toUpperCase();
+      const sym = (await resolveForMarket(raw, tab)) || raw.toUpperCase();
       const label = raw.toUpperCase() === sym ? sym : raw;
       if (tab === "custom") {
         addCustomMarketSymbol(sym, label);
@@ -230,21 +287,89 @@ export default function MarketsPage() {
 
   const isCustomTab = tab === "custom";
   const active = GROUPS.find((g) => g.key === tab);
-  const rows = useMemo(() => {
+  const baseRows = useMemo(() => {
+    // Custom rows are ALWAYS shown — even before/without a live price — so an add
+    // is never invisible and always has a Remove button. Built-in rows still wait
+    // for a price so a curated list never shows blanks.
     if (isCustomTab) {
-      return custom
-        .map((c) => ({ symbol: c.symbol, label: quotes[c.symbol]?.name || c.label, custom: true }))
-        .map((it) => ({ ...it, q: quotes[it.symbol] }))
-        .filter((r) => r.q && r.q.price != null);
+      return custom.map((c) => ({
+        symbol: c.symbol,
+        label: quotes[c.symbol]?.name || c.label,
+        custom: true,
+        q: quotes[c.symbol],
+      }));
     }
-    const base = (active?.items || []).map((it) => ({ ...it, custom: false }));
+    const base = (active?.items || [])
+      .map((it) => ({ ...it, custom: false, q: quotes[it.symbol] }))
+      .filter((r) => r.q && r.q.price != null);
     const mine = (customByGroup[tab] || []).map((c) => ({
       symbol: c.symbol,
       label: quotes[c.symbol]?.name || c.label,
       custom: true,
+      q: quotes[c.symbol],
     }));
-    return [...base, ...mine].map((it) => ({ ...it, q: quotes[it.symbol] })).filter((r) => r.q && r.q.price != null);
+    return [...base, ...mine];
   }, [active, quotes, isCustomTab, custom, customByGroup, tab]);
+
+  // --- Trend filter (uptrend / downtrend / sideways / no-trend) ---
+  const [trendFilter, setTrendFilter] = useState("all");
+  const [trendMap, setTrendMap] = useState<Record<string, string>>({});
+  const [trendLoading, setTrendLoading] = useState(false);
+
+  // Fetch trend state only when a trend filter is active, for the symbols in
+  // view that we don't already know. /api/trend is heavy, so this stays off the
+  // fast quote poll and is capped.
+  useEffect(() => {
+    if (trendFilter === "all") return;
+    const syms = baseRows.map((r) => r.symbol).filter((s) => trendMap[s] === undefined).slice(0, 60);
+    if (!syms.length) return;
+    let cancelled = false;
+    setTrendLoading(true);
+    fetch("/api/trend", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ stocks: syms.map((s) => ({ symbol: s, name: s })) }),
+    })
+      .then((r) => r.json())
+      .then((j) => {
+        if (cancelled) return;
+        const upd: Record<string, string> = {};
+        (j.results || []).forEach((t: any) => { upd[String(t.symbol).toUpperCase()] = t.ok ? t.state : ""; });
+        syms.forEach((s) => { if (upd[s] === undefined) upd[s] = ""; }); // no result → no-trend
+        setTrendMap((prev) => ({ ...prev, ...upd }));
+      })
+      .catch(() => {})
+      .finally(() => { if (!cancelled) setTrendLoading(false); });
+    return () => { cancelled = true; };
+  }, [trendFilter, baseRows, trendMap]);
+
+  const rows = useMemo(() => {
+    if (trendFilter === "all") return baseRows;
+    const up = ["up", "strong_up"];
+    const down = ["down", "strong_down"];
+    const match = (st?: string) => {
+      switch (trendFilter) {
+        case "uptrend": return up.includes(st || "");
+        case "downtrend": return down.includes(st || "");
+        case "sideways": return st === "neutral";
+        case "notrend": return !st;
+        case "up_side": return [...up, "neutral"].includes(st || "");
+        case "down_side": return [...down, "neutral"].includes(st || "");
+        default: return true;
+      }
+    };
+    return baseRows.filter((r) => match(trendMap[r.symbol]));
+  }, [baseRows, trendFilter, trendMap]);
+
+  const TREND_OPTIONS = [
+    { key: "all", label: "All trends" },
+    { key: "uptrend", label: "📈 Uptrend" },
+    { key: "downtrend", label: "📉 Downtrend" },
+    { key: "sideways", label: "➡️ Sideways" },
+    { key: "notrend", label: "• No trend" },
+    { key: "up_side", label: "Uptrend + Sideways" },
+    { key: "down_side", label: "Downtrend + Sideways" },
+  ];
 
   return (
     <div className="max-w-screen-2xl mx-auto px-4 py-8">
@@ -333,15 +458,32 @@ export default function MarketsPage() {
             </button>
         </div>
 
+        {/* Trend filter */}
+        <div className="flex items-center gap-2 px-4 pt-3 pb-1 flex-wrap">
+          <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wide">AI Trend</span>
+          <select
+            value={trendFilter}
+            onChange={(e) => setTrendFilter(e.target.value)}
+            className="text-xs font-bold text-slate-700 bg-white border border-slate-200 rounded-lg px-2.5 py-1.5 focus:ring-2 focus:ring-indigo-200 outline-none"
+          >
+            {TREND_OPTIONS.map((o) => <option key={o.key} value={o.key}>{o.label}</option>)}
+          </select>
+          {trendLoading && <span className="text-[11px] text-slate-400 flex items-center gap-1"><RefreshCw className="w-3 h-3 animate-spin" /> analysing trends…</span>}
+          {trendFilter !== "all" && !trendLoading && (
+            <span className="text-[11px] text-slate-400">{rows.length} match</span>
+          )}
+        </div>
+
         {/* Mobile: clean card list — no sideways scrolling, nothing cut off */}
         <div className="sm:hidden divide-y divide-slate-100">
           {rows.length === 0 ? (
             <div className="px-4 py-10 text-center text-slate-400 font-medium text-sm">
-              {loading ? "Loading live prices…" : isCustomTab ? "No custom symbols yet — add one above." : "Live data unavailable right now."}
+              {trendFilter !== "all" ? (trendLoading ? "Analysing trends…" : "No stocks match this trend.") : loading ? "Loading live prices…" : isCustomTab ? "No custom symbols yet — add one above." : "Live data unavailable right now."}
             </div>
           ) : (
             rows.map((r) => {
-              const q = r.q;
+              const q = r.q || {};
+              const noData = r.custom && q.price == null;
               const up = (q.changePct ?? 0) >= 0;
               const cur = curSymbol(q.currency);
               return (
@@ -352,7 +494,7 @@ export default function MarketsPage() {
                     </span>
                     <span className="min-w-0">
                       <span className="block font-black text-slate-900 text-[14px] truncate">{r.label}</span>
-                      <span className="block text-[11px] text-slate-400">{fmtTime(q.time)}</span>
+                      <span className="block text-[11px] text-slate-400">{noData ? "no data — check symbol" : fmtTime(q.time)}</span>
                     </span>
                   </Link>
                   <div className="text-right shrink-0">
@@ -363,6 +505,7 @@ export default function MarketsPage() {
                       </div>
                     )}
                   </div>
+                  <div className="shrink-0"><TrendSelect value={marks[r.symbol]} onChange={(v) => markTrend(r.symbol, v)} /></div>
                   {r.custom && (
                     <button onClick={() => removeCustom(r.symbol)} className="p-1.5 text-slate-300 hover:text-rose-600 shrink-0" title="Remove">
                       <Trash2 className="w-4 h-4" />
@@ -382,6 +525,7 @@ export default function MarketsPage() {
                 <th className="text-left font-medium px-5 py-3">Index name</th>
                 <th className="text-right font-medium px-5 py-3">Last traded</th>
                 <th className="text-right font-medium px-5 py-3">Day change</th>
+                <th className="text-center font-medium px-3 py-3">My Trend</th>
                 <th className="text-right font-medium px-5 py-3 hidden md:table-cell">High</th>
                 <th className="text-right font-medium px-5 py-3 hidden md:table-cell">Low</th>
                 <th className="text-right font-medium px-5 py-3 hidden lg:table-cell">Open</th>
@@ -392,17 +536,22 @@ export default function MarketsPage() {
             <tbody>
               {rows.length === 0 ? (
                 <tr>
-                  <td colSpan={8} className="px-5 py-12 text-center text-slate-400 font-medium">
-                    {loading
-                      ? "Loading live prices…"
-                      : isCustomTab
-                        ? "No custom symbols yet — add any index, stock, commodity or crypto above."
-                        : "Live data unavailable right now."}
+                  <td colSpan={9} className="px-5 py-12 text-center text-slate-400 font-medium">
+                    {trendFilter !== "all"
+                      ? trendLoading
+                        ? "Analysing trends…"
+                        : "No stocks match this trend."
+                      : loading
+                        ? "Loading live prices…"
+                        : isCustomTab
+                          ? "No custom symbols yet — add any index, stock, commodity or crypto above."
+                          : "Live data unavailable right now."}
                   </td>
                 </tr>
               ) : (
                 rows.map((r) => {
-                  const q = r.q;
+                  const q = r.q || {};
+                  const noData = r.custom && q.price == null;
                   const up = (q.changePct ?? 0) >= 0;
                   const cur = curSymbol(q.currency);
                   return (
@@ -414,7 +563,7 @@ export default function MarketsPage() {
                           </span>
                           <span>
                             <span className="block font-bold text-slate-900 group-hover:text-indigo-600">{r.label}</span>
-                            <span className="block text-[11px] text-slate-400">{fmtTime(q.time)}</span>
+                            <span className={`block text-[11px] ${noData ? "text-amber-600" : "text-slate-400"}`}>{noData ? "no data — check symbol" : fmtTime(q.time)}</span>
                           </span>
                         </Link>
                       </td>
@@ -422,6 +571,9 @@ export default function MarketsPage() {
                       <td className={`px-5 py-3.5 text-right tabular-nums font-bold ${up ? "text-emerald-600" : "text-rose-600"}`}>
                         {up ? "" : "-"}{fmt(q.change != null ? Math.abs(q.change) : null, cur)}
                         {q.changePct != null && <span className="ml-1">({up ? "" : "-"}{Math.abs(q.changePct).toFixed(2)}%)</span>}
+                      </td>
+                      <td className="px-3 py-3.5 text-center">
+                        <TrendSelect value={marks[r.symbol]} onChange={(v) => markTrend(r.symbol, v)} />
                       </td>
                       <td className="px-5 py-3.5 text-right tabular-nums text-slate-600 hidden md:table-cell">{fmt(q.dayHigh || null, cur)}</td>
                       <td className="px-5 py-3.5 text-right tabular-nums text-slate-600 hidden md:table-cell">{fmt(q.dayLow || null, cur)}</td>

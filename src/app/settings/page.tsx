@@ -1,18 +1,101 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
-import { Settings, Save as SaveIcon } from "lucide-react";
+import {
+  Settings,
+  Save as SaveIcon,
+  Cloud,
+  RefreshCcw,
+  Copy,
+  Check,
+  Power,
+  Wand2,
+} from "lucide-react";
 import { getSettings, saveSettings, addNotification } from "@/lib/storage";
+import {
+  getSyncCode,
+  setSyncCode as persistSyncCode,
+  clearSyncCode,
+  generateCode,
+  syncNow,
+  getLastSyncAt,
+  normCode,
+} from "@/lib/sync";
 import { useGlobal } from "@/context/GlobalContext";
+
+function timeAgo(t: number): string {
+  if (!t) return "never";
+  const s = Math.floor((Date.now() - t) / 1000);
+  if (s < 5) return "just now";
+  if (s < 60) return `${s}s ago`;
+  if (s < 3600) return `${Math.floor(s / 60)}m ago`;
+  if (s < 86400) return `${Math.floor(s / 3600)}h ago`;
+  return `${Math.floor(s / 86400)}d ago`;
+}
 
 export default function SettingsPage() {
   const { theme, setTheme, profileName, profilePhoto, setProfile } = useGlobal();
   const [settings, setLocalSettings] = useState<any>({});
 
+  // --- Cloud sync (multi-device) ---
+  const [codeInput, setCodeInput] = useState("");
+  const [linked, setLinked] = useState(false);
+  const [syncBusy, setSyncBusy] = useState(false);
+  const [lastSync, setLastSync] = useState(0);
+  const [copied, setCopied] = useState(false);
+  const [syncMsg, setSyncMsg] = useState<{ kind: "ok" | "err" | "info"; text: string } | null>(null);
+
   useEffect(() => {
     const s = getSettings();
     setLocalSettings(s);
+    const code = getSyncCode();
+    setLinked(Boolean(code));
+    setCodeInput(code);
+    setLastSync(getLastSyncAt());
   }, []);
+
+  const runSync = async () => {
+    setSyncBusy(true);
+    setSyncMsg(null);
+    const r = await syncNow();
+    setSyncBusy(false);
+    setLastSync(getLastSyncAt());
+    if (r.ok) {
+      let text = "Synced. Ab is code se linked har device par yahi data milega.";
+      if (r.dropped?.length) text += ` (Kuch bahut bade items skip hue: ${r.dropped.join(", ")}.)`;
+      setSyncMsg({ kind: "ok", text });
+    } else {
+      setSyncMsg({
+        kind: "err",
+        text: r.notConfigured
+          ? "Server par cloud store abhi setup nahi hai — Upstash Redis (KV) store + env vars add karne honge."
+          : r.error || "Sync fail hua. Thodi der baad try karein.",
+      });
+    }
+  };
+
+  const turnOnSync = async () => {
+    let c = normCode(codeInput);
+    if (c.length < 6) c = generateCode();
+    persistSyncCode(c);
+    setCodeInput(c);
+    setLinked(true);
+    await runSync();
+  };
+
+  const turnOffSync = () => {
+    clearSyncCode();
+    setLinked(false);
+    setSyncMsg({ kind: "info", text: "Sync band kar diya. Data is device par safe hai." });
+  };
+
+  const copyCode = () => {
+    try {
+      navigator.clipboard.writeText(getSyncCode());
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    } catch {}
+  };
 
   const handleSave = (e: React.FormEvent) => {
     e.preventDefault();
@@ -198,6 +281,117 @@ export default function SettingsPage() {
           </div>
         </div>
       </form>
+
+      {/* Cloud Sync — link this data to your other devices with one code */}
+      <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-6 sm:p-8 mt-6">
+        <div className="flex items-start gap-3 mb-1">
+          <div className="w-10 h-10 rounded-xl bg-indigo-50 flex items-center justify-center shrink-0">
+            <Cloud className="w-5 h-5 text-indigo-600" />
+          </div>
+          <div>
+            <h3 className="text-lg font-bold text-slate-900">Cloud Sync — multi-device</h3>
+            <p className="text-sm text-slate-500 font-medium mt-0.5">
+              Ek code banao. Wahi code dusre computer/phone par daalo — aapka portfolio,
+              watchlist, alerts aur notes wahan bhi aa jaayenge, aur aage apne aap sync rahenge.
+            </p>
+          </div>
+        </div>
+
+        {!linked ? (
+          <div className="mt-5 space-y-3">
+            <label className="block text-xs font-bold text-slate-500 uppercase tracking-widest">
+              Sync code
+            </label>
+            <div className="flex flex-col sm:flex-row gap-2">
+              <input
+                type="text"
+                value={codeInput}
+                onChange={(e) => setCodeInput(e.target.value.toUpperCase())}
+                placeholder="e.g. SA-4KQ7-9WPM"
+                className="flex-1 px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-lg focus:ring-2 focus:ring-indigo-500 font-mono font-semibold tracking-wide outline-none"
+              />
+              <button
+                type="button"
+                onClick={() => setCodeInput(generateCode())}
+                className="px-4 py-2.5 border border-slate-200 rounded-lg font-bold text-slate-700 hover:bg-slate-50 flex items-center justify-center gap-2 transition"
+              >
+                <Wand2 className="w-4 h-4" /> Generate
+              </button>
+            </div>
+            <p className="text-xs text-slate-500 font-medium">
+              Naya device? Pehle wale computer wala <b>same code</b> yahan daalo. Naya sync
+              shuru kar rahe ho? <b>Generate</b> dabao aur code note kar lo.
+            </p>
+            <button
+              type="button"
+              onClick={turnOnSync}
+              disabled={syncBusy}
+              className="px-6 py-2.5 bg-indigo-600 text-white rounded-lg font-bold hover:bg-indigo-700 disabled:opacity-60 flex items-center gap-2 transition"
+            >
+              {syncBusy ? <RefreshCcw className="w-4 h-4 animate-spin" /> : <Cloud className="w-4 h-4" />}
+              Turn on sync
+            </button>
+          </div>
+        ) : (
+          <div className="mt-5 space-y-4">
+            <div className="flex items-center justify-between gap-3 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3">
+              <div className="min-w-0">
+                <p className="text-[11px] font-bold text-emerald-700 uppercase tracking-widest">
+                  Sync is on
+                </p>
+                <p className="font-mono font-bold text-slate-900 text-lg truncate">{getSyncCode()}</p>
+                <p className="text-xs text-slate-500 font-medium mt-0.5">
+                  Last synced {timeAgo(lastSync)}
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={copyCode}
+                className="px-3 py-2 bg-white border border-slate-200 rounded-lg font-bold text-slate-700 hover:bg-slate-50 flex items-center gap-2 transition shrink-0"
+              >
+                {copied ? <Check className="w-4 h-4 text-emerald-600" /> : <Copy className="w-4 h-4" />}
+                {copied ? "Copied" : "Copy"}
+              </button>
+            </div>
+            <p className="text-xs text-slate-500 font-medium">
+              Ye code apne dusre devices par Settings → Cloud Sync mein daalo. Data apne aap
+              merge hota hai — kisi bhi device ka data delete/lose nahi hoga.
+            </p>
+            <div className="flex flex-wrap gap-2">
+              <button
+                type="button"
+                onClick={runSync}
+                disabled={syncBusy}
+                className="px-5 py-2.5 bg-indigo-600 text-white rounded-lg font-bold hover:bg-indigo-700 disabled:opacity-60 flex items-center gap-2 transition"
+              >
+                <RefreshCcw className={`w-4 h-4 ${syncBusy ? "animate-spin" : ""}`} />
+                Sync now
+              </button>
+              <button
+                type="button"
+                onClick={turnOffSync}
+                className="px-5 py-2.5 border border-slate-200 rounded-lg font-bold text-slate-600 hover:bg-slate-50 flex items-center gap-2 transition"
+              >
+                <Power className="w-4 h-4" /> Turn off
+              </button>
+            </div>
+          </div>
+        )}
+
+        {syncMsg && (
+          <div
+            className={`mt-4 rounded-lg px-4 py-3 text-sm font-medium ${
+              syncMsg.kind === "ok"
+                ? "bg-emerald-50 text-emerald-700 border border-emerald-200"
+                : syncMsg.kind === "err"
+                  ? "bg-rose-50 text-rose-700 border border-rose-200"
+                  : "bg-slate-50 text-slate-600 border border-slate-200"
+            }`}
+          >
+            {syncMsg.text}
+          </div>
+        )}
+      </div>
     </div>
   );
 }

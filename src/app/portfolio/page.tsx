@@ -37,6 +37,8 @@ const CUR: Record<PortfolioMarket, string> = {
 export default function PortfolioPage() {
   const [holdings, setHoldings] = useState<any[]>([]);
   const [market, setMarket] = useState<PortfolioMarket>("US Stocks");
+  // Holdings vs the user's own trade plan (SL / R / targets / notes).
+  const [view, setView] = useState<"holdings" | "plan">("holdings");
   const [showAdd, setShowAdd] = useState(false);
   const [form, setForm] = useState({ symbol: "", shares: "", price: "" });
   const [refreshing, setRefreshing] = useState(false);
@@ -128,11 +130,17 @@ export default function PortfolioPage() {
       const buf = await file.arrayBuffer();
       const sheets = parseWorkbook(buf);
       const rows = sheets.flatMap((s) => s.rows);
-      const usable = rows.filter((r) => r.qty != null && r.price != null);
+      // A holding needs a quantity plus SOMETHING to price it — an explicit
+      // buy/avg price, or a total value we can divide by qty. This recovers
+      // broker exports (ICICI, etc.) whose price column is named unusually but
+      // that still carry a value/amount column.
+      const usable = rows.filter(
+        (r) => r.qty != null && r.qty !== 0 && (r.price != null || r.marketValue != null),
+      );
       const skipped = rows.length - usable.length;
       if (usable.length === 0) {
         setImportError(
-          "No usable rows found. Each holding needs a Stock Name, Qty and Price column.",
+          "No usable rows found. Each holding needs a Stock/Symbol column, a Qty column, and a Price or Value column.",
         );
         setImporting(false);
         return;
@@ -142,14 +150,25 @@ export default function PortfolioPage() {
       // tab is active.
       const holdings = await Promise.all(
         usable.map(async (r) => {
-          const { symbol, market: detected } = await resolveHolding(r);
+          // Pass the active tab as a hint: explicit .NS/US symbols still
+          // auto-sort, but ambiguous names or transient search failures stay in
+          // the tab the user is importing into instead of defaulting to US.
+          const { symbol, market: detected } = await resolveHolding(r, market);
+          // Derive a per-share price from total value when the sheet had no
+          // explicit price column.
+          const price =
+            r.price != null
+              ? r.price
+              : r.marketValue != null && r.qty
+                ? r.marketValue / r.qty
+                : 0;
           return {
             symbol: (symbol || r.symbol || r.stockName).toUpperCase(),
             name: r.stockName,
             market: detected,
             shares: r.qty as number,
-            buyPrice: r.price as number,
-            currentPrice: r.price as number,
+            buyPrice: price,
+            currentPrice: price,
           };
         }),
       );
@@ -175,6 +194,13 @@ export default function PortfolioPage() {
 
   const cur = CUR[market];
   const marketHoldings = holdings.filter((h) => h.market === market);
+
+  // Save one trade-plan field (SL / R / T1 / T2 / remarks / special) on a holding.
+  // These are the user's own manual entries; only the live price is auto-fetched.
+  const setPlanField = (h: any, field: string, value: string) => {
+    savePortfolioHolding({ ...h, [field]: value });
+    setHoldings(getPortfolio());
+  };
 
   const [adding, setAdding] = useState(false);
   const handleAdd = async (e: React.FormEvent) => {
@@ -635,10 +661,67 @@ PORTFOLIO DATA: ${JSON.stringify(stats)}`;
         </form>
       )}
 
-      {/* Holdings table */}
+      {/* View toggle: Holdings ↔ Trade Plan */}
+      <div className="flex flex-wrap items-center gap-3 mb-3">
+        <div className="flex rounded-lg bg-slate-100 p-1">
+          {(["holdings", "plan"] as const).map((v) => (
+            <button key={v} onClick={() => setView(v)}
+              className={`px-3.5 py-1.5 rounded-md text-xs font-black transition ${view === v ? "bg-white text-indigo-700 shadow-sm" : "text-slate-500 hover:text-slate-700"}`}>
+              {v === "holdings" ? "Holdings" : "Trade Plan"}
+            </button>
+          ))}
+        </div>
+        {view === "plan" && (
+          <span className="text-[11px] text-slate-400 font-medium">Set your own SL / R / T1 / T2 & notes — everything is manual, only the live price auto-fetches.</span>
+        )}
+      </div>
+
+      {/* Holdings / Trade-plan table */}
       {marketHoldings.length === 0 ? (
         <div className="bg-white border border-slate-200 rounded-2xl p-16 text-center text-slate-500 font-medium">
           No {market} holdings yet. Click &quot;Add Holding&quot; to start tracking.
+        </div>
+      ) : view === "plan" ? (
+        <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-x-auto">
+          <table className="w-full text-left border-collapse text-sm">
+            <thead>
+              <tr className="bg-slate-50 border-b border-slate-200">
+                <th className="p-3 text-xs font-bold text-slate-500 uppercase tracking-wide">Stock</th>
+                <th className="p-3 text-xs font-bold text-slate-500 uppercase tracking-wide text-right">CMP</th>
+                <th className="p-3 text-xs font-bold text-slate-500 uppercase tracking-wide text-right">Market Value</th>
+                <th className="p-3 text-xs font-bold text-rose-500 uppercase tracking-wide text-right">SL</th>
+                <th className="p-3 text-xs font-bold text-slate-500 uppercase tracking-wide text-right">R</th>
+                <th className="p-3 text-xs font-bold text-emerald-600 uppercase tracking-wide text-right">T1</th>
+                <th className="p-3 text-xs font-bold text-emerald-600 uppercase tracking-wide text-right">T2</th>
+                <th className="p-3 text-xs font-bold text-slate-500 uppercase tracking-wide">Remarks</th>
+                <th className="p-3 text-xs font-bold text-slate-500 uppercase tracking-wide">Special condition</th>
+              </tr>
+            </thead>
+            <tbody>
+              {marketHoldings.map((h) => {
+                const ltp = h.currentPrice || h.buyPrice;
+                const money = (n: number) => `${cur}${Number(n).toLocaleString(undefined, { maximumFractionDigits: 2 })}`;
+                const numCls = "w-20 px-2 py-1 bg-slate-50 border border-slate-200 rounded text-right text-[13px] tabular-nums focus:ring-2 focus:ring-indigo-200 outline-none";
+                const txtCls = "w-full min-w-[9rem] px-2 py-1 bg-slate-50 border border-slate-200 rounded text-[13px] focus:ring-2 focus:ring-indigo-200 outline-none";
+                return (
+                  <tr key={h.id} className="border-b border-slate-100 hover:bg-slate-50 transition align-top">
+                    <td className="p-3">
+                      <div className="font-black text-slate-900 whitespace-nowrap">{h.name || h.symbol}</div>
+                      <div className="text-[11px] text-slate-400">{h.symbol} · {h.shares} qty</div>
+                    </td>
+                    <td className="p-3 text-right tabular-nums font-bold text-slate-800 whitespace-nowrap">{money(ltp)}</td>
+                    <td className="p-3 text-right tabular-nums font-bold text-slate-800 whitespace-nowrap">{money(ltp * h.shares)}</td>
+                    <td className="p-3 text-right"><input value={h.sl || ""} onChange={(e) => setPlanField(h, "sl", e.target.value)} placeholder="—" className={numCls} /></td>
+                    <td className="p-3 text-right"><input value={h.r || ""} onChange={(e) => setPlanField(h, "r", e.target.value)} placeholder="—" className={numCls} /></td>
+                    <td className="p-3 text-right"><input value={h.t1 || ""} onChange={(e) => setPlanField(h, "t1", e.target.value)} placeholder="—" className={numCls} /></td>
+                    <td className="p-3 text-right"><input value={h.t2 || ""} onChange={(e) => setPlanField(h, "t2", e.target.value)} placeholder="—" className={numCls} /></td>
+                    <td className="p-3"><input value={h.remarks || ""} onChange={(e) => setPlanField(h, "remarks", e.target.value)} placeholder="notes…" className={txtCls} /></td>
+                    <td className="p-3"><input value={h.special || ""} onChange={(e) => setPlanField(h, "special", e.target.value)} placeholder="e.g. only above 200-DMA" className={txtCls} /></td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
         </div>
       ) : (
         <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-x-auto">

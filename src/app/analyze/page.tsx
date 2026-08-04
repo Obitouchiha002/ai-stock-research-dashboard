@@ -63,6 +63,7 @@ import {
   saveReport,
   addNotification,
   saveRecentSearch,
+  getRecentSearches,
   isInWatchlist,
   saveAlert,
   getLastAnalysis,
@@ -251,18 +252,20 @@ function AnalyzeContent() {
   >([]);
 
   // UI states
-  const [activeTab, setActiveTab] = useState("overview");
-  // 15 tabs overwhelmed a normal user — show the 6 core ones, tuck the rest
-  // behind a "More" dropdown (same progressive-disclosure idea as the sidebar).
+  const [activeTab, setActiveTab] = useState("chart");
+  // Trimmed set: Chart is the landing tab; the rest sit behind "More".
+  // (Overview, Valuation, Risk, Top-down, Scorecard, Fundamentals removed.)
   const [moreTabOpen, setMoreTabOpen] = useState(false);
   const TAB_LABELS: Record<string, string> = {
-    overview: "Overview", "top-down": "Top Down", chart: "Chart", technical: "Technical",
-    fundamentals: "Fundamentals", valuation: "Valuation", momentum: "Momentum",
-    evaluation: "Evaluation", analytics: "Analytics", research: "Research", news: "News",
-    risk: "Risk", scorecard: "Scorecard", "ai-report": "AI Report", notes: "Notes",
+    chart: "Chart", technical: "Technical", momentum: "Momentum", analytics: "Analytics",
+    news: "News", "ai-report": "AI Report", evaluation: "Evaluation", research: "Research", notes: "Notes",
   };
-  const PRIMARY_TABS = ["overview", "chart", "technical", "momentum", "analytics", "risk"];
-  const MORE_TABS = ["fundamentals", "valuation", "scorecard", "news", "ai-report", "top-down", "evaluation", "research", "notes"];
+  const PRIMARY_TABS = ["chart", "technical", "momentum", "analytics"];
+  const MORE_TABS = ["news", "ai-report", "evaluation", "research", "notes"];
+  const ALL_TABS = [...PRIMARY_TABS, ...MORE_TABS];
+  // A saved/URL tab that no longer exists (e.g. the removed "overview") falls
+  // back to Chart so the page never lands on a blank tab.
+  const okTab = (t: string) => (ALL_TABS.includes(t) ? t : "chart");
   const [chartType, setChartType] = useState("Area");
   const [pdfGenerating, setPdfGenerating] = useState(false);
   // Momentum module: captured when the Momentum tab loads, reused in the PDF.
@@ -296,6 +299,53 @@ function AnalyzeContent() {
   // Candlestick patterns detected across recent history
   const [patData, setPatData] = useState<any | null>(null);
   const [patInterval, setPatInterval] = useState<"1d" | "1wk">("1d");
+  // AI "complete report" generated from the candle/pattern + level + chart data.
+  const [patReport, setPatReport] = useState<string>("");
+  const [patReportLoading, setPatReportLoading] = useState(false);
+  const [patReportErr, setPatReportErr] = useState("");
+  const [reportMode, setReportMode] = useState<"simple" | "detailed">("simple");
+
+  // Build an AI chart report from the candle/pattern + level + chart-intelligence
+  // data already loaded. "simple" is a short plain-language read (the default);
+  // "detailed" is the full breakdown. Research only — the prompt forbids advice.
+  const genPatReport = async (mode: "simple" | "detailed" = reportMode) => {
+    const tkr = data?.stock?.ticker;
+    if (!tkr) return;
+    setPatReportLoading(true);
+    setPatReportErr("");
+    setPatReport("");
+    try {
+      const ci = data?.chartIntelligence?.[chartTimeframe] || null;
+      const ctx = {
+        symbol: tkr,
+        name: data?.stock?.name,
+        price: data?.stock?.currentPrice,
+        interval: patInterval,
+        candle: patData?.today || null,
+        window: patData?.last30 || null,
+        patterns: patData?.today?.patterns || [],
+        baseRates: patData?.today?.baseRates || [],
+        chart: ci ? { trend: ci.trend, setup: ci.setup, patterns: ci.patterns } : null,
+        levels: lvlData?.ok ? { supports: lvlData.supports, resistances: lvlData.resistances, pivot: lvlData.pivot } : null,
+      };
+      const simplePrompt = `You are explaining ${tkr}'s chart to a normal investor in PLAIN, simple English (no jargon). Using ONLY the data below, write a SHORT read — about 90-120 words total:\n• One line: what the main candle/chart pattern right now is, and in simple words what it usually means.\n• One line: the trend (up / down / sideways) in plain words.\n• One line: the nearest support price below and nearest resistance price above (with the numbers).\n• One line: what to simply watch next.\nKeep it friendly and short. Use • bullets, no headings, no tables. Research/education ONLY — NO buy/sell advice, NO recommendations, NO price predictions.\n\nDATA:\n${JSON.stringify(ctx)}`;
+      const detailedPrompt = `You are a technical analyst. Write a COMPLETE, factual chart report for ${tkr} using ONLY the data below. Cover, with clear short markdown headings: (1) Current candle & recent window, (2) Classical chart patterns present and how they historically resolved on THIS stock (use the base rates with their win-rate / average move), (3) Trend & structure, (4) Key support/resistance levels, (5) What to watch next. Be specific with the actual numbers. This is research/education ONLY — do NOT give buy/sell advice, recommendations, or price predictions; describe factually.\n\nDATA:\n${JSON.stringify(ctx)}`;
+      const prompt = mode === "detailed" ? detailedPrompt : simplePrompt;
+      const res = await fetch("/api/gemini/generate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ prompt }),
+      });
+      const j = await res.json();
+      if (!res.ok || j.error) throw new Error(j.error || "Failed to generate report.");
+      setPatReport(j.text || "No report generated.");
+      logAiUsageDetailed("Chart AI Report", j.usage ?? { tokens: j.aiTokens });
+    } catch (e: any) {
+      setPatReportErr(e?.message || "Could not generate report right now.");
+    } finally {
+      setPatReportLoading(false);
+    }
+  };
   const [patView, setPatView] = useState<"today" | "window" | "chart" | "history">("today");
   // Technical tab is huge — show one section at a time as a card, no long scroll.
   const [techView, setTechView] = useState<"indicators" | "levels" | "strength" | "candle">("indicators");
@@ -419,10 +469,10 @@ function AnalyzeContent() {
       if (cached?.data && cached.query?.toUpperCase() === initialSymbol.toUpperCase()) {
         setQuery(cached.query);
         setData(cached.data);
-        setActiveTab(initialTab || getLastAnalysisTab());
+        setActiveTab(okTab(initialTab || getLastAnalysisTab()));
       } else {
         setQuery(initialSymbol);
-        if (initialTab) setActiveTab(initialTab);
+        if (initialTab) setActiveTab(okTab(initialTab));
         handleAnalyzeQuery(initialSymbol);
       }
     } else if (cached?.data) {
@@ -430,7 +480,7 @@ function AnalyzeContent() {
       // analysis so nothing has to be redone.
       setQuery(cached.query || "");
       setData(cached.data);
-      setActiveTab(getLastAnalysisTab());
+      setActiveTab(okTab(getLastAnalysisTab()));
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [initialSymbol]);
@@ -550,10 +600,10 @@ function AnalyzeContent() {
       }
       setSuggestions([]);
       setData(json);
-      setActiveTab("overview");
+      setActiveTab("chart");
       // Cache the full result so leaving and returning restores it instantly.
       saveLastAnalysis({ query: searchQuery.trim(), data: json, at: Date.now() });
-      saveLastAnalysisTab("overview");
+      saveLastAnalysisTab("chart");
       // Phase 2: fetch the AI report in the background and merge it in when it
       // lands. The page is already usable while this runs.
       if (includeAI) {
@@ -1237,6 +1287,64 @@ function AnalyzeContent() {
               Structuring technical indicators, parsing fundamentals, and
               analyzing sentiments...
             </p>
+          </div>
+        </div>
+      )}
+
+      {!loading && !data && (
+        <div className="max-w-3xl mx-auto px-4 mt-10 sm:mt-16 pb-20">
+          <div className="text-center">
+            {/* Animated icon */}
+            <div className="relative w-20 h-20 mx-auto mb-6">
+              <span className="absolute inset-0 rounded-2xl bg-indigo-400/30 animate-ping" />
+              <span className="relative w-20 h-20 rounded-2xl bg-gradient-to-br from-indigo-500 to-violet-600 flex items-center justify-center shadow-lg shadow-indigo-500/30">
+                <Activity className="w-9 h-9 text-white" />
+              </span>
+            </div>
+            <h2 className="text-2xl sm:text-3xl font-black text-slate-900 tracking-tight">Analyze any stock in seconds</h2>
+            <p className="text-slate-500 font-medium mt-2 max-w-md mx-auto">
+              Enter a ticker above — or tap one below — for live charts, technicals, momentum, risk &amp; an AI report.
+            </p>
+
+            {getRecentSearches().length > 0 && (
+              <div className="mt-7">
+                <div className="text-[11px] font-black uppercase tracking-wider text-slate-400 mb-2">Recent</div>
+                <div className="flex flex-wrap justify-center gap-2">
+                  {getRecentSearches().slice(0, 6).map((r: any) => (
+                    <button key={r.symbol} onClick={() => { setQuery(r.symbol); handleAnalyzeQuery(r.symbol); }}
+                      className="px-3 py-1.5 rounded-lg bg-white border border-slate-200 text-sm font-bold text-slate-700 hover:border-indigo-300 hover:text-indigo-700 hover:-translate-y-0.5 transition">
+                      {String(r.symbol).replace(/\.(NS|BO)$/i, "")}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            <div className="mt-6">
+              <div className="text-[11px] font-black uppercase tracking-wider text-slate-400 mb-2">Popular</div>
+              <div className="flex flex-wrap justify-center gap-2">
+                {["AAPL", "NVDA", "MSFT", "TSLA", "RELIANCE.NS", "TCS.NS", "INFY.NS", "HDFCBANK.NS"].map((s) => (
+                  <button key={s} onClick={() => { setQuery(s); handleAnalyzeQuery(s); }}
+                    className="px-3 py-1.5 rounded-lg bg-white border border-slate-200 text-sm font-bold text-slate-600 hover:border-indigo-300 hover:text-indigo-700 hover:-translate-y-0.5 transition">
+                    {s.replace(/\.(NS|BO)$/i, "")}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 mt-10 max-w-2xl mx-auto">
+              {[
+                { icon: CandlestickChart, label: "Live Charts" },
+                { icon: Activity, label: "Technicals" },
+                { icon: BarChart2, label: "Momentum" },
+                { icon: Zap, label: "AI Report" },
+              ].map((f, i) => (
+                <div key={f.label} className="bg-white border border-slate-200 rounded-xl px-3 py-4 flex flex-col items-center gap-2 hover:shadow-sm transition" style={{ animation: `fadeInUp 0.4s ease ${i * 0.06}s both` }}>
+                  <f.icon className="w-5 h-5 text-indigo-500" />
+                  <span className="text-[12px] font-bold text-slate-600">{f.label}</span>
+                </div>
+              ))}
+            </div>
           </div>
         </div>
       )}
@@ -3768,20 +3876,68 @@ function AnalyzeContent() {
                             actually resolved on this stock before.
                           </p>
                         </div>
-                        <div className="flex rounded-lg bg-slate-100 p-1">
-                          {(["1d", "1wk"] as const).map((iv) => (
-                            <button
-                              key={iv}
-                              onClick={() => setPatInterval(iv)}
-                              className={`px-3 py-1.5 rounded-md text-[13px] font-black transition ${
-                                patInterval === iv ? "bg-white text-indigo-700 shadow-sm" : "text-slate-500 hover:text-slate-700"
-                              }`}
-                            >
-                              {iv === "1d" ? "Daily" : "Weekly"}
-                            </button>
-                          ))}
+                        <div className="flex items-center gap-2">
+                          <div className="flex rounded-lg bg-slate-100 p-1" title="Simple = short plain-English read · Detailed = full breakdown">
+                            {(["simple", "detailed"] as const).map((m) => (
+                              <button
+                                key={m}
+                                onClick={() => { setReportMode(m); if (patReport || patReportErr) genPatReport(m); }}
+                                className={`px-2.5 py-1.5 rounded-md text-[12px] font-black capitalize transition ${
+                                  reportMode === m ? "bg-white text-indigo-700 shadow-sm" : "text-slate-500 hover:text-slate-700"
+                                }`}
+                              >
+                                {m}
+                              </button>
+                            ))}
+                          </div>
+                          <button
+                            onClick={() => genPatReport()}
+                            disabled={patReportLoading || !patData?.ok}
+                            className="px-3 py-1.5 rounded-lg text-[13px] font-black flex items-center gap-1.5 bg-indigo-600 text-white hover:bg-indigo-700 disabled:opacity-50 transition"
+                            title="Generate an AI chart report from the pattern, levels & trend data"
+                          >
+                            {patReportLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Zap className="w-4 h-4" />}
+                            AI Report
+                          </button>
+                          <div className="flex rounded-lg bg-slate-100 p-1">
+                            {(["1d", "1wk"] as const).map((iv) => (
+                              <button
+                                key={iv}
+                                onClick={() => setPatInterval(iv)}
+                                className={`px-3 py-1.5 rounded-md text-[13px] font-black transition ${
+                                  patInterval === iv ? "bg-white text-indigo-700 shadow-sm" : "text-slate-500 hover:text-slate-700"
+                                }`}
+                              >
+                                {iv === "1d" ? "Daily" : "Weekly"}
+                              </button>
+                            ))}
+                          </div>
                         </div>
                       </div>
+
+                      {/* AI complete report */}
+                      {(patReportLoading || patReport || patReportErr) && (
+                        <div className="px-5 py-4 border-b border-slate-100 bg-indigo-50/40">
+                          <div className="flex items-center justify-between gap-2 mb-2">
+                            <h4 className="text-[13px] font-black text-indigo-800 flex items-center gap-1.5">
+                              <Zap className="w-4 h-4" /> AI Chart Report
+                            </h4>
+                            {patReport && !patReportLoading && (
+                              <button onClick={() => setPatReport("")} className="text-[11px] font-bold text-slate-400 hover:text-slate-700">clear</button>
+                            )}
+                          </div>
+                          {patReportLoading ? (
+                            <div className="flex items-center gap-2 text-[13px] text-slate-500 py-3">
+                              <Loader2 className="w-4 h-4 animate-spin text-indigo-500" /> Reading the chart, patterns, levels & history…
+                            </div>
+                          ) : patReportErr ? (
+                            <div className="text-[13px] text-rose-600 flex items-center gap-1.5"><AlertTriangle className="w-4 h-4" />{patReportErr}</div>
+                          ) : (
+                            <div className="text-[13.5px] text-slate-700 whitespace-pre-wrap leading-relaxed">{patReport}</div>
+                          )}
+                          <p className="mt-2 text-[10px] text-slate-400 italic">Factual chart reading from live data. Not buy/sell advice.</p>
+                        </div>
+                      )}
 
                       {/* view switcher */}
                       <div className="flex border-b border-slate-100 bg-slate-50/60 overflow-x-auto">

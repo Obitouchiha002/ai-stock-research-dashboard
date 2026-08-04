@@ -5,6 +5,8 @@ import Link from "next/link";
 import GlobalNotes from "@/components/GlobalNotes";
 import VoiceTyping from "@/components/VoiceTyping";
 import PriceAlertMonitor from "@/components/PriceAlertMonitor";
+import SyncManager from "@/components/SyncManager";
+import ComboMonitor from "@/components/ComboMonitor";
 import { usePathname, useRouter } from "next/navigation";
 import {
   LayoutDashboard,
@@ -17,8 +19,10 @@ import {
   Bell,
   Newspaper,
   StickyNote,
+  BookOpen,
   ScanSearch,
   BookMarked,
+  SlidersHorizontal,
   Upload,
   FileSpreadsheet,
   CalendarClock,
@@ -98,9 +102,9 @@ const MORE_GROUPS = [
     label: "Research tools",
     items: [
       { name: "Screener", href: "/screener", icon: Filter },
+      { name: "Combinations", href: "/combos", icon: SlidersHorizontal },
       { name: "Compare Stocks", href: "/compare", icon: ArrowLeftRight },
-      { name: "AI Research Chat", href: "/ai-chat", icon: MessageSquare },
-      { name: "Document Research", href: "/research", icon: ScanSearch },
+      { name: "AI Research", href: "/ai-chat", icon: MessageSquare },
     ],
   },
   {
@@ -118,6 +122,7 @@ const MORE_GROUPS = [
       { name: "Import Excel", href: "/sheets", icon: FileSpreadsheet },
       { name: "Prompt Library", href: "/prompts", icon: BookMarked },
       { name: "Master Notes", href: "/notes", icon: StickyNote },
+      { name: "Trading Journal", href: "/journal", icon: BookOpen },
       { name: "Saved Reports", href: "/reports", icon: FileText },
       { name: "AI Usage", href: "/ai-usage", icon: Gauge },
     ],
@@ -142,33 +147,9 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     [],
   );
   const [searchFocused, setSearchFocused] = useState(false);
-  // Dark topbar: live index ticker + IST clock / market-open status.
-  const [ticker, setTicker] = useState<Record<string, any>>({});
+  // Sidebar market-status widget: IST clock + NSE/BSE open status.
   const [istTime, setIstTime] = useState("");
   const [marketOpen, setMarketOpen] = useState(false);
-
-  // Live ticker for the topbar — India or US set, switches with the market.
-  const tickerList = market === "US" ? TICKER_US : TICKER_INDIA;
-  const tickerSymbols = tickerList.map((t) => t.symbol).join(",");
-  useEffect(() => {
-    let cancelled = false;
-    const load = async () => {
-      try {
-        const res = await fetch("/api/quotes", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ symbols: tickerSymbols.split(",") }),
-        });
-        const j = await res.json();
-        if (!cancelled && j.quotes && Object.keys(j.quotes).length) setTicker(j.quotes);
-      } catch {
-        /* keep last values */
-      }
-    };
-    load();
-    const id = setInterval(load, 30000);
-    return () => { cancelled = true; clearInterval(id); };
-  }, [tickerSymbols]);
 
   // IST clock + NSE/BSE open status (Mon–Fri, 09:15–15:30 IST; holidays aside).
   useEffect(() => {
@@ -413,10 +394,10 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             >
               <div className="flex items-center gap-2">
                 <MessageSquare className="w-4 h-4" strokeWidth={2.5} />
-                <span className="text-[13px] font-black">AI Research Chat</span>
+                <span className="text-[13px] font-black">AI Research</span>
               </div>
               <p className="text-[11px] text-indigo-100 mt-1.5 leading-snug">
-                Ask anything about a stock and get a researched, no-hype answer.
+                Chat, load a stock, or attach a document — one clean assistant.
               </p>
               <span className="mt-3 inline-flex items-center gap-1 text-[11px] font-black bg-white/15 group-hover:bg-white/25 rounded-lg px-2.5 py-1.5 transition-colors">
                 Try it <ChevronRight className="w-3 h-3" />
@@ -455,34 +436,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             <Menu className="w-6 h-6" />
           </button>
 
-          {/* Live index ticker — headline instruments, click to chart */}
-          <div className="hidden md:flex flex-1 min-w-0 items-stretch overflow-x-auto no-scrollbar divide-x divide-white/10">
-            {tickerList.map((t) => {
-              const q = ticker[t.symbol];
-              const up = (q?.changePct ?? 0) >= 0;
-              return (
-                <Link
-                  key={t.symbol}
-                  href={`/charts?symbol=${encodeURIComponent(t.symbol)}`}
-                  className="flex flex-col justify-center px-3.5 shrink-0 hover:bg-white/5 transition-colors"
-                >
-                  <span className="text-[9.5px] font-bold uppercase tracking-wider text-slate-400 leading-none">{t.label}</span>
-                  <span className="flex items-baseline gap-1.5 mt-1 leading-none">
-                    <span className="text-[13px] font-black text-white tabular-nums">
-                      {q?.price != null ? Number(q.price).toLocaleString(undefined, { maximumFractionDigits: 2 }) : "—"}
-                    </span>
-                    {q?.changePct != null && (
-                      <span className={`text-[10.5px] font-bold tabular-nums ${up ? "text-emerald-400" : "text-rose-400"}`}>
-                        {up ? "+" : ""}{q.changePct.toFixed(2)}%
-                      </span>
-                    )}
-                  </span>
-                </Link>
-              );
-            })}
-          </div>
-
-          <div className="relative w-40 lg:w-56 shrink-0 hidden sm:block z-50 ml-auto md:ml-0">
+          <div className="relative flex-1 max-w-md hidden sm:block z-50">
             <form onSubmit={handleSearchSubmit}>
               <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
               <input
@@ -735,6 +689,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       </Suspense>
       {/* Background watcher — fires notifications when price hits a set level */}
       <PriceAlertMonitor />
+      <SyncManager />
+      <ComboMonitor />
     </div>
   );
 }

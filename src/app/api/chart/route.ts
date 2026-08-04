@@ -16,6 +16,10 @@ const RANGE_DAYS: Record<string, number> = {
   "1y": 372,
   "2y": 744,
   "5y": 1830,
+  "10y": 3660,
+  // "Lifetime": far enough back to cover any listing; Yahoo clamps to the
+  // stock's first trading day, so this effectively returns full history.
+  max: 20000,
 };
 
 function sma(values: (number | null)[], period: number): (number | null)[] {

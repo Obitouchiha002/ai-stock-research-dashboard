@@ -16,7 +16,34 @@ function timeAgo(ms: number): string {
   return new Date(ms).toLocaleDateString();
 }
 
-export default function StockNotes({ symbol, stockName, compact = false }: { symbol: string; stockName?: string; compact?: boolean }) {
+// Pull the first {...} JSON block out of an AI reply and validate a ticker.
+function parseDetect(txt: string): { symbol?: string; topic?: string; category?: string } | null {
+  if (!txt) return null;
+  const m = txt.match(/\{[\s\S]*\}/);
+  if (!m) return null;
+  try {
+    const o = JSON.parse(m[0]);
+    const sym = String(o.symbol || "").trim().toUpperCase();
+    const okSym = /^[A-Z0-9.\-=^&]{1,15}$/.test(sym) ? sym : "";
+    return { symbol: okSym, topic: String(o.topic || "").trim(), category: String(o.category || "").trim() };
+  } catch {
+    return null;
+  }
+}
+
+export default function StockNotes({
+  symbol,
+  stockName,
+  compact = false,
+  autoPage = "",
+  autoSection = "",
+}: {
+  symbol: string;
+  stockName?: string;
+  compact?: boolean;
+  autoPage?: string; // where the note was written (e.g. "Analyze", "Markets")
+  autoSection?: string; // section within that page (e.g. "Technical")
+}) {
   const NOTE_CATS = ["General", "Fundamental", "Technical", "News", "Risk", "Watch", "Idea"];
   const [notes, setNotes] = useState<any[]>([]);
   const [text, setText] = useState("");
@@ -25,29 +52,60 @@ export default function StockNotes({ symbol, stockName, compact = false }: { sym
   const [recording, setRecording] = useState(false);
   const [recSecs, setRecSecs] = useState(0);
   const [error, setError] = useState("");
+  const [detecting, setDetecting] = useState(false);
   const mediaRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<Blob[]>([]);
   const timerRef = useRef<any>(null);
 
+  const isGeneral = !symbol || symbol === "GENERAL";
   const reload = () => setNotes(getNotesForSymbol(symbol));
   useEffect(() => {
     reload();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [symbol]);
 
-  const addText = () => {
-    if (!text.trim()) return;
+  // Save a text note, auto-tagging the page/section it was written on.
+  const persist = (over: { symbol?: string; topic?: string; category?: string }) => {
+    const finalSym = over.symbol || symbol;
     saveNote({
-      symbol,
-      stockName: stockName || symbol,
+      symbol: finalSym,
+      stockName: over.symbol && over.symbol !== "GENERAL" ? over.symbol : stockName || symbol,
       type: "text",
       text: text.trim(),
-      topic: topic.trim(),
-      category,
+      topic: (over.topic || topic).trim(),
+      category: over.category || category,
+      page: autoPage || undefined,
+      section: autoSection || undefined,
     });
     setText("");
     setTopic("");
     reload();
+  };
+
+  const addText = async () => {
+    if (!text.trim()) return;
+    // Fallback smarts: a GENERAL note has no page/stock context, so ask the AI to
+    // identify the stock + topic from what was written instead of dumping it into
+    // the GENERAL pile. Notes on a real page/stock skip this (already tagged).
+    if (isGeneral && text.trim().length > 12) {
+      setDetecting(true);
+      try {
+        const prompt = `From the note below, identify the stock and a short topic. Return ONLY compact JSON: {"symbol":"<Yahoo ticker, or empty if none>","topic":"<3-6 word topic>","category":"<one of General,Fundamental,Technical,News,Risk,Watch,Idea>"}. For Indian stocks append .NS. Use "" for symbol if no specific stock is mentioned.\n\nNote: """${text.trim()}"""`;
+        const res = await fetch("/api/gemini/generate", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ prompt }),
+        });
+        const j = await res.json();
+        persist(parseDetect(j?.text) || {});
+      } catch {
+        persist({});
+      } finally {
+        setDetecting(false);
+      }
+      return;
+    }
+    persist({});
   };
 
   const startRec = async () => {
@@ -67,7 +125,7 @@ export default function StockNotes({ symbol, stockName, compact = false }: { sym
         }
         const reader = new FileReader();
         reader.onloadend = () => {
-          saveNote({ symbol, stockName: stockName || symbol, type: "voice", audio: reader.result, durationSec: recSecs, topic: topic.trim(), category });
+          saveNote({ symbol, stockName: stockName || symbol, type: "voice", audio: reader.result, durationSec: recSecs, topic: topic.trim(), category, page: autoPage || undefined, section: autoSection || undefined });
           reload();
         };
         reader.readAsDataURL(blob);
@@ -97,10 +155,18 @@ export default function StockNotes({ symbol, stockName, compact = false }: { sym
     <div className="space-y-3">
       {/* Composer */}
       <div className="bg-white border border-slate-200 rounded-2xl p-3 shadow-sm">
-        <div className="flex items-center gap-2 mb-2">
+        <div className="flex items-center gap-2 mb-2 flex-wrap">
           <StickyNote className="w-4 h-4 text-indigo-600" />
-          <span className="text-xs font-black text-slate-700">Notes for {symbol}</span>
+          <span className="text-xs font-black text-slate-700">Notes for {isGeneral ? "General" : symbol}</span>
           <span className="text-[10px] text-slate-400">· {notes.length} saved</span>
+          {autoPage && (
+            <span className="text-[10px] font-bold text-indigo-600 bg-indigo-50 rounded px-1.5 py-0.5">
+              📍 {autoPage}{autoSection ? ` · ${autoSection}` : ""}
+            </span>
+          )}
+          {isGeneral && (
+            <span className="text-[10px] font-bold text-amber-600 bg-amber-50 rounded px-1.5 py-0.5">✨ stock auto-detected on save</span>
+          )}
         </div>
         <div className="flex flex-wrap gap-2 mb-2">
           <input
@@ -135,8 +201,8 @@ export default function StockNotes({ symbol, stockName, compact = false }: { sym
               <Mic className="w-3.5 h-3.5" /> Voice Note
             </button>
           )}
-          <button onClick={addText} disabled={!text.trim()} className="px-3 py-1.5 bg-indigo-600 text-white rounded-lg text-xs font-bold flex items-center gap-1.5 hover:bg-indigo-700 disabled:opacity-50">
-            <Send className="w-3.5 h-3.5" /> Save Note
+          <button onClick={addText} disabled={!text.trim() || detecting} className="px-3 py-1.5 bg-indigo-600 text-white rounded-lg text-xs font-bold flex items-center gap-1.5 hover:bg-indigo-700 disabled:opacity-50">
+            {detecting ? <><Loader2 className="w-3.5 h-3.5 animate-spin" /> Detecting…</> : <><Send className="w-3.5 h-3.5" /> Save Note</>}
           </button>
         </div>
         {error && <div className="mt-2 text-[11px] text-rose-600 flex items-center gap-1"><AlertTriangle className="w-3 h-3" />{error}</div>}
@@ -153,11 +219,14 @@ export default function StockNotes({ symbol, stockName, compact = false }: { sym
             <div key={n.id} className="bg-white border border-slate-200 rounded-xl p-3 group">
               <div className="flex items-start justify-between mb-1.5 gap-2">
                 <div className="min-w-0">
-                  {(n.topic || n.category) && (
+                  {(n.topic || n.category || n.page) && (
                     <div className="flex flex-wrap items-center gap-1.5 mb-1">
                       {n.topic && <span className="text-[13px] font-black text-slate-900">{n.topic}</span>}
                       {n.category && (
                         <span className="px-1.5 py-0.5 rounded text-[10px] font-black bg-indigo-50 text-indigo-700">{n.category}</span>
+                      )}
+                      {n.page && (
+                        <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-slate-100 text-slate-500">📍 {n.page}{n.section ? ` · ${n.section}` : ""}</span>
                       )}
                     </div>
                   )}

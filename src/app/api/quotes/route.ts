@@ -48,7 +48,7 @@ export async function POST(req: NextRequest) {
           .map((s) => String(s || "").trim().toUpperCase())
           .filter(Boolean),
       ),
-    ).slice(0, 120); // bound the fan-out
+    ).slice(0, 220); // bound the fan-out
 
     if (clean.length === 0) {
       return NextResponse.json({ quotes: {} });

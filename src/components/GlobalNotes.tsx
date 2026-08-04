@@ -5,6 +5,7 @@ import { usePathname, useSearchParams } from "next/navigation";
 import { StickyNote, X, Search } from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
 import StockNotes from "@/components/StockNotes";
+import { getLastAnalysisTab } from "@/lib/storage";
 
 // Detect the stock the user is currently looking at, from the URL.
 function detectSymbol(pathname: string | null, search: URLSearchParams | null): string {
@@ -17,12 +18,31 @@ function detectSymbol(pathname: string | null, search: URLSearchParams | null): 
   return "";
 }
 
+// Friendly page name from the route, used to auto-tag where a note was written.
+const PAGE_LABELS: Record<string, string> = {
+  analyze: "Analyze", stock: "Stock", charts: "Charts", watchlist: "Watchlist",
+  portfolio: "Portfolio", markets: "Markets", dashboard: "Dashboard", screener: "Screener",
+  compare: "Compare", news: "News", digest: "Daily Digest", research: "Research",
+  "trend-alerts": "Trend Alerts", alerts: "Alerts", sheets: "Sheets", import: "Import",
+  qa: "Q&A", prompts: "Prompts", notes: "Notes", settings: "Settings",
+};
+function detectPage(pathname: string | null): string {
+  const seg = (pathname || "").split("/").filter(Boolean)[0] || "";
+  return PAGE_LABELS[seg] || "";
+}
+
 export default function GlobalNotes() {
   const [open, setOpen] = useState(false);
   const [symbol, setSymbol] = useState("GENERAL");
   const [editingSym, setEditingSym] = useState(false);
   const pathname = usePathname();
   const search = useSearchParams();
+
+  const autoPage = detectPage(pathname);
+  // Section only makes sense on the analyze page, where the active tab mirrors
+  // into getLastAnalysisTab(). Capitalise it for display.
+  const rawTab = pathname?.startsWith("/analyze") ? getLastAnalysisTab() : "";
+  const autoSection = rawTab ? rawTab.charAt(0).toUpperCase() + rawTab.slice(1) : "";
 
   // Keyboard shortcut: Cmd/Ctrl + J  (jot a note). Esc closes.
   useEffect(() => {
@@ -95,12 +115,22 @@ export default function GlobalNotes() {
               {/* Symbol selector */}
               <div className="px-4 py-3 bg-white border-b border-slate-100">
                 <div className="flex items-center justify-between gap-2">
-                  <div className="text-[11px] text-slate-500">
-                    Note for: <button onClick={() => setEditingSym((v) => !v)} className="font-black text-indigo-600 hover:underline">{symbol || "GENERAL"}</button>
+                  <div className="text-[11px] text-slate-500 flex items-center gap-1.5">
+                    Note for: <button onClick={() => setEditingSym((v) => !v)} className="font-black text-indigo-600 hover:underline">{symbol === "GENERAL" ? "General" : symbol}</button>
+                    {autoPage && <span className="text-[10px] font-bold text-slate-400">· on {autoPage}{autoSection ? ` (${autoSection})` : ""}</span>}
                   </div>
-                  {!editingSym && (
-                    <button onClick={() => setEditingSym(true)} className="text-[10px] font-bold text-slate-400 hover:text-indigo-600">change</button>
-                  )}
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => { setSymbol("GENERAL"); setEditingSym(false); }}
+                      className={`text-[10px] font-bold px-2 py-0.5 rounded ${symbol === "GENERAL" ? "bg-indigo-600 text-white" : "text-slate-500 hover:text-indigo-600 border border-slate-200"}`}
+                      title="Write a general note (stock auto-detected on save)"
+                    >
+                      General
+                    </button>
+                    {!editingSym && (
+                      <button onClick={() => setEditingSym(true)} className="text-[10px] font-bold text-slate-400 hover:text-indigo-600">change</button>
+                    )}
+                  </div>
                 </div>
                 {editingSym && (
                   <form
@@ -124,7 +154,7 @@ export default function GlobalNotes() {
 
               {/* Composer + list (reuses StockNotes) */}
               <div className="flex-1 overflow-y-auto p-4">
-                <StockNotes symbol={symbol || "GENERAL"} stockName={symbol || "GENERAL"} compact />
+                <StockNotes symbol={symbol || "GENERAL"} stockName={symbol || "GENERAL"} autoPage={autoPage} autoSection={autoSection} compact />
               </div>
             </motion.div>
           </>

@@ -246,6 +246,7 @@ export interface PriceAlert {
   triggered: Partial<Record<AlertLevelKey, boolean>>;
   fromPortfolio?: boolean;
   createdAt: number;
+  updatedAt?: number;
   status: "active" | "paused";
 }
 export const getPriceAlerts = (): PriceAlert[] =>
@@ -254,8 +255,10 @@ export const savePriceAlert = (alert: Partial<PriceAlert>) => {
   const current = getPriceAlerts();
   if (alert.id) {
     const i = current.findIndex((a) => a.id === alert.id);
-    if (i >= 0) current[i] = { ...current[i], ...alert } as PriceAlert;
-    else current.push(alert as PriceAlert);
+    // Stamp updatedAt so cross-device sync keeps the newer edit (createdAt alone
+    // never changes, which would let a stale copy win on merge).
+    if (i >= 0) current[i] = { ...current[i], ...alert, updatedAt: Date.now() } as PriceAlert;
+    else current.push({ ...alert, updatedAt: Date.now() } as PriceAlert);
   } else {
     current.push({
       symbol: "",
@@ -265,6 +268,7 @@ export const savePriceAlert = (alert: Partial<PriceAlert>) => {
       ...alert,
       id: Date.now().toString(),
       createdAt: Date.now(),
+      updatedAt: Date.now(),
     } as PriceAlert);
   }
   setContext("sa_price_alerts", current);
@@ -279,7 +283,7 @@ export const updatePriceAlert = (id: string, patch: Partial<PriceAlert>) => {
   const current = getPriceAlerts();
   const i = current.findIndex((a) => a.id === id);
   if (i >= 0) {
-    current[i] = { ...current[i], ...patch };
+    current[i] = { ...current[i], ...patch, updatedAt: Date.now() };
     setContext("sa_price_alerts", current);
   }
 };
@@ -631,6 +635,182 @@ export const getNotesGrouped = () => {
     .map((g: any) => ({ ...g, notes: g.notes.sort((a: any, b: any) => b.createdAt - a.createdAt) }))
     .sort((a: any, b: any) => b.lastAt - a.lastAt);
 };
+
+// TRADING JOURNAL
+// A dated diary of trades, ideas, lessons and reviews. Kept locally (and synced
+// like every other sa_* store). Not advice — the user's own record.
+export type JournalEntry = {
+  id: string;
+  date: string; // YYYY-MM-DD the entry is about
+  symbol?: string;
+  title: string;
+  text: string;
+  tag?: string; // Trade | Idea | Lesson | Review | Mistake
+  outcome?: string; // free text e.g. "+2,400" or "SL hit"
+  createdAt: number;
+  updatedAt?: number;
+};
+export const JOURNAL_TAGS = ["Trade", "Idea", "Lesson", "Review", "Mistake"] as const;
+
+export const getJournal = (): JournalEntry[] =>
+  getParsedContext<JournalEntry[]>("sa_journal", []);
+
+export const saveJournalEntry = (entry: Partial<JournalEntry>) => {
+  const current = getJournal();
+  if (entry.id) {
+    const i = current.findIndex((e) => e.id === entry.id);
+    if (i >= 0) current[i] = { ...current[i], ...entry, updatedAt: Date.now() } as JournalEntry;
+    else current.push({ ...entry, updatedAt: Date.now() } as JournalEntry);
+  } else {
+    current.push({
+      title: "",
+      text: "",
+      date: new Date().toISOString().slice(0, 10),
+      ...entry,
+      id: Date.now().toString() + Math.random().toString(36).slice(2, 6),
+      createdAt: Date.now(),
+      updatedAt: Date.now(),
+    } as JournalEntry);
+  }
+  setContext("sa_journal", current);
+};
+
+export const deleteJournalEntry = (id: string) =>
+  setContext("sa_journal", getJournal().filter((e) => e.id !== id));
+
+// AI ASSISTANT — unified research chat (general + stock-grounded + document Q&A).
+// ChatGPT-style multi-conversation store. Each thread can carry attached
+// documents and/or a stock context so follow-ups stay grounded.
+export type AssistantMsg = { role: "user" | "ai"; content: string; at: number };
+export type AssistantDoc = { name: string; text: string; chars: number };
+export type AssistantChat = {
+  id: string;
+  title: string;
+  messages: AssistantMsg[];
+  docs?: AssistantDoc[];
+  stockSymbol?: string;
+  instructions?: string; // per-chat custom prompt / persona
+  projectId?: string; // grouping
+  createdAt: number;
+  updatedAt: number;
+};
+export const getAssistantChats = (): AssistantChat[] =>
+  getParsedContext<AssistantChat[]>("sa_assistant_chats", []);
+export const saveAssistantChat = (chat: AssistantChat) => {
+  const all = getAssistantChats();
+  const i = all.findIndex((c) => c.id === chat.id);
+  const next = { ...chat, updatedAt: Date.now() };
+  if (i >= 0) all[i] = next;
+  else all.unshift(next);
+  setContext("sa_assistant_chats", all.slice(0, 100));
+};
+export const deleteAssistantChat = (id: string) =>
+  setContext("sa_assistant_chats", getAssistantChats().filter((c) => c.id !== id));
+
+// A Project groups conversations and shares documents + custom instructions
+// across them (like ChatGPT/Claude projects).
+export type AssistantProject = {
+  id: string;
+  name: string;
+  instructions?: string;
+  docs?: AssistantDoc[];
+  createdAt: number;
+  updatedAt: number;
+};
+export const getAssistantProjects = (): AssistantProject[] =>
+  getParsedContext<AssistantProject[]>("sa_assistant_projects", []);
+export const saveAssistantProject = (p: AssistantProject) => {
+  const all = getAssistantProjects();
+  const i = all.findIndex((x) => x.id === p.id);
+  const next = { ...p, updatedAt: Date.now() };
+  if (i >= 0) all[i] = next;
+  else all.unshift(next);
+  setContext("sa_assistant_projects", all.slice(0, 50));
+};
+export const deleteAssistantProject = (id: string) => {
+  setContext("sa_assistant_projects", getAssistantProjects().filter((p) => p.id !== id));
+  // Detach chats from the deleted project (keep the chats).
+  const chats = getAssistantChats().map((c) => (c.projectId === id ? { ...c, projectId: undefined } : c));
+  setContext("sa_assistant_chats", chats);
+};
+
+// "Train the AI" — persistent memory applied to EVERY conversation:
+// a global persona/instructions the user sets, plus taught facts/corrections.
+export type AssistantLesson = { id: string; text: string; createdAt: number };
+export type AssistantTraining = { globalInstructions: string; lessons: AssistantLesson[] };
+export const getAssistantTraining = (): AssistantTraining =>
+  getParsedContext<AssistantTraining>("sa_assistant_training", { globalInstructions: "", lessons: [] });
+export const saveAssistantTraining = (t: AssistantTraining) => setContext("sa_assistant_training", t);
+export const addAssistantLesson = (text: string) => {
+  const t = getAssistantTraining();
+  t.lessons = [{ id: Date.now().toString() + Math.random().toString(36).slice(2, 6), text: text.trim(), createdAt: Date.now() }, ...(t.lessons || [])].slice(0, 200);
+  saveAssistantTraining(t);
+  return t;
+};
+export const removeAssistantLesson = (id: string) => {
+  const t = getAssistantTraining();
+  t.lessons = (t.lessons || []).filter((l) => l.id !== id);
+  saveAssistantTraining(t);
+  return t;
+};
+
+// MARKET MANUAL TREND MARKS — the user's own uptrend/downtrend/sideways tag per
+// symbol on the Markets page (separate from the auto "AI Trend").
+export const getMarketMarks = (): Record<string, string> =>
+  getParsedContext<Record<string, string>>("sa_market_marks", {});
+export const setMarketMark = (symbol: string, mark: string) => {
+  const all = getMarketMarks();
+  const key = String(symbol || "").toUpperCase();
+  if (mark) all[key] = mark;
+  else delete all[key];
+  setContext("sa_market_marks", all);
+};
+
+// COMBINATION SCREENER — user-built sets of technical conditions.
+export type ScreenConditions = {
+  maStack?: boolean;
+  stackLevels?: string[]; // which levels form the stack, e.g. ["price","10","20","50"]
+  above200?: boolean;
+  golden?: boolean;
+  adx?: boolean;
+  adxMin?: number;
+  rsiStrong?: boolean;
+  rsiMin?: number;
+  nearHigh?: boolean;
+  nearPct?: number;
+  near52wLow?: boolean;
+  nearLowPct?: number;
+  atAth?: boolean;
+  atAtl?: boolean;
+  nearSupport?: boolean;
+  supportPct?: number;
+  nearResistance?: boolean;
+  resistancePct?: number;
+  earningsUp?: boolean;
+  priceRule?: boolean;
+  priceOp?: ">" | "<";
+  priceVal?: number;
+};
+export type Combination = {
+  id: string;
+  name: string;
+  label?: string;
+  conditions: ScreenConditions;
+  createdAt: number;
+  updatedAt: number;
+};
+export const getCombinations = (): Combination[] =>
+  getParsedContext<Combination[]>("sa_combinations", []);
+export const saveCombination = (c: Combination) => {
+  const all = getCombinations();
+  const i = all.findIndex((x) => x.id === c.id);
+  const next = { ...c, updatedAt: Date.now() };
+  if (i >= 0) all[i] = next;
+  else all.unshift(next);
+  setContext("sa_combinations", all.slice(0, 50));
+};
+export const deleteCombination = (id: string) =>
+  setContext("sa_combinations", getCombinations().filter((c) => c.id !== id));
 
 // NOTIFICATIONS
 export const getNotifications = () =>
