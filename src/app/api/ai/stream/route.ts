@@ -61,7 +61,7 @@ async function* geminiStream(prompt: string) {
 
 async function* claudeStream(prompt: string) {
   const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
-  const model = process.env.ANTHROPIC_MODEL || "claude-3-5-sonnet-latest";
+  const model = process.env.ANTHROPIC_MODEL || "claude-opus-4-8";
   const stream = await client.messages.stream({ model, max_tokens: 2048, messages: [{ role: "user", content: prompt }] });
   for await (const ev of stream as any) {
     if (ev?.type === "content_block_delta" && ev?.delta?.type === "text_delta") yield ev.delta.text as string;

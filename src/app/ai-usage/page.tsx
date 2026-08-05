@@ -10,6 +10,8 @@ import {
   Trash2,
   Sparkles,
   DollarSign,
+  RefreshCw,
+  Activity,
 } from "lucide-react";
 import { getAiUsage, getAiBalances, saveAiBalances } from "@/lib/storage";
 
@@ -68,10 +70,24 @@ export default function AiUsagePage() {
   const [usdInr, setUsdInr] = useState(88);
   const [rateLive, setRateLive] = useState(false);
   const [balances, setBalances] = useState<Record<string, number>>({});
+  // Live rate-limit data pulled straight from each provider's response headers.
+  const [limits, setLimits] = useState<any[]>([]);
+  const [limitsLoading, setLimitsLoading] = useState(false);
+  const [limitsAt, setLimitsAt] = useState<string>("");
+
+  const fetchLimits = () => {
+    setLimitsLoading(true);
+    fetch("/api/ai/limits")
+      .then((r) => r.json())
+      .then((j) => { setLimits(j.limits || []); setLimitsAt(j.checkedAt || ""); })
+      .catch(() => {})
+      .finally(() => setLimitsLoading(false));
+  };
 
   const reload = () => { setEvents(getAiUsage()); setBalances(getAiBalances()); };
   useEffect(() => {
     reload();
+    fetchLimits();
     fetch("/api/gemini/file-status")
       .then((r) => r.json())
       .then(setStatus)
@@ -176,6 +192,70 @@ export default function AiUsagePage() {
             <Trash2 className="w-3.5 h-3.5" /> Clear
           </button>
         </div>
+      </div>
+
+      {/* Live API limits (real data from provider headers) */}
+      <div className="bg-white rounded-2xl border border-indigo-200 shadow-sm p-5 mb-6">
+        <div className="flex items-center justify-between gap-2 mb-1">
+          <h3 className="text-sm font-black text-slate-800 flex items-center gap-2">
+            <Activity className="w-4 h-4 text-indigo-600" /> Live API limits
+            <span className="text-[10px] font-bold text-emerald-600 bg-emerald-50 px-1.5 py-0.5 rounded">REAL</span>
+          </h3>
+          <button onClick={fetchLimits} disabled={limitsLoading} className="px-3 py-1.5 text-xs font-bold text-slate-500 hover:text-indigo-600 flex items-center gap-1.5 disabled:opacity-50">
+            <RefreshCw className={`w-3.5 h-3.5 ${limitsLoading ? "animate-spin" : ""}`} /> Refresh
+          </button>
+        </div>
+        <p className="text-[11px] text-slate-400 mb-4">
+          Actual requests &amp; tokens left in each provider&apos;s current rate-limit window, read live from the API response headers.
+          {" "}Providers don&apos;t expose account $ balance over the API — for that, use the manual balance below.
+        </p>
+        {limits.length === 0 ? (
+          <p className="text-[12px] text-slate-400 py-2">{limitsLoading ? "Checking providers…" : "No configured providers to check."}</p>
+        ) : (
+          <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-3">
+            {limits.map((l: any) => {
+              const meta = PROVIDERS[l.provider] || { label: l.provider, color: "bg-slate-400" };
+              const bar = (rem: number | null, lim: number | null) => {
+                if (rem == null || !lim) return null;
+                const pct = Math.max(2, Math.min(100, (rem / lim) * 100));
+                const low = pct < 20;
+                return (
+                  <div className="h-1.5 rounded-full bg-slate-100 overflow-hidden">
+                    <div className={`h-full rounded-full ${low ? "bg-rose-500" : "bg-emerald-500"}`} style={{ width: `${pct}%` }} />
+                  </div>
+                );
+              };
+              return (
+                <div key={l.provider} className="rounded-xl border border-slate-200 p-3">
+                  <div className="flex items-center gap-2 mb-2">
+                    <span className={`w-2 h-2 rounded-full ${meta.color}`} />
+                    <span className="text-[13px] font-black text-slate-800">{meta.label}</span>
+                  </div>
+                  {l.ok ? (
+                    <div className="space-y-2">
+                      {l.reqRemaining != null && (
+                        <div>
+                          <div className="flex justify-between text-[11px] font-bold text-slate-500 mb-0.5"><span>Requests left</span><span className="tabular-nums text-slate-700">{l.reqRemaining.toLocaleString()}{l.reqLimit ? ` / ${l.reqLimit.toLocaleString()}` : ""}</span></div>
+                          {bar(l.reqRemaining, l.reqLimit)}
+                        </div>
+                      )}
+                      {l.tokRemaining != null && (
+                        <div>
+                          <div className="flex justify-between text-[11px] font-bold text-slate-500 mb-0.5"><span>Tokens left</span><span className="tabular-nums text-slate-700">{l.tokRemaining.toLocaleString()}{l.tokLimit ? ` / ${l.tokLimit.toLocaleString()}` : ""}</span></div>
+                          {bar(l.tokRemaining, l.tokLimit)}
+                        </div>
+                      )}
+                      {l.reqReset && <div className="text-[10px] text-slate-400">resets in {l.reqReset}</div>}
+                    </div>
+                  ) : (
+                    <p className="text-[11px] text-slate-400">{l.note || "Live limits not available."}</p>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        )}
+        {limitsAt && <p className="text-[10px] text-slate-300 mt-3">Checked {new Date(limitsAt).toLocaleTimeString()}</p>}
       </div>
 
       {/* Cost tiles */}
