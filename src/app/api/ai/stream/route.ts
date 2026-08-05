@@ -1,17 +1,25 @@
 import { NextRequest } from "next/server";
 import { GoogleGenAI } from "@google/genai";
+import Anthropic from "@anthropic-ai/sdk";
+import { generateWithProvider, configuredProviders, type NamedProvider } from "@/lib/aiClient";
 
-// Streaming chat endpoint — tokens are sent to the browser as they are produced
-// so the answer appears instantly instead of after a wait. Mirrors the "fast"
-// tier order (Groq → OpenAI → Gemini); the first provider that yields text wins.
-// If nothing streams, the client falls back to the non-streaming route.
+// Streaming chat endpoint with model choice. `provider` picks which AI answers:
+// "auto" (fast order) or a specific one — openai (ChatGPT), claude, gemini, groq.
+// Tokens stream as they're produced; if streaming for the chosen model fails,
+// it falls back to a single non-streamed call to that same model.
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
 
 const enc = new TextEncoder();
 
-// Groq and OpenAI share the OpenAI chat-completions SSE shape.
+// List configured providers for the model picker.
+export async function GET() {
+  return new Response(JSON.stringify({ providers: configuredProviders() }), {
+    headers: { "Content-Type": "application/json" },
+  });
+}
+
 async function* openaiCompatStream(url: string, key: string, model: string, prompt: string) {
   const res = await fetch(url, {
     method: "POST",
@@ -36,9 +44,7 @@ async function* openaiCompatStream(url: string, key: string, model: string, prom
       try {
         const delta = JSON.parse(data)?.choices?.[0]?.delta?.content;
         if (delta) yield delta as string;
-      } catch {
-        /* ignore keep-alive / partial lines */
-      }
+      } catch { /* keep-alive / partial */ }
     }
   }
 }
@@ -53,44 +59,59 @@ async function* geminiStream(prompt: string) {
   }
 }
 
+async function* claudeStream(prompt: string) {
+  const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+  const model = process.env.ANTHROPIC_MODEL || "claude-3-5-sonnet-latest";
+  const stream = await client.messages.stream({ model, max_tokens: 2048, messages: [{ role: "user", content: prompt }] });
+  for await (const ev of stream as any) {
+    if (ev?.type === "content_block_delta" && ev?.delta?.type === "text_delta") yield ev.delta.text as string;
+  }
+}
+
+function streamerFor(p: NamedProvider, prompt: string): (() => AsyncGenerator<string>) | null {
+  switch (p) {
+    case "groq": return process.env.GROQ_API_KEY ? () => openaiCompatStream("https://api.groq.com/openai/v1/chat/completions", process.env.GROQ_API_KEY!, process.env.GROQ_MODEL || "llama-3.3-70b-versatile", prompt) : null;
+    case "openai": return process.env.OPENAI_API_KEY ? () => openaiCompatStream("https://api.openai.com/v1/chat/completions", process.env.OPENAI_API_KEY!, process.env.OPENAI_MODEL || "gpt-4o-mini", prompt) : null;
+    case "gemini": return process.env.GEMINI_API_KEY ? () => geminiStream(prompt) : null;
+    case "claude": return process.env.ANTHROPIC_API_KEY ? () => claudeStream(prompt) : null;
+    default: return null;
+  }
+}
+
 export async function POST(req: NextRequest) {
   const body = await req.json().catch(() => ({}));
   const prompt = String(body.prompt || body.input || "");
+  const provider = String(body.provider || "auto") as NamedProvider | "auto";
   if (!prompt) return new Response(JSON.stringify({ error: "prompt required" }), { status: 400 });
 
-  const attempts: Array<() => AsyncGenerator<string>> = [];
-  if (process.env.GROQ_API_KEY)
-    attempts.push(() => openaiCompatStream("https://api.groq.com/openai/v1/chat/completions", process.env.GROQ_API_KEY!, process.env.GROQ_MODEL || "llama-3.3-70b-versatile", prompt));
-  if (process.env.OPENAI_API_KEY)
-    attempts.push(() => openaiCompatStream("https://api.openai.com/v1/chat/completions", process.env.OPENAI_API_KEY!, process.env.OPENAI_MODEL || "gpt-4o-mini", prompt));
-  if (process.env.GEMINI_API_KEY) attempts.push(() => geminiStream(prompt));
-
-  if (!attempts.length) return new Response(JSON.stringify({ error: "no AI provider configured" }), { status: 503 });
+  // Which streamers to try, in order. A specific provider = just that one; auto
+  // = the fast order.
+  const order: NamedProvider[] = provider === "auto" ? ["groq", "openai", "gemini", "claude"] : [provider];
+  const attempts = order.map((p) => streamerFor(p, prompt)).filter(Boolean) as Array<() => AsyncGenerator<string>>;
 
   const stream = new ReadableStream({
     async start(controller) {
       let sentAny = false;
       for (const attempt of attempts) {
         try {
-          for await (const piece of attempt()) {
-            sentAny = true;
-            controller.enqueue(enc.encode(piece));
-          }
-          if (sentAny) break; // finished cleanly on a working provider
+          for await (const piece of attempt()) { sentAny = true; controller.enqueue(enc.encode(piece)); }
+          if (sentAny) break;
         } catch {
-          if (sentAny) break; // already mid-stream — don't restart with another model
-          // otherwise fall through to the next provider
+          if (sentAny) break;
         }
       }
-      controller.close(); // empty stream → client falls back to the non-streaming route
+      // Chosen model couldn't stream — one non-streamed call to that same model.
+      if (!sentAny && provider !== "auto") {
+        try {
+          const text = await generateWithProvider(provider as NamedProvider, prompt);
+          if (text) { controller.enqueue(enc.encode(text)); sentAny = true; }
+        } catch { /* client falls back */ }
+      }
+      controller.close();
     },
   });
 
   return new Response(stream, {
-    headers: {
-      "Content-Type": "text/plain; charset=utf-8",
-      "Cache-Control": "no-store",
-      "X-Accel-Buffering": "no",
-    },
+    headers: { "Content-Type": "text/plain; charset=utf-8", "Cache-Control": "no-store", "X-Accel-Buffering": "no" },
   });
 }

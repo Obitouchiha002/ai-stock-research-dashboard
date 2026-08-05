@@ -691,6 +691,7 @@ export type AssistantChat = {
   stockSymbol?: string;
   instructions?: string; // per-chat custom prompt / persona
   projectId?: string; // grouping
+  provider?: string; // chosen AI model: auto | openai | claude | gemini | groq
   createdAt: number;
   updatedAt: number;
 };

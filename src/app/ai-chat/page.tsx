@@ -5,9 +5,19 @@ import ReactMarkdown from "react-markdown";
 import {
   MessageSquare, Send, Plus, Paperclip, Search, X, Loader2, Trash2, Copy, Check,
   FileText, BarChart3, Sparkles, PanelLeftClose, PanelLeftOpen, Settings2,
-  FolderPlus, Folder, BookMarked, ClipboardPaste, ShieldCheck, Mic, MicOff, Languages, GraduationCap,
+  FolderPlus, Folder, BookMarked, ClipboardPaste, ShieldCheck, Mic, MicOff, Languages, GraduationCap, FileCode2, Cpu,
 } from "lucide-react";
 import { useSpeech, SPEECH_LANGS } from "@/lib/useSpeech";
+import { listHtmlReports, getHtmlReport, type ReportMeta } from "@/lib/htmlReports";
+
+// AI model choices for the picker.
+const PROVIDER_UI: { v: string; label: string }[] = [
+  { v: "auto", label: "Auto (fastest)" },
+  { v: "openai", label: "ChatGPT" },
+  { v: "claude", label: "Claude" },
+  { v: "gemini", label: "Gemini" },
+  { v: "groq", label: "Groq" },
+];
 
 // Render the assistant's markdown (bold, bullet points, headings) cleanly.
 const MD: any = {
@@ -98,6 +108,10 @@ export default function AssistantPage() {
   const [trainOpen, setTrainOpen] = useState(false);
   const [training, setTraining] = useState<AssistantTraining>({ globalInstructions: "", lessons: [] });
   const [lessonDraft, setLessonDraft] = useState("");
+  const [providers, setProviders] = useState<string[]>([]);
+  const [providerOpen, setProviderOpen] = useState(false);
+  const [reportPickerOpen, setReportPickerOpen] = useState(false);
+  const [reportList, setReportList] = useState<ReportMeta[]>([]);
 
   const fileRef = useRef<HTMLInputElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -117,7 +131,26 @@ export default function AssistantPage() {
     setProjects(getAssistantProjects());
     setTraining(getAssistantTraining());
     if (cs.length) setActiveId(cs[0].id);
+    fetch("/api/ai/stream").then((r) => r.json()).then((j) => setProviders(j.providers || [])).catch(() => {});
   }, []);
+
+  const currentProvider = active?.provider || "auto";
+  const setProviderChoice = (v: string) => { persist({ ...ensureActive(), provider: v }); setProviderOpen(false); };
+
+  // Attach one of the user's stored HTML reports as context to analyse.
+  const openReportPicker = async () => {
+    try { setReportList(await listHtmlReports()); } catch { setReportList([]); }
+    setReportPickerOpen(true);
+  };
+  const attachReport = async (r: ReportMeta) => {
+    try {
+      const html = await getHtmlReport(r.id);
+      const text = new DOMParser().parseFromString(html, "text/html").body?.textContent || "";
+      const clean = text.replace(/\s+\n/g, "\n").replace(/\n{3,}/g, "\n\n").trim();
+      attachDocs([{ name: r.name, text: clean || html, chars: (clean || html).length }]);
+    } catch { /* ignore */ }
+    setReportPickerOpen(false);
+  };
 
   // ---- train the AI (persistent memory across all chats) ----
   const updateTraining = (patch: Partial<AssistantTraining>) =>
@@ -309,7 +342,7 @@ User question: ${q}`;
     let acc = "";
     try {
       const res = await fetch("/api/ai/stream", {
-        method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ prompt }),
+        method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ prompt, provider: thread.provider || "auto" }),
       });
       if (res.ok && res.body) {
         const reader = res.body.getReader();
@@ -384,6 +417,7 @@ User question: ${q}`;
 
   const PLUS_ITEMS = [
     { icon: Paperclip, label: "Upload document / report", onClick: () => { setPlusOpen(false); fileRef.current?.click(); } },
+    { icon: FileCode2, label: "Attach saved HTML report", onClick: () => { setPlusOpen(false); openReportPicker(); } },
     { icon: ClipboardPaste, label: "Paste text as context", onClick: () => { setPlusOpen(false); setPasteOpen(true); } },
     { icon: BookMarked, label: "Insert saved prompt", onClick: () => { setPlusOpen(false); setPromptOpen(true); } },
     { icon: Settings2, label: "Custom instructions", onClick: () => { setPlusOpen(false); setCustomizeOpen(true); } },
@@ -459,6 +493,25 @@ User question: ${q}`;
               </span>
             )}
             {effInstr && <span className="text-[11px] font-bold px-2 py-1 bg-amber-50 text-amber-700 rounded-lg border border-amber-100">custom prompt</span>}
+            {/* AI model picker */}
+            <div className="relative">
+              <button onClick={() => setProviderOpen((v) => !v)} className="inline-flex items-center gap-1 text-[11px] font-bold px-2 py-1 border border-slate-200 rounded-lg text-slate-600 hover:bg-slate-50" title="Choose AI model">
+                <Cpu className="w-3.5 h-3.5" /> {PROVIDER_UI.find((p) => p.v === currentProvider)?.label || "Auto"}
+              </button>
+              {providerOpen && (
+                <>
+                  <div className="fixed inset-0 z-10" onClick={() => setProviderOpen(false)} />
+                  <div className="absolute top-full mt-1 right-0 z-20 w-44 bg-white border border-slate-200 rounded-xl shadow-xl py-1">
+                    {PROVIDER_UI.filter((p) => p.v === "auto" || providers.includes(p.v)).map((p) => (
+                      <button key={p.v} onClick={() => setProviderChoice(p.v)} className={`w-full flex items-center justify-between px-3 py-2 text-[13px] font-semibold text-left hover:bg-indigo-50 ${currentProvider === p.v ? "text-indigo-700" : "text-slate-600"}`}>
+                        {p.label}{currentProvider === p.v && <Check className="w-3.5 h-3.5" />}
+                      </button>
+                    ))}
+                    {providers.length === 0 && <p className="text-[10px] text-slate-400 px-3 py-1.5">Add API keys to enable more models.</p>}
+                  </div>
+                </>
+              )}
+            </div>
             <button onClick={() => { setTrainOpen((v) => !v); setCustomizeOpen(false); }} className={`p-1.5 rounded-lg hover:bg-slate-100 ${trainOpen ? "text-indigo-600 bg-indigo-50" : "text-slate-400 hover:text-indigo-600"}`} title="Train the AI (persistent memory)">
               <GraduationCap className="w-5 h-5" />
             </button>
@@ -596,6 +649,29 @@ User question: ${q}`;
                   <button key={p.id} onClick={() => insertPrompt(p.body)} className="w-full text-left bg-white border border-slate-200 rounded-lg px-3 py-2 hover:border-indigo-300 hover:bg-indigo-50/40 transition">
                     <div className="text-[13px] font-bold text-slate-800 truncate">{p.title || p.body.slice(0, 50)}</div>
                     <div className="text-[11px] text-slate-500 truncate">{p.body}</div>
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Saved HTML report picker */}
+        {reportPickerOpen && (
+          <div className="shrink-0 px-4 py-3 bg-slate-50 border-b border-slate-200 max-h-[40vh] overflow-y-auto">
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-[12px] font-black text-slate-700 flex items-center gap-1.5"><FileCode2 className="w-4 h-4 text-indigo-600" /> Attach a saved HTML report</span>
+              <button onClick={() => setReportPickerOpen(false)} className="text-slate-400 hover:text-slate-700"><X className="w-4 h-4" /></button>
+            </div>
+            {reportList.length === 0 ? (
+              <p className="text-[12px] text-slate-400 py-2 text-center">No saved HTML reports yet — add some in <span className="font-bold">HTML Reports</span>.</p>
+            ) : (
+              <div className="space-y-1.5">
+                {reportList.map((r) => (
+                  <button key={r.id} onClick={() => attachReport(r)} className="w-full text-left bg-white border border-slate-200 rounded-lg px-3 py-2 hover:border-indigo-300 hover:bg-indigo-50/40 transition flex items-center gap-2">
+                    <FileCode2 className="w-4 h-4 text-indigo-500 shrink-0" />
+                    <span className="flex-1 min-w-0 text-[13px] font-bold text-slate-800 truncate">{r.name}</span>
+                    {r.symbol && <span className="text-[10px] font-black text-indigo-700 bg-indigo-50 px-1.5 py-0.5 rounded">{r.symbol}</span>}
                   </button>
                 ))}
               </div>
