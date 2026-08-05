@@ -117,9 +117,10 @@ async function evalSymbol(symbol: string, name: string, c: ScreenConditions) {
       } catch { /* fundamentals unavailable */ }
     }
 
+    const changePct = typeof (quote as any)?.regularMarketChangePercent === "number" ? (quote as any).regularMarketChangePercent : null;
     const raw: ComboRaw = {
       price, dma10, dma20, dma50, dma200, rsi, adx,
-      pctFromHigh, pctFromLow, recentHigh, recentLow, ath, atl, earningsGrowth,
+      pctFromHigh, pctFromLow, recentHigh, recentLow, ath, atl, earningsGrowth, changePct,
     };
     const { passed, match } = evalConditions(raw, c);
 

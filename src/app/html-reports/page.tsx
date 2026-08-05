@@ -180,28 +180,49 @@ export default function HtmlReportsPage() {
       ) : filtered.length === 0 ? (
         <div className="text-center text-slate-500 font-medium py-12">No reports match your search.</div>
       ) : (
-        <div className="grid sm:grid-cols-2 gap-3">
-          {filtered.map((r) => (
-            <div key={r.id} className="bg-white rounded-2xl border border-slate-200 shadow-sm p-4 flex flex-col group">
-              <div className="flex items-start gap-3">
-                <div className="w-10 h-10 rounded-lg bg-indigo-50 border border-indigo-100 flex items-center justify-center shrink-0"><FileCode2 className="w-5 h-5 text-indigo-600" /></div>
-                <div className="min-w-0 flex-1">
-                  <button onClick={() => openPreview(r)} className="text-left font-black text-slate-900 truncate hover:text-indigo-600 w-full">{r.name}</button>
-                  <div className="flex items-center gap-2 mt-1">
-                    <input value={r.symbol || ""} onChange={(e) => setSymbol(r, e.target.value)} placeholder="+ symbol"
-                      className="w-24 text-[11px] font-black text-indigo-700 bg-indigo-50/60 rounded px-1.5 py-0.5 outline-none focus:ring-1 focus:ring-indigo-300 placeholder:text-slate-400 placeholder:font-medium" />
-                    <span className="text-[11px] text-slate-400">{fmtSize(r.size)} · {timeAgo(r.addedAt)}</span>
-                  </div>
-                </div>
-              </div>
-              <div className="flex items-center gap-1 mt-3 pt-3 border-t border-slate-100">
-                <button onClick={() => openPreview(r)} className="flex-1 px-2 py-1.5 bg-indigo-600 text-white rounded-lg text-xs font-bold hover:bg-indigo-700 flex items-center justify-center gap-1.5"><Eye className="w-3.5 h-3.5" /> Preview</button>
-                <button onClick={() => openNewTab(r)} className="p-1.5 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg" title="Open in new tab"><ExternalLink className="w-4 h-4" /></button>
-                <button onClick={() => download(r)} className="p-1.5 text-slate-400 hover:text-slate-800 hover:bg-slate-100 rounded-lg" title="Download"><Download className="w-4 h-4" /></button>
-                <button onClick={() => remove(r)} className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg" title="Delete"><Trash2 className="w-4 h-4" /></button>
-              </div>
-            </div>
-          ))}
+        <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+          <div className="overflow-x-auto">
+            <table className="w-full text-left border-collapse text-sm">
+              <thead>
+                <tr className="bg-slate-50 border-b border-slate-200 text-xs font-bold text-slate-500 uppercase tracking-wide">
+                  <th className="p-3 w-12">S.No</th>
+                  <th className="p-3">Company / Report</th>
+                  <th className="p-3">Details</th>
+                  <th className="p-3 whitespace-nowrap">Date</th>
+                  <th className="p-3 text-right">Preview / Link</th>
+                </tr>
+              </thead>
+              <tbody>
+                {filtered.map((r, idx) => (
+                  <tr key={r.id} className="border-b border-slate-100 hover:bg-slate-50 transition">
+                    <td className="p-3 text-slate-400 tabular-nums">{idx + 1}</td>
+                    <td className="p-3">
+                      <button onClick={() => openPreview(r)} className="flex items-center gap-2 text-left group/n">
+                        <FileCode2 className="w-4 h-4 text-indigo-500 shrink-0" />
+                        <span className="font-black text-slate-900 group-hover/n:text-indigo-600 max-w-[280px] truncate">{r.name}</span>
+                      </button>
+                    </td>
+                    <td className="p-3">
+                      <div className="flex items-center gap-2">
+                        <input value={r.symbol || ""} onChange={(e) => setSymbol(r, e.target.value)} placeholder="+ symbol"
+                          className="w-24 text-[11px] font-black text-indigo-700 bg-indigo-50/60 rounded px-1.5 py-0.5 outline-none focus:ring-1 focus:ring-indigo-300 placeholder:text-slate-400 placeholder:font-medium" />
+                        <span className="text-[11px] text-slate-400 whitespace-nowrap">{fmtSize(r.size)}</span>
+                      </div>
+                    </td>
+                    <td className="p-3 text-slate-500 text-[13px] whitespace-nowrap">{new Date(r.addedAt).toLocaleDateString()}</td>
+                    <td className="p-3">
+                      <div className="flex items-center justify-end gap-1">
+                        <button onClick={() => openPreview(r)} className="px-2.5 py-1.5 bg-indigo-600 text-white rounded-lg text-xs font-bold hover:bg-indigo-700 flex items-center gap-1.5"><Eye className="w-3.5 h-3.5" /> Preview</button>
+                        <button onClick={() => openNewTab(r)} className="p-1.5 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg" title="Open in new tab"><ExternalLink className="w-4 h-4" /></button>
+                        <button onClick={() => download(r)} className="p-1.5 text-slate-400 hover:text-slate-800 hover:bg-slate-100 rounded-lg" title="Download"><Download className="w-4 h-4" /></button>
+                        <button onClick={() => remove(r)} className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg" title="Delete"><Trash2 className="w-4 h-4" /></button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         </div>
       )}
 

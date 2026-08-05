@@ -12,8 +12,12 @@ import {
   getCombinations, saveCombination, deleteCombination,
   type Combination, type ScreenConditions,
 } from "@/lib/storage";
+import { RULE_METRICS } from "@/lib/comboEval";
 
 const genId = () => Date.now().toString() + Math.random().toString(36).slice(2, 6);
+const OP_UI = [
+  { v: ">", l: ">" }, { v: ">=", l: "≥" }, { v: "<", l: "<" }, { v: "<=", l: "≤" }, { v: "=", l: "=" },
+];
 
 // The condition blocks a combination can be built from.
 const COND_META: { key: keyof ScreenConditions; label: string; hint: string }[] = [
@@ -36,7 +40,7 @@ const COND_META: { key: keyof ScreenConditions; label: string; hint: string }[] 
 const SHORT: Record<string, string> = {
   maStack: "MA stack", above200: "Above 200", golden: "Golden", adx: "ADX", rsiStrong: "RSI",
   nearHigh: "52w high", near52wLow: "52w low", atAth: "ATH", atAtl: "ATL",
-  nearSupport: "Support", nearResistance: "Resistance", earningsUp: "Earnings", priceRule: "Price",
+  nearSupport: "Support", nearResistance: "Resistance", earningsUp: "Earnings", priceRule: "Price", rules: "Rules",
 };
 
 // The MA-stack levels the user can chain (canonical order).
@@ -130,6 +134,12 @@ export default function CombosPage() {
   });
   const curLevels = cond.stackLevels ?? ["price", "10", "20", "50", "200"];
 
+  // Custom rules ("design your own").
+  const rules = cond.rules || [];
+  const addRule = () => setCond((c) => ({ ...c, rules: [...(c.rules || []), { id: genId(), left: "price", op: ">" as const, rightType: "value" as const, rightVal: 0, join: "and" as const }] }));
+  const updateRule = (id: string, patch: any) => setCond((c) => ({ ...c, rules: (c.rules || []).map((r) => (r.id === id ? { ...r, ...patch } : r)) }));
+  const removeRule = (id: string) => setCond((c) => ({ ...c, rules: (c.rules || []).filter((r) => r.id !== id) }));
+
   const flash = (m: string) => { setToast(m); setTimeout(() => setToast(""), 1800); };
 
   const gatherSymbols = (): string[] => {
@@ -144,7 +154,7 @@ export default function CombosPage() {
     setErr("");
     const symbols = gatherSymbols();
     if (!symbols.length) { setErr("Pick a universe — add your Watchlist/Portfolio or paste some symbols."); return; }
-    if (enabledCount === 0) { setErr("Turn on at least one condition."); return; }
+    if (enabledCount === 0 && rules.length === 0) { setErr("Add at least one condition or rule."); return; }
     setRunning(true); setResults(null); setMeta(null);
     try {
       const res = await fetch("/api/screen", {
@@ -249,6 +259,53 @@ export default function CombosPage() {
               </div>
               <button onClick={saveCombo} className="px-4 py-2 bg-white border border-slate-200 rounded-lg font-bold text-slate-700 hover:bg-slate-50 flex items-center gap-2"><Save className="w-4 h-4" /> Save</button>
             </div>
+          </div>
+
+          {/* Design your own rules */}
+          <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-5">
+            <div className="flex items-center justify-between mb-1">
+              <h3 className="font-black text-slate-800">Design your own rules</h3>
+              <span className="text-[11px] font-bold text-slate-400">{rules.length} rule{rules.length === 1 ? "" : "s"}</span>
+            </div>
+            <p className="text-[11px] text-slate-400 mb-3">Compare any metric to a value or another metric — e.g. <b>Price ≥ 200-DMA</b>, <b>RSI &lt; 30</b>. Combine with AND / OR.</p>
+            <div className="space-y-1.5">
+              {rules.map((r, i) => (
+                <div key={r.id}>
+                  {i > 0 && (
+                    <div className="flex justify-center my-1">
+                      <div className="flex rounded-lg bg-slate-100 p-0.5">
+                        {(["and", "or"] as const).map((j) => (
+                          <button key={j} onClick={() => updateRule(r.id, { join: j })} className={`px-2.5 py-0.5 rounded text-[11px] font-black uppercase transition ${(r.join || "and") === j ? "bg-white text-indigo-700 shadow-sm" : "text-slate-400"}`}>{j}</button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                  <div className="flex flex-wrap items-center gap-1.5 rounded-lg border border-slate-200 bg-slate-50/50 p-2">
+                    <select value={r.left} onChange={(e) => updateRule(r.id, { left: e.target.value })} className="px-2 py-1 bg-white border border-slate-200 rounded text-[12px] font-semibold outline-none focus:ring-2 focus:ring-indigo-200">
+                      {RULE_METRICS.map((m) => <option key={m.k} value={m.k}>{m.label}</option>)}
+                    </select>
+                    <select value={r.op} onChange={(e) => updateRule(r.id, { op: e.target.value })} className="px-2 py-1 bg-white border border-slate-200 rounded text-[13px] font-black outline-none focus:ring-2 focus:ring-indigo-200">
+                      {OP_UI.map((o) => <option key={o.v} value={o.v}>{o.l}</option>)}
+                    </select>
+                    <select value={r.rightType} onChange={(e) => updateRule(r.id, { rightType: e.target.value, ...(e.target.value === "metric" && !r.rightMetric ? { rightMetric: "dma50" } : {}) })} className="px-2 py-1 bg-white border border-slate-200 rounded text-[12px] font-semibold outline-none focus:ring-2 focus:ring-indigo-200">
+                      <option value="value">value</option>
+                      <option value="metric">metric</option>
+                    </select>
+                    {r.rightType === "metric" ? (
+                      <select value={r.rightMetric || "dma50"} onChange={(e) => updateRule(r.id, { rightMetric: e.target.value })} className="px-2 py-1 bg-white border border-slate-200 rounded text-[12px] font-semibold outline-none focus:ring-2 focus:ring-indigo-200">
+                        {RULE_METRICS.map((m) => <option key={m.k} value={m.k}>{m.label}</option>)}
+                      </select>
+                    ) : (
+                      <input type="number" value={r.rightVal ?? ""} onChange={(e) => updateRule(r.id, { rightVal: Number(e.target.value) })} placeholder="value" className="w-24 px-2 py-1 bg-white border border-slate-200 rounded text-right text-[12px] outline-none focus:ring-2 focus:ring-indigo-200" />
+                    )}
+                    <button onClick={() => removeRule(r.id)} className="ml-auto text-slate-300 hover:text-rose-600" title="Remove rule"><X className="w-4 h-4" /></button>
+                  </div>
+                </div>
+              ))}
+            </div>
+            <button onClick={addRule} className="mt-2 w-full flex items-center justify-center gap-2 px-3 py-2 border-2 border-dashed border-slate-200 rounded-lg text-[13px] font-bold text-slate-500 hover:border-indigo-300 hover:text-indigo-600 transition">
+              <Plus className="w-4 h-4" /> Add rule
+            </button>
           </div>
 
           {/* Universe + Run */}

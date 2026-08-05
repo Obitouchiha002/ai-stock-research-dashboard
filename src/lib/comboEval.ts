@@ -18,9 +18,53 @@ export type ComboRaw = {
   ath?: number | null;
   atl?: number | null;
   earningsGrowth?: number | null; // quarterly EPS YoY, %
+  changePct?: number | null; // day change %
 };
 
 const ORDER = ["price", "10", "20", "50", "200"];
+
+// Metrics a custom rule can reference (raw-field key -> label used in the UI).
+export const RULE_METRICS: { k: string; label: string }[] = [
+  { k: "price", label: "Price" },
+  { k: "dma10", label: "10-DMA" },
+  { k: "dma20", label: "20-DMA" },
+  { k: "dma50", label: "50-DMA" },
+  { k: "dma200", label: "200-DMA" },
+  { k: "rsi", label: "RSI" },
+  { k: "adx", label: "ADX" },
+  { k: "pctFromHigh", label: "% from 52w high" },
+  { k: "pctFromLow", label: "% from 52w low" },
+  { k: "changePct", label: "Day change %" },
+  { k: "earningsGrowth", label: "EPS growth %" },
+];
+
+function evalRule(r: ComboRaw, rule: any): boolean {
+  const left = (r as any)[rule?.left];
+  const right = rule?.rightType === "metric" ? (r as any)[rule?.rightMetric] : rule?.rightVal;
+  if (left == null || right == null) return false;
+  const a = Number(left), b = Number(right);
+  if (!Number.isFinite(a) || !Number.isFinite(b)) return false;
+  switch (rule.op) {
+    case ">": return a > b;
+    case ">=": return a >= b;
+    case "<": return a < b;
+    case "<=": return a <= b;
+    case "=": return a === b || Math.abs(a - b) <= Math.abs(b) * 0.005; // ~equal (0.5%)
+    default: return false;
+  }
+}
+
+// Combine rules left-to-right using each rule's connector to the previous one.
+function evalRules(r: ComboRaw, rules: any[] | undefined): { has: boolean; pass: boolean } {
+  const valid = (rules || []).filter((x) => x && x.left && x.op);
+  if (!valid.length) return { has: false, pass: false };
+  let res = evalRule(r, valid[0]);
+  for (let i = 1; i < valid.length; i++) {
+    const cur = evalRule(r, valid[i]);
+    res = valid[i].join === "or" ? res || cur : res && cur;
+  }
+  return { has: true, pass: res };
+}
 
 export function evalConditions(
   r: ComboRaw,
@@ -52,6 +96,16 @@ export function evalConditions(
     passed.priceRule = price != null && Number.isFinite(val) && ((c.priceOp || ">") === ">" ? price > val : price < val);
   }
 
-  const keys = Object.keys(passed);
-  return { passed, match: keys.length > 0 && keys.every((k) => passed[k]) };
+  // Preset conditions must all pass; custom rules are evaluated separately and
+  // AND-ed with the presets.
+  const presetKeys = Object.keys(passed);
+  const presetHas = presetKeys.length > 0;
+  const presetPass = presetKeys.every((k) => passed[k]);
+  const rules = evalRules(r, (c as any).rules);
+  if (rules.has) passed.rules = rules.pass;
+  const match =
+    !presetHas && !rules.has
+      ? false
+      : (presetHas ? presetPass : true) && (rules.has ? rules.pass : true);
+  return { passed, match };
 }

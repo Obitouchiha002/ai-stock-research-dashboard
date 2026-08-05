@@ -791,6 +791,17 @@ export type ScreenConditions = {
   priceRule?: boolean;
   priceOp?: ">" | "<";
   priceVal?: number;
+  // "Design your own" custom rules: each compares a metric to a value or another
+  // metric, combined with AND/OR.
+  rules?: {
+    id: string;
+    left: string;
+    op: ">" | ">=" | "<" | "<=" | "=";
+    rightType: "value" | "metric";
+    rightVal?: number;
+    rightMetric?: string;
+    join?: "and" | "or";
+  }[];
 };
 export type Combination = {
   id: string;

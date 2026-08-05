@@ -116,6 +116,7 @@ export default function WatchlistPage() {
   const [active, setActive] = useState<string>("All");
   const [activeSub, setActiveSub] = useState<string>("All"); // sub-list within a category
   const [search, setSearch] = useState("");
+  const [markFilter, setMarkFilter] = useState("all"); // all | green | red | yellow | unmarked
   const [quotes, setQuotes] = useState<Record<string, any>>({});
   const [refreshing, setRefreshing] = useState(false);
   const [subcats, setSubcats] = useState<Record<string, string[]>>({});
@@ -202,6 +203,9 @@ export default function WatchlistPage() {
       if (activeSub === "__none") { if (item.subcategory) return false; }
       else if (item.subcategory !== activeSub) return false;
     }
+    // trend-mark filter
+    if (markFilter === "unmarked") { if (item.color) return false; }
+    else if (markFilter !== "all" && item.color !== markFilter) return false;
     if (!search) return true;
     const s = search.toLowerCase();
     return (
@@ -615,15 +619,19 @@ export default function WatchlistPage() {
         />
       </div>
 
-      {/* Colour-mark legend */}
-      <div className="flex items-center gap-3 mb-4 text-[11px] font-bold text-slate-400 flex-wrap">
-        <span className="uppercase tracking-wide">Mark:</span>
+      {/* Trend-mark filter (click a dot on a row to tag; filter here) */}
+      <div className="flex items-center gap-2 mb-4 flex-wrap">
+        <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wide">Trend mark:</span>
+        <button onClick={() => setMarkFilter("all")}
+          className={`px-2.5 py-1 rounded-lg text-xs font-bold transition ${markFilter === "all" ? "bg-slate-900 text-white" : "bg-white text-slate-600 border border-slate-200 hover:bg-slate-50"}`}>All</button>
         {MARK_COLORS.map((c) => (
-          <span key={c.key} className="inline-flex items-center gap-1.5">
+          <button key={c.key} onClick={() => setMarkFilter(markFilter === c.key ? "all" : c.key)}
+            className={`px-2.5 py-1 rounded-lg text-xs font-bold transition inline-flex items-center gap-1.5 ${markFilter === c.key ? "bg-slate-900 text-white" : "bg-white text-slate-600 border border-slate-200 hover:bg-slate-50"}`}>
             <span className={`w-2.5 h-2.5 rounded-full ${c.dot}`} /> {c.label}
-          </span>
+          </button>
         ))}
-        <span className="text-slate-300">— click a dot on a row to tag it</span>
+        <button onClick={() => setMarkFilter(markFilter === "unmarked" ? "all" : "unmarked")}
+          className={`px-2.5 py-1 rounded-lg text-xs font-bold transition ${markFilter === "unmarked" ? "bg-slate-900 text-white" : "bg-white text-slate-400 border border-slate-200 hover:bg-slate-50"}`}>Unmarked</button>
       </div>
 
       {/* Empty state */}

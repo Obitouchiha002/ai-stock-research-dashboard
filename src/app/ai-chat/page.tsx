@@ -112,6 +112,7 @@ export default function AssistantPage() {
   const [providerOpen, setProviderOpen] = useState(false);
   const [reportPickerOpen, setReportPickerOpen] = useState(false);
   const [reportList, setReportList] = useState<ReportMeta[]>([]);
+  const [slashIdx, setSlashIdx] = useState(0);
 
   const fileRef = useRef<HTMLInputElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -414,6 +415,37 @@ User question: ${q}`;
   }, [promptSearch, promptOpen]);
 
   const stock = active?.stockSymbol || "";
+
+  // ---- slash commands + keyboard shortcuts ----
+  const lastAiIdx = active ? (() => { for (let i = active.messages.length - 1; i >= 0; i--) if (active.messages[i].role === "ai" && active.messages[i].content) return i; return -1; })() : -1;
+  const SLASH_CMDS = [
+    { cmd: "new", label: "New chat", icon: Plus, run: () => newChat() },
+    { cmd: "model", label: "Switch AI model", icon: Cpu, run: () => setProviderOpen(true) },
+    { cmd: "stock", label: "Set stock context", icon: BarChart3, run: () => setStockOpen(true) },
+    { cmd: "attach", label: "Upload document", icon: Paperclip, run: () => fileRef.current?.click() },
+    { cmd: "report", label: "Attach saved HTML report", icon: FileCode2, run: () => openReportPicker() },
+    { cmd: "prompt", label: "Insert saved prompt", icon: BookMarked, run: () => setPromptOpen(true) },
+    { cmd: "paste", label: "Paste text as context", icon: ClipboardPaste, run: () => setPasteOpen(true) },
+    { cmd: "instructions", label: "Custom instructions", icon: Settings2, run: () => setCustomizeOpen(true) },
+    { cmd: "train", label: "Train / teach the AI", icon: GraduationCap, run: () => setTrainOpen(true) },
+    { cmd: "verify", label: "Cross-verify last answer", icon: ShieldCheck, run: () => { if (lastAiIdx >= 0) crossVerify(lastAiIdx); } },
+  ];
+  const slashQuery = input.startsWith("/") && !input.slice(1).includes(" ") ? input.slice(1).toLowerCase() : null;
+  const slashCmds = slashQuery != null ? SLASH_CMDS.filter((c) => c.cmd.includes(slashQuery) || c.label.toLowerCase().includes(slashQuery)) : [];
+  const slashOpen = slashQuery != null && slashCmds.length > 0;
+  const runSlash = (c: (typeof SLASH_CMDS)[number]) => { setInput(""); setSlashIdx(0); setPlusOpen(false); c.run(); };
+
+  // Global shortcuts: Cmd/Ctrl+Shift+O = new chat, Cmd/Ctrl+K = focus input.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      const meta = e.metaKey || e.ctrlKey;
+      if (meta && e.shiftKey && (e.key === "o" || e.key === "O")) { e.preventDefault(); newChat(); }
+      else if (meta && (e.key === "k" || e.key === "K")) { e.preventDefault(); taRef.current?.focus(); }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const PLUS_ITEMS = [
     { icon: Paperclip, label: "Upload document / report", onClick: () => { setPlusOpen(false); fileRef.current?.click(); } },
@@ -782,6 +814,20 @@ User question: ${q}`;
               </div>
             )}
             <div className="relative flex items-end gap-2 bg-slate-50 border border-slate-200 rounded-2xl px-2 py-2 focus-within:ring-2 focus-within:ring-indigo-200">
+              {/* Slash-command menu */}
+              {slashOpen && (
+                <div className="absolute bottom-full left-0 right-0 mb-2 bg-white border border-slate-200 rounded-xl shadow-xl py-1 max-h-72 overflow-y-auto z-30">
+                  <div className="px-3 py-1 text-[10px] font-black uppercase tracking-wider text-slate-400">Commands</div>
+                  {slashCmds.map((c, i) => (
+                    <button key={c.cmd} onMouseEnter={() => setSlashIdx(i)} onClick={() => runSlash(c)}
+                      className={`w-full flex items-center gap-2.5 px-3 py-2 text-left transition ${i === Math.min(slashIdx, slashCmds.length - 1) ? "bg-indigo-50" : "hover:bg-slate-50"}`}>
+                      <c.icon className="w-4 h-4 text-slate-400 shrink-0" />
+                      <span className="text-[13px] font-black text-slate-800">/{c.cmd}</span>
+                      <span className="text-[12px] text-slate-400 truncate">{c.label}</span>
+                    </button>
+                  ))}
+                </div>
+              )}
               {/* + menu */}
               <div className="relative shrink-0">
                 <button onClick={() => setPlusOpen((v) => !v)} className={`p-1.5 rounded-lg transition ${plusOpen ? "bg-indigo-100 text-indigo-700" : "text-slate-400 hover:text-indigo-600 hover:bg-slate-100"}`} title="Add">
@@ -800,8 +846,16 @@ User question: ${q}`;
                   </>
                 )}
               </div>
-              <textarea ref={taRef} value={input} onChange={(e) => setInput(e.target.value)}
-                onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(); } }}
+              <textarea ref={taRef} value={input} onChange={(e) => { setInput(e.target.value); setSlashIdx(0); }}
+                onKeyDown={(e) => {
+                  if (slashOpen) {
+                    if (e.key === "ArrowDown") { e.preventDefault(); setSlashIdx((i) => Math.min(i + 1, slashCmds.length - 1)); return; }
+                    if (e.key === "ArrowUp") { e.preventDefault(); setSlashIdx((i) => Math.max(i - 1, 0)); return; }
+                    if (e.key === "Enter") { e.preventDefault(); runSlash(slashCmds[Math.min(slashIdx, slashCmds.length - 1)]); return; }
+                    if (e.key === "Escape") { e.preventDefault(); setInput(""); return; }
+                  }
+                  if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(); }
+                }}
                 rows={1}
                 placeholder={speech.listening ? "Listening… speak now" : effDocs.length ? "Ask about your documents…" : stock ? `Ask about ${stock}…` : "Ask anything…"}
                 className="no-focus-outline flex-1 bg-transparent resize-none outline-none text-sm py-1.5 max-h-40 leading-relaxed" />
@@ -849,7 +903,7 @@ User question: ${q}`;
             )}
             <input ref={fileRef} type="file" multiple accept=".pdf,.txt,.md,.csv,.docx,.doc" className="hidden" onChange={(e) => { onFiles(e.target.files); e.target.value = ""; }} />
             <p className="mt-1.5 text-center text-[10px] text-slate-400 font-medium">
-              Research support only. Not buy/sell advice. AI can make mistakes — verify independently. Enter to send · Shift+Enter = new line.
+              Type <b className="text-slate-500">/</b> for commands · <b className="text-slate-500">⌘K</b> focus · <b className="text-slate-500">⌘⇧O</b> new chat · Enter send · Shift+Enter newline. Research only — not buy/sell advice.
             </p>
           </div>
         </div>
