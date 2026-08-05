@@ -423,6 +423,17 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             </div>
           )}
           {renderNavItem({ name: "Settings", href: "/settings", icon: Settings })}
+          {(!isCollapsed || mobileOpen) && (
+            <a
+              href="https://vanshkashyap.lzworth.in"
+              target="_blank"
+              rel="author noopener"
+              title="Portfolio of Vansh Kashyap"
+              className="block mt-2 px-3 text-[11px] font-medium text-slate-400 hover:text-amber-400 transition-colors"
+            >
+              Made by <span className="font-black text-slate-300">Vansh Kashyap</span>
+            </a>
+          )}
         </div>
       </aside>
 
