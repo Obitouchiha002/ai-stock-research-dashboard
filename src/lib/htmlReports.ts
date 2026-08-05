@@ -10,6 +10,8 @@ export type ReportMeta = {
   id: string;
   name: string;
   symbol?: string;
+  details?: string; // user notes
+  tags?: string[]; // user labels
   size: number; // bytes of HTML
   addedAt: number;
 };

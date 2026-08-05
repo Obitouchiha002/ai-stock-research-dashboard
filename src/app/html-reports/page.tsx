@@ -106,9 +106,10 @@ export default function HtmlReportsPage() {
     a.click();
   };
   const remove = async (r: ReportMeta) => { await deleteHtmlReport(r.id); reload(); };
-  const setSymbol = async (r: ReportMeta, sym: string) => {
-    await updateHtmlReportMeta(r.id, { symbol: sym.toUpperCase() });
-    setReports((prev) => prev.map((x) => (x.id === r.id ? { ...x, symbol: sym.toUpperCase() } : x)));
+  // Edit a report's user fields (name / symbol / details / tags), persist + update.
+  const patchMeta = (r: ReportMeta, patch: Partial<ReportMeta>) => {
+    updateHtmlReportMeta(r.id, patch);
+    setReports((prev) => prev.map((x) => (x.id === r.id ? { ...x, ...patch } : x)));
   };
 
   const filtered = useMemo(() => {
@@ -188,6 +189,7 @@ export default function HtmlReportsPage() {
                   <th className="p-3 w-12">S.No</th>
                   <th className="p-3">Company / Report</th>
                   <th className="p-3">Details</th>
+                  <th className="p-3">Tags</th>
                   <th className="p-3 whitespace-nowrap">Date</th>
                   <th className="p-3 text-right">Preview / Link</th>
                 </tr>
@@ -197,16 +199,29 @@ export default function HtmlReportsPage() {
                   <tr key={r.id} className="border-b border-slate-100 hover:bg-slate-50 transition">
                     <td className="p-3 text-slate-400 tabular-nums">{idx + 1}</td>
                     <td className="p-3">
-                      <button onClick={() => openPreview(r)} className="flex items-center gap-2 text-left group/n">
+                      <div className="flex items-center gap-2">
                         <FileCode2 className="w-4 h-4 text-indigo-500 shrink-0" />
-                        <span className="font-black text-slate-900 group-hover/n:text-indigo-600 max-w-[280px] truncate">{r.name}</span>
-                      </button>
+                        <input value={r.name} onChange={(e) => patchMeta(r, { name: e.target.value })}
+                          className="font-black text-slate-900 bg-transparent border border-transparent hover:border-slate-200 focus:border-indigo-300 rounded px-1.5 py-0.5 outline-none focus:ring-2 focus:ring-indigo-200 min-w-[12rem] max-w-[280px]" />
+                      </div>
+                      <input value={r.symbol || ""} onChange={(e) => patchMeta(r, { symbol: e.target.value.toUpperCase() })} placeholder="+ symbol"
+                        className="ml-6 mt-1 w-24 text-[11px] font-black text-indigo-700 bg-indigo-50/60 rounded px-1.5 py-0.5 outline-none focus:ring-1 focus:ring-indigo-300 placeholder:text-slate-400 placeholder:font-medium" />
                     </td>
                     <td className="p-3">
-                      <div className="flex items-center gap-2">
-                        <input value={r.symbol || ""} onChange={(e) => setSymbol(r, e.target.value)} placeholder="+ symbol"
-                          className="w-24 text-[11px] font-black text-indigo-700 bg-indigo-50/60 rounded px-1.5 py-0.5 outline-none focus:ring-1 focus:ring-indigo-300 placeholder:text-slate-400 placeholder:font-medium" />
-                        <span className="text-[11px] text-slate-400 whitespace-nowrap">{fmtSize(r.size)}</span>
+                      <input value={r.details || ""} onChange={(e) => patchMeta(r, { details: e.target.value })} placeholder="add details…"
+                        className="text-[13px] bg-slate-50 border border-slate-200 rounded px-2 py-1 outline-none focus:ring-2 focus:ring-indigo-200 w-full min-w-[10rem]" />
+                      <span className="text-[10px] text-slate-400 ml-1">{fmtSize(r.size)}</span>
+                    </td>
+                    <td className="p-3">
+                      <div className="flex flex-wrap items-center gap-1 min-w-[9rem]">
+                        {(r.tags || []).map((t) => (
+                          <span key={t} className="inline-flex items-center gap-1 text-[10px] font-bold text-indigo-700 bg-indigo-50 rounded px-1.5 py-0.5">
+                            {t}<button onClick={() => patchMeta(r, { tags: (r.tags || []).filter((x) => x !== t) })} className="hover:text-rose-600"><X className="w-3 h-3" /></button>
+                          </span>
+                        ))}
+                        <input placeholder="+ tag"
+                          onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); const el = e.target as HTMLInputElement; const v = el.value.trim(); if (v) { patchMeta(r, { tags: Array.from(new Set([...(r.tags || []), v])) }); el.value = ""; } } }}
+                          className="w-16 text-[11px] bg-transparent outline-none border-b border-transparent focus:border-slate-300 placeholder:text-slate-400" />
                       </div>
                     </td>
                     <td className="p-3 text-slate-500 text-[13px] whitespace-nowrap">{new Date(r.addedAt).toLocaleDateString()}</td>
