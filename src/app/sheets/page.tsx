@@ -48,6 +48,14 @@ export default function SheetsPage() {
     reload();
   }, []);
 
+  // Edit one row's user fields (custom name / details / tags) and persist.
+  const updateRow = (sNo: number, patch: Partial<SheetRow>) => {
+    const cur = getSheets().find((s) => s.id === activeId);
+    if (!cur) return;
+    updateSheet(activeId, { rows: cur.rows.map((r) => (r.sNo === sNo ? { ...r, ...patch } : r)) });
+    reload();
+  };
+
   const active = sheets.find((s) => s.id === activeId);
   const cur = market === "Indian" ? "₹" : "$";
 
@@ -335,6 +343,8 @@ export default function SheetsPage() {
                     <tr className="bg-slate-50 border-b border-slate-200">
                       <th className="p-3 text-xs font-bold text-slate-500 uppercase tracking-wide">S.No</th>
                       <th className="p-3 text-xs font-bold text-slate-500 uppercase tracking-wide">Stock Name</th>
+                      <th className="p-3 text-xs font-bold text-slate-500 uppercase tracking-wide">Details</th>
+                      <th className="p-3 text-xs font-bold text-slate-500 uppercase tracking-wide">Tags</th>
                       <th className="p-3 text-xs font-bold text-slate-500 uppercase tracking-wide text-right">Qty</th>
                       <th className="p-3 text-xs font-bold text-slate-500 uppercase tracking-wide text-right">Price</th>
                       <th className="p-3 text-xs font-bold text-slate-500 uppercase tracking-wide text-right">Market Value</th>
@@ -348,11 +358,45 @@ export default function SheetsPage() {
                       return (
                         <tr key={r.sNo} className="border-b border-slate-100 hover:bg-slate-50 transition">
                           <td className="p-3 text-slate-400 tabular-nums">{r.sNo}</td>
-                          <td className="p-3 font-bold text-slate-900">
-                            {r.stockName}
-                            {r.symbol && r.symbol !== r.stockName && (
-                              <span className="ml-2 text-xs text-slate-400 font-medium">{r.symbol}</span>
+                          <td className="p-3">
+                            <input
+                              value={r.customName ?? r.stockName}
+                              onChange={(e) => updateRow(r.sNo, { customName: e.target.value })}
+                              className="font-bold text-slate-900 bg-transparent border border-transparent hover:border-slate-200 focus:border-indigo-300 rounded px-1.5 py-0.5 outline-none focus:ring-2 focus:ring-indigo-200 w-full min-w-[9rem]"
+                            />
+                            {r.symbol && r.symbol !== (r.customName ?? r.stockName) && (
+                              <div className="text-[11px] text-slate-400 font-medium px-1.5">{r.symbol}</div>
                             )}
+                          </td>
+                          <td className="p-3">
+                            <input
+                              value={r.details || ""}
+                              onChange={(e) => updateRow(r.sNo, { details: e.target.value })}
+                              placeholder="add details…"
+                              className="text-[13px] bg-slate-50 border border-slate-200 rounded px-2 py-1 outline-none focus:ring-2 focus:ring-indigo-200 w-full min-w-[10rem]"
+                            />
+                          </td>
+                          <td className="p-3">
+                            <div className="flex flex-wrap items-center gap-1 min-w-[9rem]">
+                              {(r.tags || []).map((t) => (
+                                <span key={t} className="inline-flex items-center gap-1 text-[10px] font-bold text-indigo-700 bg-indigo-50 rounded px-1.5 py-0.5">
+                                  {t}
+                                  <button onClick={() => updateRow(r.sNo, { tags: (r.tags || []).filter((x) => x !== t) })} className="hover:text-rose-600"><X className="w-3 h-3" /></button>
+                                </span>
+                              ))}
+                              <input
+                                placeholder="+ tag"
+                                onKeyDown={(e) => {
+                                  if (e.key === "Enter") {
+                                    e.preventDefault();
+                                    const el = e.target as HTMLInputElement;
+                                    const v = el.value.trim();
+                                    if (v) { updateRow(r.sNo, { tags: Array.from(new Set([...(r.tags || []), v])) }); el.value = ""; }
+                                  }
+                                }}
+                                className="w-16 text-[11px] bg-transparent outline-none border-b border-transparent focus:border-slate-300 placeholder:text-slate-400"
+                              />
+                            </div>
                           </td>
                           <td className="p-3 text-right tabular-nums text-slate-700">{fmt(r.qty)}</td>
                           <td className="p-3 text-right tabular-nums text-slate-700">{fmt(r.price, cur)}</td>

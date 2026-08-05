@@ -383,6 +383,9 @@ export type SheetRow = {
   ltp?: number | null; // live price, filled on demand
   plValue?: number | null; // (ltp - price) * qty
   plPct?: number | null; // (ltp - price) / price * 100
+  customName?: string; // user's own edited name (overrides stockName in the UI)
+  details?: string; // free notes the user adds per row
+  tags?: string[]; // user labels
   raw?: Record<string, any>; // original row, nothing is lost
 };
 export type ExcelSheet = {
