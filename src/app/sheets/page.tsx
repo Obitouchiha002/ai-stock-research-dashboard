@@ -338,27 +338,27 @@ export default function SheetsPage() {
 
               {/* Table */}
               <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-x-auto">
-                <table className="w-full text-left border-collapse text-sm">
+                <table className="sa-table">
                   <thead>
-                    <tr className="bg-slate-50 border-b border-slate-200">
-                      <th className="p-3 text-xs font-bold text-slate-500 uppercase tracking-wide">S.No</th>
-                      <th className="p-3 text-xs font-bold text-slate-500 uppercase tracking-wide">Stock Name</th>
-                      <th className="p-3 text-xs font-bold text-slate-500 uppercase tracking-wide">Details</th>
-                      <th className="p-3 text-xs font-bold text-slate-500 uppercase tracking-wide">Tags</th>
-                      <th className="p-3 text-xs font-bold text-slate-500 uppercase tracking-wide text-right">Qty</th>
-                      <th className="p-3 text-xs font-bold text-slate-500 uppercase tracking-wide text-right">Price</th>
-                      <th className="p-3 text-xs font-bold text-slate-500 uppercase tracking-wide text-right">Market Value</th>
-                      <th className="p-3 text-xs font-bold text-slate-500 uppercase tracking-wide text-right">LTP (Live)</th>
-                      <th className="p-3 text-xs font-bold text-slate-500 uppercase tracking-wide text-right">P/L</th>
+                    <tr>
+                      <th>S.No</th>
+                      <th>Stock Name</th>
+                      <th>Details</th>
+                      <th>Tags</th>
+                      <th className="text-right">Qty</th>
+                      <th className="text-right">Price</th>
+                      <th className="text-right">Market Value</th>
+                      <th className="text-right">LTP (Live)</th>
+                      <th className="text-right">P/L</th>
                     </tr>
                   </thead>
                   <tbody>
                     {active.rows.map((r) => {
                       const up = (r.plPct ?? 0) >= 0;
                       return (
-                        <tr key={r.sNo} className="border-b border-slate-100 hover:bg-slate-50 transition">
-                          <td className="p-3 text-slate-400 tabular-nums">{r.sNo}</td>
-                          <td className="p-3">
+                        <tr key={r.sNo}>
+                          <td className="text-slate-400 tabular-nums">{r.sNo}</td>
+                          <td>
                             <input
                               value={r.customName ?? r.stockName}
                               onChange={(e) => updateRow(r.sNo, { customName: e.target.value })}
@@ -368,7 +368,7 @@ export default function SheetsPage() {
                               <div className="text-[11px] text-slate-400 font-medium px-1.5">{r.symbol}</div>
                             )}
                           </td>
-                          <td className="p-3">
+                          <td>
                             <input
                               value={r.details || ""}
                               onChange={(e) => updateRow(r.sNo, { details: e.target.value })}
@@ -376,7 +376,7 @@ export default function SheetsPage() {
                               className="text-[13px] bg-slate-50 border border-slate-200 rounded px-2 py-1 outline-none focus:ring-2 focus:ring-indigo-200 w-full min-w-[10rem]"
                             />
                           </td>
-                          <td className="p-3">
+                          <td>
                             <div className="flex flex-wrap items-center gap-1 min-w-[9rem]">
                               {(r.tags || []).map((t) => (
                                 <span key={t} className="inline-flex items-center gap-1 text-[10px] font-bold text-indigo-700 bg-indigo-50 rounded px-1.5 py-0.5">
@@ -398,11 +398,11 @@ export default function SheetsPage() {
                               />
                             </div>
                           </td>
-                          <td className="p-3 text-right tabular-nums text-slate-700">{fmt(r.qty)}</td>
-                          <td className="p-3 text-right tabular-nums text-slate-700">{fmt(r.price, cur)}</td>
-                          <td className="p-3 text-right tabular-nums font-bold text-slate-900">{fmt(r.marketValue, cur)}</td>
-                          <td className="p-3 text-right tabular-nums text-slate-900">{fmt(r.ltp, cur)}</td>
-                          <td className="p-3 text-right tabular-nums font-bold">
+                          <td className="text-right tabular-nums text-slate-700">{fmt(r.qty)}</td>
+                          <td className="text-right tabular-nums text-slate-700">{fmt(r.price, cur)}</td>
+                          <td className="text-right tabular-nums font-bold text-slate-900">{fmt(r.marketValue, cur)}</td>
+                          <td className="text-right tabular-nums text-slate-900">{fmt(r.ltp, cur)}</td>
+                          <td className="text-right tabular-nums font-bold">
                             {r.plValue == null ? (
                               <span className="text-slate-300">—</span>
                             ) : (

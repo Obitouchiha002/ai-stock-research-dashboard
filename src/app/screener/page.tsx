@@ -94,7 +94,7 @@ export default function ScreenerPage() {
             </div>
           ) : (
             <div className="overflow-x-auto">
-              <table className="w-full text-left border-collapse [&_th]:!p-2.5 [&_td]:!p-2.5 sm:[&_th]:!p-4 sm:[&_td]:!p-4">
+              <table className="sa-table [&_th]:!p-2.5 [&_td]:!p-2.5 sm:[&_th]:!p-4 sm:[&_td]:!p-4">
                 <thead>
                   <tr className="bg-slate-50 border-b border-slate-200">
                     <th className="p-4 text-xs font-bold text-slate-500 uppercase tracking-widest whitespace-nowrap">

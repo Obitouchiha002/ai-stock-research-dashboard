@@ -290,7 +290,7 @@ export default function AiUsagePage() {
           <DollarSign className="w-4 h-4 text-emerald-600" /> Cost by provider ({scopeLabel})
         </h3>
         <div className="overflow-x-auto">
-          <table className="w-full text-sm">
+          <table className="sa-table">
             <thead>
               <tr className="text-slate-400 text-xs">
                 <th className="text-left font-bold py-2">Provider</th>

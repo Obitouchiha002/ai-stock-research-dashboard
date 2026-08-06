@@ -223,7 +223,7 @@ export default function TrendAlertsPage() {
         <div className="min-w-0">
           <div className="bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden">
             <div className="overflow-x-auto">
-              <table className="w-full text-sm border-collapse [&_th]:!px-2.5 [&_td]:!px-2.5 sm:[&_th]:!px-4 sm:[&_td]:!px-4">
+              <table className="sa-table [&_th]:!px-2.5 [&_td]:!px-2.5 sm:[&_th]:!px-4 sm:[&_td]:!px-4">
                 <thead>
                   <tr className="bg-slate-50 border-b border-slate-200 text-slate-500">
                     <th className="text-left font-bold px-4 py-3 text-xs uppercase tracking-wide">Stock</th>

@@ -10,6 +10,7 @@ export type ReportMeta = {
   id: string;
   name: string;
   symbol?: string;
+  market?: string; // Indian | US | Global | Crypto | Other
   details?: string; // user notes
   tags?: string[]; // user labels
   size: number; // bytes of HTML

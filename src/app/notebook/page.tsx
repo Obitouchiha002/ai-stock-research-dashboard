@@ -23,8 +23,8 @@ const TAG_STYLE: Record<string, string> = {
 const dt = (d: string) => { try { return new Date(d + "T00:00:00").toLocaleDateString(undefined, { day: "numeric", month: "short", year: "2-digit" }); } catch { return d; } };
 const dtms = (ms: number) => new Date(ms).toLocaleDateString(undefined, { day: "numeric", month: "short", year: "2-digit" });
 
-const TH = "p-3 text-[11px] font-bold text-slate-500 uppercase tracking-wide text-left whitespace-nowrap";
-const TD = "p-3 align-top";
+const TH = "text-left whitespace-nowrap"; // structure comes from the shared .sa-table base
+const TD = "!align-top"; // keep multi-line note/detail cells top-aligned
 
 export default function NotebookPage() {
   const [tab, setTab] = useState<"journal" | "notes" | "reports">("journal");
@@ -136,13 +136,13 @@ export default function NotebookPage() {
           ) : (
             <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
               <div className="overflow-x-auto">
-                <table className="w-full border-collapse text-sm">
-                  <thead><tr className="bg-slate-50 border-b border-slate-200">
+                <table className="sa-table">
+                  <thead><tr>
                     <th className={TH}>Date</th><th className={TH}>Type</th><th className={TH}>Market</th><th className={TH}>Symbol</th><th className={TH}>Title</th><th className={TH}>Details</th><th className={TH}>Outcome</th><th className={`${TH} text-right`}></th>
                   </tr></thead>
                   <tbody>
                     {jFiltered.map((e) => (
-                      <tr key={e.id} className="border-b border-slate-100 hover:bg-slate-50 transition">
+                      <tr key={e.id}>
                         <td className={`${TD} text-slate-500 whitespace-nowrap text-[13px]`}>{dt(e.date)}</td>
                         <td className={TD}>{e.tag && <span className={`text-[10px] font-black px-2 py-0.5 rounded ${TAG_STYLE[e.tag] || "bg-slate-100 text-slate-600"}`}>{e.tag}</span>}</td>
                         <td className={`${TD} text-[12px] text-slate-500 whitespace-nowrap`}>{e.market || "—"}</td>
@@ -171,13 +171,13 @@ export default function NotebookPage() {
         nFiltered.length === 0 ? <Empty icon={StickyNote} msg="No notes yet — jot notes anywhere with Cmd/Ctrl+J." /> : (
           <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
             <div className="overflow-x-auto">
-              <table className="w-full border-collapse text-sm">
-                <thead><tr className="bg-slate-50 border-b border-slate-200">
+              <table className="sa-table">
+                <thead><tr>
                   <th className={TH}>Date</th><th className={TH}>Stock</th><th className={TH}>Topic</th><th className={TH}>Category</th><th className={TH}>Note</th><th className={TH}>From</th><th className={`${TH} text-right`}></th>
                 </tr></thead>
                 <tbody>
                   {nFiltered.map((n) => (
-                    <tr key={n.id} className="border-b border-slate-100 hover:bg-slate-50 transition">
+                    <tr key={n.id}>
                       <td className={`${TD} text-slate-500 whitespace-nowrap text-[13px]`}>{dtms(n.createdAt)}</td>
                       <td className={TD}>{n.symbol && n.symbol !== "GENERAL" ? <Link href={`/analyze?symbol=${n.symbol}`} className="text-[12px] font-black text-indigo-700 hover:underline">{n.symbol}</Link> : <span className="text-[11px] text-slate-400">General</span>}</td>
                       <td className={`${TD} font-bold text-slate-800 max-w-[180px] truncate`}>{n.topic || "—"}</td>
@@ -201,13 +201,13 @@ export default function NotebookPage() {
         rFiltered.length === 0 ? <Empty icon={FileText} msg="No saved reports yet — save an analysis from the Analyze page." /> : (
           <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
             <div className="overflow-x-auto">
-              <table className="w-full border-collapse text-sm">
-                <thead><tr className="bg-slate-50 border-b border-slate-200">
+              <table className="sa-table">
+                <thead><tr>
                   <th className={TH}>Date</th><th className={TH}>Symbol</th><th className={TH}>Company</th><th className={`${TH} text-right`}>Score</th><th className={TH}>View</th><th className={`${TH} text-right`}></th>
                 </tr></thead>
                 <tbody>
                   {rFiltered.map((r) => (
-                    <tr key={r.id} className="border-b border-slate-100 hover:bg-slate-50 transition">
+                    <tr key={r.id}>
                       <td className={`${TD} text-slate-500 whitespace-nowrap text-[13px]`}>{dtms(r.savedAt)}</td>
                       <td className={`${TD} font-black text-slate-900`}>{r.symbol}</td>
                       <td className={`${TD} text-slate-600 text-[13px] max-w-[200px] truncate`}>{r.name || "—"}</td>

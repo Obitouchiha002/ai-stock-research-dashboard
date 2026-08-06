@@ -375,3 +375,23 @@ button:active, a[role="button"]:active { transform: translateY(0.5px); }
 
 /* 8. Slightly warmer page background — pure grey can feel clinical. */
 :root:not(.dark) body { background-color: #f7f8fa; }
+
+/* 9. Shared "base" data-table look, modelled on the Watchlist table the user
+   likes: one clean text size, uppercase muted headers, calm row borders and a
+   soft hover. Add `sa-table` to any <table> to inherit it. Header COLOUR uses a
+   low-specificity :where() so a cell can still opt into an accent (rose SL,
+   emerald targets, indigo alert); structure (size/weight/padding) is forced so
+   every table lines up the same way. Cells with `!` padding (Watchlist) keep
+   their own responsive spacing. */
+.sa-table { @apply w-full text-left border-collapse text-sm; }
+.sa-table :where(th) { @apply text-slate-500; }
+.sa-table th {
+  @apply px-4 py-3 text-xs font-bold uppercase tracking-widest whitespace-nowrap bg-slate-50 border-b border-slate-200;
+}
+.sa-table :where(td) { @apply text-slate-700; }
+.sa-table td { @apply px-4 py-3 align-middle border-b border-slate-100; }
+.sa-table tbody tr { @apply transition-colors; }
+.sa-table tbody tr:hover { @apply bg-slate-50; }
+.sa-table tbody tr:last-child td { @apply border-b-0; }
+/* Right-aligned numeric cells: tabular figures so columns line up. */
+.sa-num { @apply text-right tabular-nums font-semibold text-slate-800; }

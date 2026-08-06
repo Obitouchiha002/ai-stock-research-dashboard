@@ -349,7 +349,7 @@ export default function CombosPage() {
                 <p className="text-sm text-slate-500 py-6 text-center">No stocks matched this combination.</p>
               ) : (
                 <div className="overflow-x-auto">
-                  <table className="w-full text-left text-sm border-collapse">
+                  <table className="sa-table">
                     <thead>
                       <tr className="text-slate-400 text-[11px] uppercase tracking-wide border-b border-slate-200">
                         <th className="py-2 pr-2">Stock</th>
