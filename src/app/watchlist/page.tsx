@@ -27,6 +27,9 @@ import {
   DEFAULT_SUBCATS,
   SUBCAT_TITLES,
   type WatchlistCategory,
+  getPriceAlerts,
+  savePriceAlert,
+  deletePriceAlert,
 } from "@/lib/storage";
 import {
   resolveHolding,
@@ -231,6 +234,29 @@ export default function WatchlistPage() {
   };
 
   // Set (or clear) the personal colour mark on a row.
+  // Edit a plan field (SL/R/T1/T2/remarks) or the alert trigger on a watchlist row.
+  const updateWL = (item: any, field: string, value: string) => {
+    const merged = { ...item, [field]: value };
+    saveToWatchlist(merged);
+    if (field === "condOp" || field === "condVal" || field === "special") {
+      const id = `wl-${item.symbol}-${item.category}`;
+      const v = Number(merged.condVal);
+      const op = merged.condOp || ">";
+      const existing = getPriceAlerts().find((a) => a.id === id);
+      if (merged.condVal != null && String(merged.condVal) !== "" && Number.isFinite(v)) {
+        savePriceAlert({
+          id, symbol: String(item.symbol).toUpperCase(),
+          name: merged.special ? `CMP ${op} ${v} → ${merged.special}` : `CMP ${op} ${v}`,
+          status: "active", conditionTriggered: false,
+          condition: { metric: "price", op: op as any, value: v },
+        });
+      } else if (existing) {
+        deletePriceAlert(id);
+      }
+    }
+    reload();
+  };
+
   const setColor = (item: any, color: string) => {
     saveToWatchlist({ ...item, color });
     reload();
@@ -699,10 +725,12 @@ export default function WatchlistPage() {
                   <th className="p-4 text-xs font-bold text-slate-500 uppercase tracking-widest whitespace-nowrap hidden sm:table-cell">List</th>
                   <th className="p-4 text-xs font-bold text-slate-500 uppercase tracking-widest whitespace-nowrap text-right">Price</th>
                   <th className="p-4 text-xs font-bold text-slate-500 uppercase tracking-widest whitespace-nowrap text-right">Change</th>
-                  <th className="p-4 text-xs font-bold text-slate-500 uppercase tracking-widest whitespace-nowrap text-right hidden md:table-cell">Day Range</th>
-                  <th className="p-4 text-xs font-bold text-slate-500 uppercase tracking-widest whitespace-nowrap text-right hidden lg:table-cell">Open</th>
-                  <th className="p-4 text-xs font-bold text-slate-500 uppercase tracking-widest whitespace-nowrap text-right hidden xl:table-cell">Prev Close</th>
-                  <th className="p-4 text-xs font-bold text-slate-500 uppercase tracking-widest whitespace-nowrap text-right hidden lg:table-cell">Mkt Cap</th>
+                  <th className="p-3 text-xs font-bold text-rose-500 uppercase tracking-widest whitespace-nowrap text-center">SL</th>
+                  <th className="p-3 text-xs font-bold text-slate-500 uppercase tracking-widest whitespace-nowrap text-center">R</th>
+                  <th className="p-3 text-xs font-bold text-emerald-600 uppercase tracking-widest whitespace-nowrap text-center">T1</th>
+                  <th className="p-3 text-xs font-bold text-emerald-600 uppercase tracking-widest whitespace-nowrap text-center">T2</th>
+                  <th className="p-3 text-xs font-bold text-slate-500 uppercase tracking-widest whitespace-nowrap">Remarks</th>
+                  <th className="p-3 text-xs font-bold text-indigo-600 uppercase tracking-widest whitespace-nowrap">Alert Trigger</th>
                   <th className="p-4 text-xs font-bold text-slate-500 uppercase tracking-widest whitespace-nowrap text-right">Actions</th>
                 </tr>
               </thead>
@@ -751,18 +779,39 @@ export default function WatchlistPage() {
                           <span className="text-slate-400 text-sm">—</span>
                         )}
                       </td>
-                      <td className="p-4 text-right hidden md:table-cell whitespace-nowrap">
-                        {q?.dayLow != null && q?.dayHigh != null ? (
-                          <span className="text-[12px] tabular-nums">
-                            <span className="text-slate-400">{fmtVal(q.dayLow, q, item.category)}</span>
-                            <span className="text-slate-300"> – </span>
-                            <span className="text-slate-600">{fmtVal(q.dayHigh, q, item.category)}</span>
-                          </span>
-                        ) : <span className="text-slate-400 text-sm">—</span>}
+                      {(["sl", "r", "t1", "t2"] as const).map((f) => (
+                        <td key={f} className="p-3 text-center">
+                          <input value={item[f] || ""} onChange={(e) => updateWL(item, f, e.target.value)} placeholder="—"
+                            className="w-16 px-2 py-1 bg-slate-50 border border-slate-200 rounded text-right text-[12px] tabular-nums outline-none focus:ring-2 focus:ring-indigo-200" />
+                        </td>
+                      ))}
+                      <td className="p-3">
+                        <input value={item.remarks || ""} onChange={(e) => updateWL(item, "remarks", e.target.value)} placeholder="notes…"
+                          className="w-full min-w-[8rem] px-2 py-1 bg-slate-50 border border-slate-200 rounded text-[12px] outline-none focus:ring-2 focus:ring-indigo-200" />
                       </td>
-                      <td className="p-4 text-right tabular-nums text-slate-600 text-sm hidden lg:table-cell">{fmtVal(q?.open, q, item.category)}</td>
-                      <td className="p-4 text-right tabular-nums text-slate-600 text-sm hidden xl:table-cell">{fmtVal(q?.prevClose, q, item.category)}</td>
-                      <td className="p-4 text-right tabular-nums text-slate-600 text-sm hidden lg:table-cell">{fmtCap(q?.marketCap, q, item.category)}</td>
+                      <td className="p-3">
+                        <div className="flex items-center gap-1.5">
+                          <span className="text-[11px] font-black text-slate-400">CMP</span>
+                          <select value={item.condOp || ">"} onChange={(e) => updateWL(item, "condOp", e.target.value)}
+                            className="px-1.5 py-1 bg-white border border-slate-200 rounded text-[13px] font-black outline-none focus:ring-2 focus:ring-indigo-200">
+                            <option value=">">{">"}</option><option value=">=">{"≥"}</option><option value="<">{"<"}</option><option value="<=">{"≤"}</option><option value="=">{"="}</option>
+                          </select>
+                          <input type="number" value={item.condVal ?? ""} onChange={(e) => updateWL(item, "condVal", e.target.value)} placeholder="value"
+                            className="w-20 px-2 py-1 bg-slate-50 border border-slate-200 rounded text-right text-[12px] tabular-nums outline-none focus:ring-2 focus:ring-indigo-200" />
+                          <select value={item.special || ""} onChange={(e) => updateWL(item, "special", e.target.value)}
+                            className="px-2 py-1 bg-slate-50 border border-slate-200 rounded text-[12px] font-bold text-slate-700 outline-none focus:ring-2 focus:ring-indigo-200">
+                            <option value="">→ action</option>
+                            <option value="Buy">Buy</option>
+                            <option value="Sell">Sell</option>
+                            <option value="Book profit">Book profit</option>
+                            <option value="Add more">Add more</option>
+                            <option value="Watch">Watch</option>
+                          </select>
+                        </div>
+                        {item.condVal != null && String(item.condVal) !== "" && (
+                          <div className="text-[10px] text-emerald-600 font-bold mt-0.5">🔔 alert on</div>
+                        )}
+                      </td>
                       <td className="p-4 text-right">
                         <div className="flex items-center justify-end gap-2">
                           <Link
