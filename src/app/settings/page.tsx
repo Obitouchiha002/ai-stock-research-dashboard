@@ -401,13 +401,15 @@ export default function SettingsPage() {
           <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-indigo-500 to-violet-600 flex items-center justify-center text-white font-black text-lg shrink-0">VK</div>
           <div className="min-w-0">
             <div className="font-black text-slate-900">Vansh Kashyap</div>
-            <a href="https://vanshkashyap.lzworth.in" target="_blank" rel="author noopener" className="text-sm font-bold text-indigo-600 hover:underline break-all">vanshkashyap.lzworth.in</a>
+            <a href="mailto:vk1234888i@gmail.com" className="text-sm font-bold text-indigo-600 hover:underline break-all">vk1234888i@gmail.com</a>
           </div>
         </div>
         <p className="mt-4 text-[13px] text-slate-500">
-          For any query, feedback or collaboration, please{" "}
-          <a href="https://vanshkashyap.lzworth.in" target="_blank" rel="noopener" className="font-bold text-indigo-600 hover:underline">contact Vansh Kashyap</a>.
+          For any query, feedback or collaboration, email{" "}
+          <a href="mailto:vk1234888i@gmail.com" className="font-bold text-indigo-600 hover:underline">vk1234888i@gmail.com</a>.
         </p>
+        {/* Author link kept for SEO but hidden from view. */}
+        <a href="https://vanshkashyap.lzworth.in" rel="author" className="sr-only">Vansh Kashyap — portfolio</a>
       </div>
     </div>
   );

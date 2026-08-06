@@ -304,8 +304,11 @@ export default function AlertsPage() {
             <option value="price">Price (CMP)</option>
             <option value="changePct">Day change %</option>
           </select>
-          <select value={condForm.op} onChange={(e) => setCondForm((f) => ({ ...f, op: e.target.value }))} className="px-3 py-2 bg-white border border-slate-200 rounded-lg text-sm font-black text-slate-700 outline-none focus:ring-2 focus:ring-indigo-200">
-            <option value=">">{">"}</option><option value=">=">{"≥"}</option><option value="<">{"<"}</option><option value="<=">{"≤"}</option>
+          <select value={condForm.op} onChange={(e) => setCondForm((f) => ({ ...f, op: e.target.value }))} className="px-3 py-2 bg-white border border-slate-200 rounded-lg text-sm font-bold text-slate-700 outline-none focus:ring-2 focus:ring-indigo-200 min-w-[9rem]">
+            <option value=">">{"> above"}</option>
+            <option value=">=">{"≥ at least"}</option>
+            <option value="<">{"< below"}</option>
+            <option value="<=">{"≤ at most"}</option>
           </select>
           <input type="number" value={condForm.value} onChange={(e) => setCondForm((f) => ({ ...f, value: e.target.value }))} placeholder="value"
             className="px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm font-semibold text-right outline-none focus:ring-2 focus:ring-indigo-200 w-28" />
