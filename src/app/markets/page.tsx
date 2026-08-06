@@ -15,6 +15,9 @@ import {
   setMarketMark,
   getMarketPlans,
   setMarketPlanField,
+  getPriceAlerts,
+  savePriceAlert,
+  deletePriceAlert,
 } from "@/lib/storage";
 import { resolveHolding, resolveCommodity, resolveCrypto } from "@/lib/excelImport";
 
@@ -204,6 +207,24 @@ export default function MarketsPage() {
   const [plans, setPlans] = useState<Record<string, Record<string, string>>>({});
   const setPlan = (sym: string, field: string, value: string) => {
     setMarketPlanField(sym, field, value);
+    if (field === "condOp" || field === "condVal" || field === "special") {
+      const key = sym.toUpperCase();
+      const p = getMarketPlans()[key] || {};
+      const id = `mk-${key}`;
+      const v = Number(p.condVal);
+      const op = p.condOp || ">";
+      const existing = getPriceAlerts().find((a) => a.id === id);
+      if (p.condVal != null && String(p.condVal) !== "" && Number.isFinite(v)) {
+        savePriceAlert({
+          id, symbol: key,
+          name: p.special ? `CMP ${op} ${v} → ${p.special}` : `CMP ${op} ${v}`,
+          status: "active", conditionTriggered: false,
+          condition: { metric: "price", op: op as any, value: v },
+        });
+      } else if (existing) {
+        deletePriceAlert(id);
+      }
+    }
     setPlans(getMarketPlans());
   };
   // Per-tab custom symbols the user added into any group.
@@ -538,14 +559,15 @@ export default function MarketsPage() {
                 <th className="text-center font-medium px-2 py-3">R</th>
                 <th className="text-center font-medium px-2 py-3 text-emerald-600">T1</th>
                 <th className="text-center font-medium px-2 py-3 text-emerald-600">T2</th>
-                <th className="text-right font-medium px-5 py-3 hidden xl:table-cell">Prev. Close</th>
+                <th className="text-left font-medium px-3 py-3">Remarks</th>
+                <th className="text-left font-medium px-3 py-3 text-indigo-600">Alert Trigger</th>
                 <th className="w-10" />
               </tr>
             </thead>
             <tbody>
               {rows.length === 0 ? (
                 <tr>
-                  <td colSpan={10} className="px-5 py-12 text-center text-slate-400 font-medium">
+                  <td colSpan={11} className="px-5 py-12 text-center text-slate-400 font-medium">
                     {trendFilter !== "all"
                       ? trendLoading
                         ? "Analysing trends…"
@@ -590,7 +612,33 @@ export default function MarketsPage() {
                             className="w-16 px-2 py-1 bg-slate-50 border border-slate-200 rounded text-right text-[12px] tabular-nums focus:ring-2 focus:ring-indigo-200 outline-none" />
                         </td>
                       ))}
-                      <td className="px-5 py-3.5 text-right tabular-nums text-slate-600 hidden xl:table-cell">{fmt(q.prevClose || null, cur)}</td>
+                      <td className="px-3 py-3.5">
+                        <input value={plans[r.symbol]?.remarks || ""} onChange={(e) => setPlan(r.symbol, "remarks", e.target.value)} placeholder="notes…"
+                          className="w-full min-w-[7rem] px-2 py-1 bg-slate-50 border border-slate-200 rounded text-[12px] outline-none focus:ring-2 focus:ring-indigo-200" />
+                      </td>
+                      <td className="px-3 py-3.5">
+                        <div className="flex items-center gap-1.5">
+                          <span className="text-[11px] font-black text-slate-400">CMP</span>
+                          <select value={plans[r.symbol]?.condOp || ">"} onChange={(e) => setPlan(r.symbol, "condOp", e.target.value)}
+                            className="px-1.5 py-1 bg-white border border-slate-200 rounded text-[13px] font-black outline-none focus:ring-2 focus:ring-indigo-200">
+                            <option value=">">{">"}</option><option value=">=">{"≥"}</option><option value="<">{"<"}</option><option value="<=">{"≤"}</option><option value="=">{"="}</option>
+                          </select>
+                          <input type="number" value={plans[r.symbol]?.condVal ?? ""} onChange={(e) => setPlan(r.symbol, "condVal", e.target.value)} placeholder="value"
+                            className="w-20 px-2 py-1 bg-slate-50 border border-slate-200 rounded text-right text-[12px] tabular-nums outline-none focus:ring-2 focus:ring-indigo-200" />
+                          <select value={plans[r.symbol]?.special || ""} onChange={(e) => setPlan(r.symbol, "special", e.target.value)}
+                            className="px-2 py-1 bg-slate-50 border border-slate-200 rounded text-[12px] font-bold text-slate-700 outline-none focus:ring-2 focus:ring-indigo-200">
+                            <option value="">→ action</option>
+                            <option value="Buy">Buy</option>
+                            <option value="Sell">Sell</option>
+                            <option value="Book profit">Book profit</option>
+                            <option value="Add more">Add more</option>
+                            <option value="Watch">Watch</option>
+                          </select>
+                        </div>
+                        {plans[r.symbol]?.condVal != null && String(plans[r.symbol]?.condVal) !== "" && (
+                          <div className="text-[10px] text-emerald-600 font-bold mt-0.5">🔔 alert on</div>
+                        )}
+                      </td>
                       <td className="pr-4">
                         {r.custom && (
                           <button
