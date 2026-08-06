@@ -14,6 +14,9 @@ import {
   FileSpreadsheet,
   Activity,
   Bell,
+  Search,
+  Save,
+  Check,
 } from "lucide-react";
 import {
   getPortfolio,
@@ -34,11 +37,21 @@ const CUR: Record<PortfolioMarket, string> = {
   "Indian Stocks": "₹",
 };
 
+// Manual trend tag per holding in the Trade Plan.
+const PF_TREND = [
+  { v: "", label: "— trend", cls: "text-slate-400 border-slate-200 bg-white" },
+  { v: "up", label: "↑ Uptrend", cls: "text-emerald-700 border-emerald-300 bg-emerald-50" },
+  { v: "down", label: "↓ Downtrend", cls: "text-rose-700 border-rose-300 bg-rose-50" },
+  { v: "side", label: "→ Sideways", cls: "text-amber-700 border-amber-300 bg-amber-50" },
+];
+
 export default function PortfolioPage() {
   const [holdings, setHoldings] = useState<any[]>([]);
   const [market, setMarket] = useState<PortfolioMarket>("US Stocks");
   // Holdings vs the user's own trade plan (SL / R / targets / notes).
   const [view, setView] = useState<"holdings" | "plan">("holdings");
+  const [search, setSearch] = useState("");
+  const [savedMsg, setSavedMsg] = useState(false);
   const [showAdd, setShowAdd] = useState(false);
   const [form, setForm] = useState({ symbol: "", shares: "", price: "" });
   const [refreshing, setRefreshing] = useState(false);
@@ -194,6 +207,12 @@ export default function PortfolioPage() {
 
   const cur = CUR[market];
   const marketHoldings = holdings.filter((h) => h.market === market);
+  const visibleHoldings = search.trim()
+    ? marketHoldings.filter((h) => {
+        const s = search.trim().toLowerCase();
+        return String(h.symbol || "").toLowerCase().includes(s) || String(h.name || "").toLowerCase().includes(s);
+      })
+    : marketHoldings;
 
   // Save one trade-plan field (SL / R / T1 / T2 / remarks / special) on a holding.
   // These are the user's own manual entries; only the live price is auto-fetched.
@@ -671,8 +690,20 @@ PORTFOLIO DATA: ${JSON.stringify(stats)}`;
             </button>
           ))}
         </div>
+        <div className="relative">
+          <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+          <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search holdings…"
+            className="pl-9 pr-3 py-2 w-48 bg-white border border-slate-200 rounded-lg text-sm font-medium focus:ring-2 focus:ring-indigo-200 outline-none" />
+        </div>
         {view === "plan" && (
-          <span className="text-[11px] text-slate-400 font-medium">Set your own SL / R / T1 / T2 & notes — everything is manual, only the live price auto-fetches.</span>
+          <>
+            <button
+              onClick={() => { setHoldings(getPortfolio()); setSavedMsg(true); setTimeout(() => setSavedMsg(false), 1800); }}
+              className="px-4 py-2 bg-indigo-600 text-white rounded-lg text-sm font-bold hover:bg-indigo-700 flex items-center gap-2">
+              {savedMsg ? <><Check className="w-4 h-4" /> Saved</> : <><Save className="w-4 h-4" /> Save plan</>}
+            </button>
+            <span className="text-[11px] text-slate-400 font-medium">SL / R / T1 / T2, trend &amp; notes auto-save as you type — only the live price auto-fetches.</span>
+          </>
         )}
       </div>
 
@@ -689,6 +720,7 @@ PORTFOLIO DATA: ${JSON.stringify(stats)}`;
                 <th className="p-3 text-xs font-bold text-slate-500 uppercase tracking-wide">Stock</th>
                 <th className="p-3 text-xs font-bold text-slate-500 uppercase tracking-wide text-right">CMP</th>
                 <th className="p-3 text-xs font-bold text-slate-500 uppercase tracking-wide text-right">Market Value</th>
+                <th className="p-3 text-xs font-bold text-slate-500 uppercase tracking-wide text-center">Trend</th>
                 <th className="p-3 text-xs font-bold text-rose-500 uppercase tracking-wide text-right">SL</th>
                 <th className="p-3 text-xs font-bold text-slate-500 uppercase tracking-wide text-right">R</th>
                 <th className="p-3 text-xs font-bold text-emerald-600 uppercase tracking-wide text-right">T1</th>
@@ -698,7 +730,7 @@ PORTFOLIO DATA: ${JSON.stringify(stats)}`;
               </tr>
             </thead>
             <tbody>
-              {marketHoldings.map((h) => {
+              {visibleHoldings.map((h) => {
                 const ltp = h.currentPrice || h.buyPrice;
                 const money = (n: number) => `${cur}${Number(n).toLocaleString(undefined, { maximumFractionDigits: 2 })}`;
                 const numCls = "w-20 px-2 py-1 bg-slate-50 border border-slate-200 rounded text-right text-[13px] tabular-nums focus:ring-2 focus:ring-indigo-200 outline-none";
@@ -711,6 +743,17 @@ PORTFOLIO DATA: ${JSON.stringify(stats)}`;
                     </td>
                     <td className="p-3 text-right tabular-nums font-bold text-slate-800 whitespace-nowrap">{money(ltp)}</td>
                     <td className="p-3 text-right tabular-nums font-bold text-slate-800 whitespace-nowrap">{money(ltp * h.shares)}</td>
+                    <td className="p-3 text-center">
+                      {(() => {
+                        const t = PF_TREND.find((x) => x.v === (h.trend || "")) || PF_TREND[0];
+                        return (
+                          <select value={h.trend || ""} onChange={(e) => setPlanField(h, "trend", e.target.value)}
+                            className={`text-[11px] font-bold rounded-lg border px-2 py-1 outline-none focus:ring-2 focus:ring-indigo-200 cursor-pointer ${t.cls}`}>
+                            {PF_TREND.map((o) => <option key={o.v} value={o.v}>{o.label}</option>)}
+                          </select>
+                        );
+                      })()}
+                    </td>
                     <td className="p-3 text-right"><input value={h.sl || ""} onChange={(e) => setPlanField(h, "sl", e.target.value)} placeholder="—" className={numCls} /></td>
                     <td className="p-3 text-right"><input value={h.r || ""} onChange={(e) => setPlanField(h, "r", e.target.value)} placeholder="—" className={numCls} /></td>
                     <td className="p-3 text-right"><input value={h.t1 || ""} onChange={(e) => setPlanField(h, "t1", e.target.value)} placeholder="—" className={numCls} /></td>
@@ -740,7 +783,7 @@ PORTFOLIO DATA: ${JSON.stringify(stats)}`;
               </tr>
             </thead>
             <tbody>
-              {marketHoldings.map((h, idx) => {
+              {visibleHoldings.map((h, idx) => {
                 const ltp = h.currentPrice || h.buyPrice;
                 const marketValue = ltp * h.shares; // Qty × current price
                 const costValue = h.buyPrice * h.shares; // Qty × purchase price
