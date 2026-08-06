@@ -247,7 +247,7 @@ export interface PriceAlert {
   fromPortfolio?: boolean;
   // Custom condition alert, e.g. price > 160. Fires once when the condition
   // first becomes true (re-armable).
-  condition?: { metric: "price" | "changePct"; op: ">" | "<" | ">=" | "<="; value: number };
+  condition?: { metric: "price" | "changePct"; op: ">" | "<" | ">=" | "<=" | "="; value: number };
   conditionTriggered?: boolean;
   createdAt: number;
   updatedAt?: number;

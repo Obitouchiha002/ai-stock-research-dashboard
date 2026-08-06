@@ -786,12 +786,19 @@ PORTFOLIO DATA: ${JSON.stringify(stats)}`;
                         <span className="text-[11px] font-black text-slate-400">CMP</span>
                         <select value={h.condOp || ">"} onChange={(e) => setPlanField(h, "condOp", e.target.value)}
                           className="px-1.5 py-1 bg-white border border-slate-200 rounded text-[13px] font-black outline-none focus:ring-2 focus:ring-indigo-200">
-                          <option value=">">{">"}</option><option value=">=">{"≥"}</option><option value="<">{"<"}</option><option value="<=">{"≤"}</option>
+                          <option value=">">{">"}</option><option value=">=">{"≥"}</option><option value="<">{"<"}</option><option value="<=">{"≤"}</option><option value="=">{"="}</option>
                         </select>
                         <input type="number" value={h.condVal ?? ""} onChange={(e) => setPlanField(h, "condVal", e.target.value)} placeholder="value"
                           className="w-20 px-2 py-1 bg-slate-50 border border-slate-200 rounded text-right text-[12px] tabular-nums outline-none focus:ring-2 focus:ring-indigo-200" />
-                        <input value={h.special || ""} onChange={(e) => setPlanField(h, "special", e.target.value)} placeholder="→ buy/sell"
-                          className="w-24 px-2 py-1 bg-slate-50 border border-slate-200 rounded text-[12px] outline-none focus:ring-2 focus:ring-indigo-200" />
+                        <select value={h.special || ""} onChange={(e) => setPlanField(h, "special", e.target.value)}
+                          className="px-2 py-1 bg-slate-50 border border-slate-200 rounded text-[12px] font-bold text-slate-700 outline-none focus:ring-2 focus:ring-indigo-200">
+                          <option value="">→ action</option>
+                          <option value="Buy">Buy</option>
+                          <option value="Sell">Sell</option>
+                          <option value="Book profit">Book profit</option>
+                          <option value="Add more">Add more</option>
+                          <option value="Watch">Watch</option>
+                        </select>
                       </div>
                       {h.condVal != null && String(h.condVal) !== "" && (
                         <div className="text-[10px] text-emerald-600 font-bold mt-0.5">🔔 alert on</div>

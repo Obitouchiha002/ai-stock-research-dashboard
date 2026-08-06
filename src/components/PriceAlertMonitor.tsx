@@ -124,7 +124,12 @@ export default function PriceAlertMonitor() {
             const mv = isPct ? q?.changePct : price;
             if (mv != null) {
               const { op, value } = a.condition;
-              const hit = op === ">" ? mv > value : op === "<" ? mv < value : op === ">=" ? mv >= value : mv <= value;
+              const hit =
+                op === ">" ? mv > value
+                : op === "<" ? mv < value
+                : op === ">=" ? mv >= value
+                : op === "<=" ? mv <= value
+                : Math.abs(mv - value) <= Math.abs(value) * 0.001; // "=" within 0.1%
               if (hit) {
                 const shown = isPct ? `${fmt(mv)}%` : `${cur}${fmt(mv)}`;
                 const target = isPct ? `${value}%` : `${cur}${fmt(value)}`;

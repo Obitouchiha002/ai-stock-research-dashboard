@@ -162,7 +162,7 @@ export default function AlertsPage() {
     if (!condForm.symbol.trim() || !Number.isFinite(v)) return;
     savePriceAlert({
       symbol: condForm.symbol.trim().toUpperCase(),
-      condition: { metric: condForm.metric as "price" | "changePct", op: condForm.op as ">" | "<" | ">=" | "<=", value: v },
+      condition: { metric: condForm.metric as "price" | "changePct", op: condForm.op as ">" | "<" | ">=" | "<=" | "=", value: v },
       status: "active",
     });
     setCondForm({ symbol: "", metric: "price", op: ">", value: "" });
@@ -329,6 +329,7 @@ export default function AlertsPage() {
             <option value=">=">{"≥ at least"}</option>
             <option value="<">{"< below"}</option>
             <option value="<=">{"≤ at most"}</option>
+            <option value="=">{"= equals"}</option>
           </select>
           <input type="number" value={condForm.value} onChange={(e) => setCondForm((f) => ({ ...f, value: e.target.value }))} placeholder="value"
             className="px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm font-semibold text-right outline-none focus:ring-2 focus:ring-indigo-200 w-28" />
