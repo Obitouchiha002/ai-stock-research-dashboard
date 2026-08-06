@@ -13,6 +13,8 @@ import {
   removeCustomMarketSymbol,
   getMarketMarks,
   setMarketMark,
+  getMarketPlans,
+  setMarketPlanField,
 } from "@/lib/storage";
 import { resolveHolding, resolveCommodity, resolveCrypto } from "@/lib/excelImport";
 
@@ -199,6 +201,11 @@ export default function MarketsPage() {
   // user's own symbols ("Custom" tab)
   const [custom, setCustom] = useState<{ symbol: string; label: string }[]>([]);
   const [marks, setMarks] = useState<Record<string, string>>({});
+  const [plans, setPlans] = useState<Record<string, Record<string, string>>>({});
+  const setPlan = (sym: string, field: string, value: string) => {
+    setMarketPlanField(sym, field, value);
+    setPlans(getMarketPlans());
+  };
   // Per-tab custom symbols the user added into any group.
   const [customByGroup, setCustomByGroup] = useState<Record<string, { symbol: string; label: string }[]>>({});
   const [addInput, setAddInput] = useState("");
@@ -243,6 +250,7 @@ export default function MarketsPage() {
     setCustom(getCustomMarketSymbols());
     setCustomByGroup(getCustomMarketByGroup());
     setMarks(getMarketMarks());
+    setPlans(getMarketPlans());
     // Only fetch if the cache is missing or stale — otherwise show it instantly.
     const fresh = Object.keys(mktCache.quotes).length > 0 && Date.now() - mktCache.at < MKT_TTL;
     if (!fresh) load();
@@ -526,17 +534,18 @@ export default function MarketsPage() {
                 <th className="text-right font-medium px-5 py-3">Last traded</th>
                 <th className="text-right font-medium px-5 py-3">Day change</th>
                 <th className="text-center font-medium px-3 py-3">My Trend</th>
-                <th className="text-right font-medium px-5 py-3 hidden md:table-cell">High</th>
-                <th className="text-right font-medium px-5 py-3 hidden md:table-cell">Low</th>
-                <th className="text-right font-medium px-5 py-3 hidden lg:table-cell">Open</th>
-                <th className="text-right font-medium px-5 py-3 hidden lg:table-cell">Prev. Close</th>
+                <th className="text-center font-medium px-2 py-3 text-rose-500">SL</th>
+                <th className="text-center font-medium px-2 py-3">R</th>
+                <th className="text-center font-medium px-2 py-3 text-emerald-600">T1</th>
+                <th className="text-center font-medium px-2 py-3 text-emerald-600">T2</th>
+                <th className="text-right font-medium px-5 py-3 hidden xl:table-cell">Prev. Close</th>
                 <th className="w-10" />
               </tr>
             </thead>
             <tbody>
               {rows.length === 0 ? (
                 <tr>
-                  <td colSpan={9} className="px-5 py-12 text-center text-slate-400 font-medium">
+                  <td colSpan={10} className="px-5 py-12 text-center text-slate-400 font-medium">
                     {trendFilter !== "all"
                       ? trendLoading
                         ? "Analysing trends…"
@@ -575,10 +584,13 @@ export default function MarketsPage() {
                       <td className="px-3 py-3.5 text-center">
                         <TrendSelect value={marks[r.symbol]} onChange={(v) => markTrend(r.symbol, v)} />
                       </td>
-                      <td className="px-5 py-3.5 text-right tabular-nums text-slate-600 hidden md:table-cell">{fmt(q.dayHigh || null, cur)}</td>
-                      <td className="px-5 py-3.5 text-right tabular-nums text-slate-600 hidden md:table-cell">{fmt(q.dayLow || null, cur)}</td>
-                      <td className="px-5 py-3.5 text-right tabular-nums text-slate-600 hidden lg:table-cell">{fmt(q.open || null, cur)}</td>
-                      <td className="px-5 py-3.5 text-right tabular-nums text-slate-600 hidden lg:table-cell">{fmt(q.prevClose || null, cur)}</td>
+                      {(["sl", "r", "t1", "t2"] as const).map((f) => (
+                        <td key={f} className="px-2 py-3.5 text-center">
+                          <input value={plans[r.symbol]?.[f] || ""} onChange={(e) => setPlan(r.symbol, f, e.target.value)} placeholder="—"
+                            className="w-16 px-2 py-1 bg-slate-50 border border-slate-200 rounded text-right text-[12px] tabular-nums focus:ring-2 focus:ring-indigo-200 outline-none" />
+                        </td>
+                      ))}
+                      <td className="px-5 py-3.5 text-right tabular-nums text-slate-600 hidden xl:table-cell">{fmt(q.prevClose || null, cur)}</td>
                       <td className="pr-4">
                         {r.custom && (
                           <button

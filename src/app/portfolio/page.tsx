@@ -27,6 +27,8 @@ import {
   inferPortfolioMarket,
   logAiUsageDetailed,
   getPriceAlerts,
+  savePriceAlert,
+  deletePriceAlert,
   PORTFOLIO_MARKETS,
   type PortfolioMarket,
 } from "@/lib/storage";
@@ -218,6 +220,18 @@ export default function PortfolioPage() {
   // These are the user's own manual entries; only the live price is auto-fetched.
   const setPlanField = (h: any, field: string, value: string) => {
     savePortfolioHolding({ ...h, [field]: value });
+    // A special condition like "cmp > 162 = buy" becomes a real, monitored price
+    // alert (fires a notification + email when it's true).
+    if (field === "special") {
+      const id = `pf-${h.id}`;
+      const m = String(value || "").match(/(?:cmp|price)\s*(>=|<=|>|<)\s*([\d.]+)/i);
+      const existing = getPriceAlerts().find((a) => a.id === id);
+      if (m) {
+        savePriceAlert({ id, symbol: String(h.symbol).toUpperCase(), name: value.trim(), fromPortfolio: true, status: "active", conditionTriggered: false, condition: { metric: "price", op: m[1] as any, value: Number(m[2]) } });
+      } else if (existing) {
+        deletePriceAlert(id);
+      }
+    }
     setHoldings(getPortfolio());
   };
 
@@ -759,7 +773,7 @@ PORTFOLIO DATA: ${JSON.stringify(stats)}`;
                     <td className="p-3 text-right"><input value={h.t1 || ""} onChange={(e) => setPlanField(h, "t1", e.target.value)} placeholder="—" className={numCls} /></td>
                     <td className="p-3 text-right"><input value={h.t2 || ""} onChange={(e) => setPlanField(h, "t2", e.target.value)} placeholder="—" className={numCls} /></td>
                     <td className="p-3"><input value={h.remarks || ""} onChange={(e) => setPlanField(h, "remarks", e.target.value)} placeholder="notes…" className={txtCls} /></td>
-                    <td className="p-3"><input value={h.special || ""} onChange={(e) => setPlanField(h, "special", e.target.value)} placeholder="e.g. only above 200-DMA" className={txtCls} /></td>
+                    <td className="p-3"><input value={h.special || ""} onChange={(e) => setPlanField(h, "special", e.target.value)} placeholder="e.g. cmp > 162 = buy" className={txtCls} /></td>
                   </tr>
                 );
               })}

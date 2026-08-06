@@ -5,9 +5,24 @@ import {
   getPriceAlerts,
   updatePriceAlert,
   addNotification,
+  getSettings,
   type AlertLevelKey,
   type PriceAlert,
 } from "@/lib/storage";
+
+// Send a real email for a triggered alert (best-effort; needs the user's email
+// set in Settings and RESEND_API_KEY on the server).
+function emailAlert(subject: string, text: string) {
+  try {
+    const to = getSettings()?.alertEmail;
+    if (!to) return;
+    fetch("/api/alert-email", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ to, subject, text }),
+    }).catch(() => {});
+  } catch { /* best-effort */ }
+}
 
 // How each level fires. "up" = price rising through it, "down" = price falling to it.
 const LEVELS: {
@@ -76,6 +91,7 @@ export default function PriceAlertMonitor() {
               target,
             )}) — now ${cur}${fmt(price)}.`;
             addNotification({ type: lv.tone, message: msg, symbol: a.symbol });
+            emailAlert(`${a.symbol} · ${lv.label} reached`, msg);
 
             // OS notification only when the tab is backgrounded — otherwise the
             // in-app notification already covers it (no duplicate pop-up).
@@ -112,7 +128,9 @@ export default function PriceAlertMonitor() {
               if (hit) {
                 const shown = isPct ? `${fmt(mv)}%` : `${cur}${fmt(mv)}`;
                 const target = isPct ? `${value}%` : `${cur}${fmt(value)}`;
-                addNotification({ type: "info", message: `${a.symbol}: ${isPct ? "Day change" : "Price"} ${op} ${target} — now ${shown}.`, symbol: a.symbol });
+                const cmsg = `${a.symbol}: ${isPct ? "Day change" : "Price"} ${op} ${target} — now ${shown}.${a.name ? ` (${a.name})` : ""}`;
+                addNotification({ type: "info", message: cmsg, symbol: a.symbol });
+                emailAlert(`${a.symbol} · condition met`, cmsg);
                 try {
                   if (typeof document !== "undefined" && document.hidden && typeof Notification !== "undefined" && Notification.permission === "granted") {
                     new Notification(`${a.symbol} · condition met`, { body: `${isPct ? "Day change" : "Price"} ${op} ${target} — now ${shown}` });

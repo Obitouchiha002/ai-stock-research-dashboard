@@ -547,6 +547,7 @@ export const getSettings = () =>
     profilePhoto: "",
     notifications: true,
     autoSave: false,
+    alertEmail: "",
   });
 export const saveSettings = (settings: any) => {
   setContext("sa_settings", { ...getSettings(), ...settings });
@@ -774,6 +775,16 @@ export const setMarketMark = (symbol: string, mark: string) => {
   if (mark) all[key] = mark;
   else delete all[key];
   setContext("sa_market_marks", all);
+};
+
+// Per-symbol trade-plan levels (SL / R / T1 / T2) on the Markets page.
+export const getMarketPlans = (): Record<string, Record<string, string>> =>
+  getParsedContext<Record<string, Record<string, string>>>("sa_market_plans", {});
+export const setMarketPlanField = (symbol: string, field: string, value: string) => {
+  const all = getMarketPlans();
+  const key = String(symbol || "").toUpperCase();
+  all[key] = { ...(all[key] || {}), [field]: value };
+  setContext("sa_market_plans", all);
 };
 
 // COMBINATION SCREENER — user-built sets of technical conditions.

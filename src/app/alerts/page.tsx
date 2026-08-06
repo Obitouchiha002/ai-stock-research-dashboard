@@ -21,6 +21,8 @@ import {
   deletePriceAlert,
   updatePriceAlert,
   getPortfolio,
+  getSettings,
+  saveSettings,
   type PriceAlert,
   type AlertLevelKey,
 } from "@/lib/storage";
@@ -59,6 +61,10 @@ export default function AlertsPage() {
   const [form, setForm] = useState({ ...emptyForm });
   const [formCmp, setFormCmp] = useState<{ price: number; cur: string } | null>(null);
   const [notifPerm, setNotifPerm] = useState<string>("default");
+  const [alertEmail, setAlertEmail] = useState("");
+  const [emailSaved, setEmailSaved] = useState(false);
+  useEffect(() => { setAlertEmail(getSettings()?.alertEmail || ""); }, []);
+  const saveEmail = () => { saveSettings({ alertEmail: alertEmail.trim() }); setEmailSaved(true); setTimeout(() => setEmailSaved(false), 1800); };
 
   const reload = () => setAlerts(getPriceAlerts());
 
@@ -292,6 +298,20 @@ export default function AlertsPage() {
           </div>
         </form>
       )}
+
+      {/* Email alerts recipient */}
+      <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-4 mb-4">
+        <h3 className="text-sm font-black text-slate-800 mb-1">📧 Email alerts</h3>
+        <p className="text-[11px] text-slate-400 mb-3">Get a real email the moment an alert triggers. Works while the app is open in a tab.</p>
+        <div className="flex flex-wrap items-center gap-2">
+          <input type="email" value={alertEmail} onChange={(e) => setAlertEmail(e.target.value)} placeholder="you@email.com"
+            className="px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm font-medium outline-none focus:ring-2 focus:ring-indigo-200 w-64" />
+          <button onClick={saveEmail} className="px-4 py-2 bg-indigo-600 text-white rounded-lg text-sm font-bold hover:bg-indigo-700 flex items-center gap-1.5">
+            {emailSaved ? <><Check className="w-4 h-4" /> Saved</> : "Save email"}
+          </button>
+          {alertEmail && <span className="text-[11px] text-emerald-600 font-semibold">Alerts will be emailed to {alertEmail}</span>}
+        </div>
+      </div>
 
       {/* Custom condition alert — e.g. price > 160 */}
       <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-4 mb-6">
