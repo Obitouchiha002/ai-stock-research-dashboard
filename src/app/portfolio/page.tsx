@@ -53,6 +53,7 @@ export default function PortfolioPage() {
   // Holdings vs the user's own trade plan (SL / R / targets / notes).
   const [view, setView] = useState<"holdings" | "plan">("holdings");
   const [search, setSearch] = useState("");
+  const [trendFilter, setTrendFilter] = useState("all"); // all | up | down | side
   const [savedMsg, setSavedMsg] = useState(false);
   const [showAdd, setShowAdd] = useState(false);
   const [form, setForm] = useState({ symbol: "", shares: "", price: "" });
@@ -209,12 +210,14 @@ export default function PortfolioPage() {
 
   const cur = CUR[market];
   const marketHoldings = holdings.filter((h) => h.market === market);
-  const visibleHoldings = search.trim()
-    ? marketHoldings.filter((h) => {
-        const s = search.trim().toLowerCase();
-        return String(h.symbol || "").toLowerCase().includes(s) || String(h.name || "").toLowerCase().includes(s);
-      })
-    : marketHoldings;
+  const visibleHoldings = marketHoldings.filter((h) => {
+    if (trendFilter !== "all" && (h.trend || "") !== trendFilter) return false;
+    if (search.trim()) {
+      const s = search.trim().toLowerCase();
+      if (!(String(h.symbol || "").toLowerCase().includes(s) || String(h.name || "").toLowerCase().includes(s))) return false;
+    }
+    return true;
+  });
 
   // Save one trade-plan field (SL / R / T1 / T2 / remarks / special) on a holding.
   // These are the user's own manual entries; only the live price is auto-fetched.
@@ -716,6 +719,16 @@ PORTFOLIO DATA: ${JSON.stringify(stats)}`;
           <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
           <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search holdings…"
             className="pl-9 pr-3 py-2 w-48 bg-white border border-slate-200 rounded-lg text-sm font-medium focus:ring-2 focus:ring-indigo-200 outline-none" />
+        </div>
+        <div className="flex items-center gap-1.5">
+          <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wide">Trend</span>
+          <button onClick={() => setTrendFilter("all")} className={`px-2.5 py-1 rounded-lg text-xs font-bold transition ${trendFilter === "all" ? "bg-slate-900 text-white" : "bg-white text-slate-600 border border-slate-200 hover:bg-slate-50"}`}>All</button>
+          {PF_TREND.filter((t) => t.v).map((t) => (
+            <button key={t.v} onClick={() => setTrendFilter(trendFilter === t.v ? "all" : t.v)}
+              className={`px-2.5 py-1 rounded-lg text-xs font-bold transition ${trendFilter === t.v ? "bg-slate-900 text-white" : "bg-white text-slate-600 border border-slate-200 hover:bg-slate-50"}`}>
+              {t.label}
+            </button>
+          ))}
         </div>
         {view === "plan" && (
           <>
