@@ -219,15 +219,23 @@ export default function PortfolioPage() {
   // Save one trade-plan field (SL / R / T1 / T2 / remarks / special) on a holding.
   // These are the user's own manual entries; only the live price is auto-fetched.
   const setPlanField = (h: any, field: string, value: string) => {
-    savePortfolioHolding({ ...h, [field]: value });
-    // A special condition like "cmp > 162 = buy" becomes a real, monitored price
-    // alert (fires a notification + email when it's true).
-    if (field === "special") {
-      const id = `pf-${h.id}`;
-      const m = String(value || "").match(/(?:cmp|price)\s*(>=|<=|>|<)\s*([\d.]+)/i);
+    const updated = { ...h, [field]: value };
+    savePortfolioHolding(updated);
+    // The structured trigger (CMP [op] [value]) becomes a REAL monitored alert
+    // so the app knows exactly when to fire a notification + email.
+    if (field === "condOp" || field === "condVal" || field === "special") {
+      const id = `pf-${updated.id}`;
+      const v = Number(updated.condVal);
+      const op = updated.condOp || ">";
       const existing = getPriceAlerts().find((a) => a.id === id);
-      if (m) {
-        savePriceAlert({ id, symbol: String(h.symbol).toUpperCase(), name: value.trim(), fromPortfolio: true, status: "active", conditionTriggered: false, condition: { metric: "price", op: m[1] as any, value: Number(m[2]) } });
+      if (updated.condVal != null && String(updated.condVal) !== "" && Number.isFinite(v)) {
+        const note = String(updated.special || "").trim();
+        savePriceAlert({
+          id, symbol: String(updated.symbol).toUpperCase(),
+          name: note ? `CMP ${op} ${v} → ${note}` : `CMP ${op} ${v}`,
+          fromPortfolio: true, status: "active", conditionTriggered: false,
+          condition: { metric: "price", op: op as any, value: v },
+        });
       } else if (existing) {
         deletePriceAlert(id);
       }
@@ -740,7 +748,7 @@ PORTFOLIO DATA: ${JSON.stringify(stats)}`;
                 <th className="p-3 text-xs font-bold text-emerald-600 uppercase tracking-wide text-right">T1</th>
                 <th className="p-3 text-xs font-bold text-emerald-600 uppercase tracking-wide text-right">T2</th>
                 <th className="p-3 text-xs font-bold text-slate-500 uppercase tracking-wide">Remarks</th>
-                <th className="p-3 text-xs font-bold text-slate-500 uppercase tracking-wide">Special condition</th>
+                <th className="p-3 text-xs font-bold text-indigo-600 uppercase tracking-wide">Alert Trigger</th>
               </tr>
             </thead>
             <tbody>
@@ -773,7 +781,22 @@ PORTFOLIO DATA: ${JSON.stringify(stats)}`;
                     <td className="p-3 text-right"><input value={h.t1 || ""} onChange={(e) => setPlanField(h, "t1", e.target.value)} placeholder="—" className={numCls} /></td>
                     <td className="p-3 text-right"><input value={h.t2 || ""} onChange={(e) => setPlanField(h, "t2", e.target.value)} placeholder="—" className={numCls} /></td>
                     <td className="p-3"><input value={h.remarks || ""} onChange={(e) => setPlanField(h, "remarks", e.target.value)} placeholder="notes…" className={txtCls} /></td>
-                    <td className="p-3"><input value={h.special || ""} onChange={(e) => setPlanField(h, "special", e.target.value)} placeholder="e.g. cmp > 162 = buy" className={txtCls} /></td>
+                    <td className="p-3">
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-[11px] font-black text-slate-400">CMP</span>
+                        <select value={h.condOp || ">"} onChange={(e) => setPlanField(h, "condOp", e.target.value)}
+                          className="px-1.5 py-1 bg-white border border-slate-200 rounded text-[13px] font-black outline-none focus:ring-2 focus:ring-indigo-200">
+                          <option value=">">{">"}</option><option value=">=">{"≥"}</option><option value="<">{"<"}</option><option value="<=">{"≤"}</option>
+                        </select>
+                        <input type="number" value={h.condVal ?? ""} onChange={(e) => setPlanField(h, "condVal", e.target.value)} placeholder="value"
+                          className="w-20 px-2 py-1 bg-slate-50 border border-slate-200 rounded text-right text-[12px] tabular-nums outline-none focus:ring-2 focus:ring-indigo-200" />
+                        <input value={h.special || ""} onChange={(e) => setPlanField(h, "special", e.target.value)} placeholder="→ buy/sell"
+                          className="w-24 px-2 py-1 bg-slate-50 border border-slate-200 rounded text-[12px] outline-none focus:ring-2 focus:ring-indigo-200" />
+                      </div>
+                      {h.condVal != null && String(h.condVal) !== "" && (
+                        <div className="text-[10px] text-emerald-600 font-bold mt-0.5">🔔 alert on</div>
+                      )}
+                    </td>
                   </tr>
                 );
               })}
