@@ -101,6 +101,27 @@ export default function PriceAlertMonitor() {
             const live = getPriceAlerts().find((x) => x.id === a.id);
             updatePriceAlert(a.id, { triggered: { ...(live?.triggered || {}), ...firedNow } });
           }
+
+          // Custom condition alert (e.g. price > 160). Fires once, re-armable.
+          if (a.condition && !a.conditionTriggered) {
+            const isPct = a.condition.metric === "changePct";
+            const mv = isPct ? q?.changePct : price;
+            if (mv != null) {
+              const { op, value } = a.condition;
+              const hit = op === ">" ? mv > value : op === "<" ? mv < value : op === ">=" ? mv >= value : mv <= value;
+              if (hit) {
+                const shown = isPct ? `${fmt(mv)}%` : `${cur}${fmt(mv)}`;
+                const target = isPct ? `${value}%` : `${cur}${fmt(value)}`;
+                addNotification({ type: "info", message: `${a.symbol}: ${isPct ? "Day change" : "Price"} ${op} ${target} — now ${shown}.`, symbol: a.symbol });
+                try {
+                  if (typeof document !== "undefined" && document.hidden && typeof Notification !== "undefined" && Notification.permission === "granted") {
+                    new Notification(`${a.symbol} · condition met`, { body: `${isPct ? "Day change" : "Price"} ${op} ${target} — now ${shown}` });
+                  }
+                } catch { /* best-effort */ }
+                updatePriceAlert(a.id, { conditionTriggered: true });
+              }
+            }
+          }
         }
       } catch {
         /* transient fetch failure — try again next tick */

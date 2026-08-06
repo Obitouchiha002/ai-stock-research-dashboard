@@ -145,7 +145,21 @@ export default function AlertsPage() {
     reload();
   };
   const rearm = (a: PriceAlert) => {
-    updatePriceAlert(a.id, { triggered: {} });
+    updatePriceAlert(a.id, { triggered: {}, conditionTriggered: false });
+    reload();
+  };
+
+  // Custom condition alert (e.g. price > 160).
+  const [condForm, setCondForm] = useState({ symbol: "", metric: "price", op: ">", value: "" });
+  const createCondition = () => {
+    const v = Number(condForm.value);
+    if (!condForm.symbol.trim() || !Number.isFinite(v)) return;
+    savePriceAlert({
+      symbol: condForm.symbol.trim().toUpperCase(),
+      condition: { metric: condForm.metric as "price" | "changePct", op: condForm.op as ">" | "<" | ">=" | "<=", value: v },
+      status: "active",
+    });
+    setCondForm({ symbol: "", metric: "price", op: ">", value: "" });
     reload();
   };
 
@@ -279,6 +293,28 @@ export default function AlertsPage() {
         </form>
       )}
 
+      {/* Custom condition alert — e.g. price > 160 */}
+      <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-4 mb-6">
+        <h3 className="text-sm font-black text-slate-800 mb-1">Custom condition alert</h3>
+        <p className="text-[11px] text-slate-400 mb-3">Get notified when a condition becomes true — e.g. <b>Price &gt; 160</b> or <b>Day change &lt; -3%</b>.</p>
+        <div className="flex flex-wrap items-center gap-2">
+          <input value={condForm.symbol} onChange={(e) => setCondForm((f) => ({ ...f, symbol: e.target.value.toUpperCase() }))} placeholder="Symbol e.g. AAPL"
+            className="px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm font-bold outline-none focus:ring-2 focus:ring-indigo-200 w-40" />
+          <select value={condForm.metric} onChange={(e) => setCondForm((f) => ({ ...f, metric: e.target.value }))} className="px-3 py-2 bg-white border border-slate-200 rounded-lg text-sm font-bold text-slate-700 outline-none focus:ring-2 focus:ring-indigo-200">
+            <option value="price">Price (CMP)</option>
+            <option value="changePct">Day change %</option>
+          </select>
+          <select value={condForm.op} onChange={(e) => setCondForm((f) => ({ ...f, op: e.target.value }))} className="px-3 py-2 bg-white border border-slate-200 rounded-lg text-sm font-black text-slate-700 outline-none focus:ring-2 focus:ring-indigo-200">
+            <option value=">">{">"}</option><option value=">=">{"≥"}</option><option value="<">{"<"}</option><option value="<=">{"≤"}</option>
+          </select>
+          <input type="number" value={condForm.value} onChange={(e) => setCondForm((f) => ({ ...f, value: e.target.value }))} placeholder="value"
+            className="px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm font-semibold text-right outline-none focus:ring-2 focus:ring-indigo-200 w-28" />
+          <button onClick={createCondition} disabled={!condForm.symbol.trim() || condForm.value === ""} className="px-4 py-2 bg-indigo-600 text-white rounded-lg text-sm font-bold hover:bg-indigo-700 disabled:opacity-50 flex items-center gap-1.5">
+            <Plus className="w-4 h-4" /> Add
+          </button>
+        </div>
+      </div>
+
       {/* Alert list */}
       {alerts.length === 0 ? (
         <div className="bg-white border border-slate-200 rounded-2xl p-12 text-center shadow-sm">
@@ -368,9 +404,23 @@ export default function AlertsPage() {
                   })}
                 </div>
 
-                {Object.values(a.triggered || {}).some(Boolean) && (
+                {a.condition && (
+                  <div className="px-3.5 pb-3.5 -mt-1">
+                    <div className={`rounded-xl border px-3 py-2.5 ${a.conditionTriggered ? "border-slate-300 bg-slate-50" : "border-indigo-200 bg-indigo-50/50"}`}>
+                      <div className="flex items-center justify-between">
+                        <span className="text-[10px] font-black uppercase tracking-wide text-indigo-600">Custom condition</span>
+                        {a.conditionTriggered && <span className="inline-flex items-center gap-0.5 text-[9.5px] font-black text-emerald-600"><Check className="w-3 h-3" /> met</span>}
+                      </div>
+                      <div className="text-[14px] font-black text-slate-900 mt-0.5">
+                        {a.condition.metric === "changePct" ? "Day change" : "Price"} {a.condition.op} {a.condition.metric === "changePct" ? `${a.condition.value}%` : `${cur}${fmt(a.condition.value)}`}
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {(Object.values(a.triggered || {}).some(Boolean) || a.conditionTriggered) && (
                   <div className="px-5 py-2.5 bg-slate-50 border-t border-slate-100 flex items-center justify-between">
-                    <span className="text-[11.5px] text-slate-500">Some levels were reached.</span>
+                    <span className="text-[11.5px] text-slate-500">{a.conditionTriggered ? "Condition met." : "Some levels were reached."}</span>
                     <button onClick={() => rearm(a)} className="text-[12px] font-black text-indigo-600 hover:underline">
                       Re-arm
                     </button>

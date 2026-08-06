@@ -245,6 +245,10 @@ export interface PriceAlert {
   levels: Partial<Record<AlertLevelKey, number | null>>;
   triggered: Partial<Record<AlertLevelKey, boolean>>;
   fromPortfolio?: boolean;
+  // Custom condition alert, e.g. price > 160. Fires once when the condition
+  // first becomes true (re-armable).
+  condition?: { metric: "price" | "changePct"; op: ">" | "<" | ">=" | "<="; value: number };
+  conditionTriggered?: boolean;
   createdAt: number;
   updatedAt?: number;
   status: "active" | "paused";
@@ -649,11 +653,13 @@ export type JournalEntry = {
   title: string;
   text: string;
   tag?: string; // Trade | Idea | Lesson | Review | Mistake
+  market?: string; // General | Indian Market | US Market | Global
   outcome?: string; // free text e.g. "+2,400" or "SL hit"
   createdAt: number;
   updatedAt?: number;
 };
 export const JOURNAL_TAGS = ["Trade", "Idea", "Lesson", "Review", "Mistake"] as const;
+export const JOURNAL_MARKETS = ["General", "Indian Market", "US Market", "Global"] as const;
 
 export const getJournal = (): JournalEntry[] =>
   getParsedContext<JournalEntry[]>("sa_journal", []);

@@ -392,6 +392,23 @@ export default function SettingsPage() {
           </div>
         )}
       </div>
+
+      {/* Developer */}
+      <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-6 sm:p-8 mt-6">
+        <h3 className="text-lg font-bold text-slate-900 mb-1">Developer</h3>
+        <p className="text-sm text-slate-500 font-medium mb-4">This app is designed &amp; built by the developer below.</p>
+        <div className="flex items-center gap-4">
+          <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-indigo-500 to-violet-600 flex items-center justify-center text-white font-black text-lg shrink-0">VK</div>
+          <div className="min-w-0">
+            <div className="font-black text-slate-900">Vansh Kashyap</div>
+            <a href="https://vanshkashyap.lzworth.in" target="_blank" rel="author noopener" className="text-sm font-bold text-indigo-600 hover:underline break-all">vanshkashyap.lzworth.in</a>
+          </div>
+        </div>
+        <p className="mt-4 text-[13px] text-slate-500">
+          For any query, feedback or collaboration, please{" "}
+          <a href="https://vanshkashyap.lzworth.in" target="_blank" rel="noopener" className="font-bold text-indigo-600 hover:underline">contact Vansh Kashyap</a>.
+        </p>
+      </div>
     </div>
   );
 }
