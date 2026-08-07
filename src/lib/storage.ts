@@ -825,9 +825,18 @@ export type ScreenConditions = {
   // Chain builder: a left-to-right sequence of boxes (metric or a plain value)
   // joined by operators, e.g. Price < 10-DMA < 20-DMA > 50-DMA. Every link is
   // AND-ed. `op` on a node is the operator connecting it to the PREVIOUS node
-  // (the first node has none). This is the primary, simple builder; it is
-  // compiled to pairwise rules by comboEval.
+  // (the first node has none). Legacy single-chain field (superseded by
+  // chainGroups, but still read for old saved combos).
   chain?: ChainNode[];
+  // Multiple chains, each AND-ed within itself, combined with AND/OR between
+  // groups — e.g. (Price > 20-DMA > 50-DMA) AND (RSI > 60). `join` on a group is
+  // how it combines with the PREVIOUS group (the first group has none).
+  chainGroups?: ChainGroup[];
+};
+export type ChainGroup = {
+  id: string;
+  join?: "and" | "or"; // how this group joins the previous one
+  nodes: ChainNode[];
 };
 export type ChainNode = {
   id: string;

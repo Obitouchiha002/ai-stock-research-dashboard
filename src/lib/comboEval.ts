@@ -80,6 +80,22 @@ export function chainToRules(chain: any[] | undefined): any[] {
   return rules;
 }
 
+// Evaluate multiple chain-groups: each group is AND-ed within itself, then the
+// groups' boolean results are combined left-to-right by each group's join
+// (and/or) — so (a AND b) OR (c AND d) is respected, unlike a flat rule fold.
+export function evalChainGroups(r: ComboRaw, groups: any[] | undefined): { has: boolean; pass: boolean } {
+  const gs = (groups || [])
+    .map((g) => ({ join: g?.join, rules: chainToRules(g?.nodes) }))
+    .filter((g) => g.rules.length);
+  if (!gs.length) return { has: false, pass: false };
+  let res: boolean | null = null;
+  for (const g of gs) {
+    const gp = evalRules(r, g.rules).pass; // all links within a group are AND
+    res = res === null ? gp : g.join === "or" ? res || gp : res && gp;
+  }
+  return { has: true, pass: !!res };
+}
+
 // Combine rules left-to-right using each rule's connector to the previous one.
 function evalRules(r: ComboRaw, rules: any[] | undefined): { has: boolean; pass: boolean } {
   const valid = (rules || []).filter((x) => x && x.left && x.op);
@@ -127,10 +143,16 @@ export function evalConditions(
   const presetKeys = Object.keys(passed);
   const presetHas = presetKeys.length > 0;
   const presetPass = presetKeys.every((k) => passed[k]);
-  // The chain builder is the primary source; fall back to legacy freeform rules.
-  const chainRules = chainToRules((c as any).chain);
-  const effectiveRules = chainRules.length ? chainRules : (c as any).rules;
-  const rules = evalRules(r, effectiveRules);
+  // Priority: grouped chains (with AND/OR) → single legacy chain → freeform rules.
+  const groups = (c as any).chainGroups;
+  let rules: { has: boolean; pass: boolean };
+  if (Array.isArray(groups) && groups.length) {
+    rules = evalChainGroups(r, groups);
+  } else {
+    const chainRules = chainToRules((c as any).chain);
+    const effectiveRules = chainRules.length ? chainRules : (c as any).rules;
+    rules = evalRules(r, effectiveRules);
+  }
   if (rules.has) passed.rules = rules.pass;
   const match =
     !presetHas && !rules.has

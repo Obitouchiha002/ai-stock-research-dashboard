@@ -10,7 +10,7 @@ import {
   getWatchlist, getPortfolio, saveToWatchlist, inferCategory,
   savePortfolioHolding, inferPortfolioMarket,
   getCombinations, saveCombination, deleteCombination,
-  type Combination, type ScreenConditions,
+  type Combination, type ScreenConditions, type ChainGroup,
 } from "@/lib/storage";
 import { RULE_METRICS } from "@/lib/comboEval";
 
@@ -58,10 +58,13 @@ const opLabel = (v?: string) => OP_UI.find((o) => o.v === v)?.l || v || ">";
 
 // Short human summary of a saved combo (chain preview + count of extra filters).
 function comboSummary(c: ScreenConditions): string {
-  const chain = c.chain || [];
-  const chainStr = chain.length >= 2
-    ? chain.map((n, i) => (i > 0 ? ` ${opLabel(n.op)} ` : "") + (n.kind === "value" ? String(n.value ?? 0) : (RULE_METRICS.find((m) => m.k === n.metric)?.label || n.metric))).join("")
-    : "";
+  const nLabel = (n: any) => (n.kind === "value" ? String(n.value ?? 0) : (RULE_METRICS.find((m) => m.k === n.metric)?.label || n.metric));
+  const gPrev = (nodes: any[]) => nodes.map((n, i) => (i > 0 ? ` ${opLabel(n.op)} ` : "") + nLabel(n)).join("");
+  const groups = (c.chainGroups && c.chainGroups.length ? c.chainGroups : (c.chain && c.chain.length ? [{ nodes: c.chain }] as any[] : []))
+    .filter((g: any) => (g.nodes || []).length >= 2);
+  const chainStr = groups
+    .map((g: any, i: number) => (i > 0 ? ` ${(g.join || "and").toUpperCase()} ` : "") + (groups.length > 1 ? `(${gPrev(g.nodes)})` : gPrev(g.nodes)))
+    .join("");
   const extras = Object.keys(c).filter((k) => (c as any)[k] === true).length;
   if (chainStr && extras) return `${chainStr} · +${extras} filter${extras === 1 ? "" : "s"}`;
   if (chainStr) return chainStr;
@@ -82,12 +85,17 @@ const CHAIN_PRESETS: { label: string; chain: any[] }[] = [
     { kind: "metric", metric: "rsi" }, { kind: "value", value: 60, op: ">" }] },
 ];
 
-// A sensible default chain, ready to run: Price above its 20 & 50 DMA.
+// A sensible default, ready to run: one group — Price above its 20 & 50 DMA.
 const DEFAULT_COND: ScreenConditions = {
-  chain: [
-    { id: "n1", kind: "metric", metric: "price" },
-    { id: "n2", kind: "metric", metric: "dma20", op: ">" },
-    { id: "n3", kind: "metric", metric: "dma50", op: ">" },
+  chainGroups: [
+    {
+      id: "g1",
+      nodes: [
+        { id: "n1", kind: "metric", metric: "price" },
+        { id: "n2", kind: "metric", metric: "dma20", op: ">" },
+        { id: "n3", kind: "metric", metric: "dma50", op: ">" },
+      ],
+    },
   ],
 };
 
@@ -169,16 +177,26 @@ export default function CombosPage() {
   });
   const curLevels = cond.stackLevels ?? ["price", "10", "20", "50", "200"];
 
-  // ---- Chain builder (primary): boxes joined by operators, all AND-ed ----
-  const chain = cond.chain || [];
-  const setChain = (fn: (ch: any[]) => any[]) => setCond((c) => ({ ...c, chain: fn(c.chain || []) }));
-  const addNode = () => setChain((ch) => [...ch, { id: genId(), kind: "metric", metric: "dma50", op: ">" }]);
-  const updateNode = (id: string, patch: any) => setChain((ch) => ch.map((n) => (n.id === id ? { ...n, ...patch } : n)));
-  const removeNode = (id: string) => setChain((ch) => ch.filter((n) => n.id !== id));
-  const loadChainPreset = (c: any[]) => setCond((prev) => ({ ...prev, chain: c.map((n, i) => ({ ...n, id: `n${i}-${genId()}` })) }));
+  // ---- Chain builder (primary): groups of boxes; AND within, AND/OR between ----
+  const groups: ChainGroup[] = cond.chainGroups && cond.chainGroups.length
+    ? cond.chainGroups
+    : (cond.chain && cond.chain.length ? [{ id: "g0", nodes: cond.chain }] : []);
+  // All edits write to chainGroups and clear the legacy `chain`.
+  const setGroups = (fn: (gs: ChainGroup[]) => ChainGroup[]) =>
+    setCond((c) => ({ ...c, chain: undefined, chainGroups: fn(c.chainGroups && c.chainGroups.length ? c.chainGroups : (c.chain && c.chain.length ? [{ id: "g0", nodes: c.chain }] : [])) }));
+  const newNode = () => ({ id: genId(), kind: "metric" as const, metric: "dma50", op: ">" as const });
+  const addGroup = () => setGroups((gs) => [...gs, { id: genId(), join: "and", nodes: [{ id: genId(), kind: "metric", metric: "rsi" }, { id: genId(), kind: "value", value: 60, op: ">" }] }]);
+  const removeGroup = (gid: string) => setGroups((gs) => gs.filter((g) => g.id !== gid));
+  const setGroupJoin = (gid: string, join: "and" | "or") => setGroups((gs) => gs.map((g) => (g.id === gid ? { ...g, join } : g)));
+  const addNode = (gid: string) => setGroups((gs) => gs.map((g) => (g.id === gid ? { ...g, nodes: [...g.nodes, newNode()] } : g)));
+  const updateNode = (gid: string, nid: string, patch: any) => setGroups((gs) => gs.map((g) => (g.id === gid ? { ...g, nodes: g.nodes.map((n) => (n.id === nid ? { ...n, ...patch } : n)) } : g)));
+  const removeNode = (gid: string, nid: string) => setGroups((gs) => gs.map((g) => (g.id === gid ? { ...g, nodes: g.nodes.filter((n) => n.id !== nid) } : g)));
+  const loadChainPreset = (c: any[]) => setCond((prev) => ({ ...prev, chain: undefined, chainGroups: [{ id: genId(), nodes: c.map((n, i) => ({ ...n, id: `n${i}-${genId()}` })) }] }));
   const nodeLabel = (n: any) => (n.kind === "value" ? String(n.value ?? 0) : (RULE_METRICS.find((m) => m.k === n.metric)?.label || n.metric));
-  const chainPreview = chain.map((n, i) => (i > 0 ? ` ${opLabel(n.op)} ` : "") + nodeLabel(n)).join("");
-  const chainLinks = Math.max(0, chain.length - 1); // number of comparisons
+  const groupPreview = (g: ChainGroup) => g.nodes.map((n, i) => (i > 0 ? ` ${opLabel(n.op)} ` : "") + nodeLabel(n)).join("");
+  const realGroups = groups.filter((g) => g.nodes.length >= 2);
+  const chainPreview = realGroups.map((g, i) => (i > 0 ? ` ${(g.join || "and").toUpperCase()} ` : "") + (realGroups.length > 1 ? `(${groupPreview(g)})` : groupPreview(g))).join("");
+  const chainLinks = groups.reduce((a, g) => a + Math.max(0, g.nodes.length - 1), 0); // total comparisons
 
   // Legacy freeform rules (kept only so previously-saved combos still evaluate).
   const rules = cond.rules || [];
@@ -254,7 +272,7 @@ export default function CombosPage() {
               <span className="text-[11px] font-bold text-indigo-600 bg-indigo-50 px-2 py-1 rounded">{chainLinks} compare{chainLinks === 1 ? "" : "s"}</span>
             </div>
             <p className="text-[11px] text-slate-400 mb-3">
-              Chain boxes with an operator between each — e.g. <b>Price &lt; 10-DMA &lt; 20-DMA &gt; 50-DMA</b>. Pick a metric (or a plain value) in every box. All links must be true.
+              Chain boxes with an operator between each (all AND-ed inside a group). Add more <b>groups</b> and join them with <b>AND / OR</b> — e.g. <b>(Price &gt; 20-DMA &gt; 50-DMA) AND (RSI &gt; 60)</b>.
             </p>
 
             {/* Quick starts */}
@@ -267,50 +285,82 @@ export default function CombosPage() {
               ))}
             </div>
 
-            {/* The boxes */}
-            <div className="flex flex-wrap items-stretch gap-2 rounded-xl border-2 border-dashed border-slate-200 p-3">
-              {chain.length === 0 && (
-                <span className="text-[13px] text-slate-400 self-center">No boxes yet — click “+ box” to start.</span>
-              )}
-              {chain.map((n, i) => (
-                <React.Fragment key={n.id}>
-                  {i > 0 && (
-                    <select value={n.op || ">"} onChange={(e) => updateNode(n.id, { op: e.target.value })}
-                      title="Operator"
-                      className="self-center px-2 py-1.5 bg-slate-900 text-white rounded-lg text-[15px] font-black outline-none cursor-pointer focus:ring-2 focus:ring-indigo-300">
-                      {OP_UI.map((o) => <option key={o.v} value={o.v} className="bg-white text-slate-800">{o.l}</option>)}
-                    </select>
+            {/* Groups of boxes — AND inside a group, AND/OR between groups */}
+            {groups.length === 0 && (
+              <div className="text-[13px] text-slate-400 border-2 border-dashed border-slate-200 rounded-xl p-4 text-center">No conditions yet — add a group below.</div>
+            )}
+            <div className="space-y-1">
+              {groups.map((g, gi) => (
+                <React.Fragment key={g.id}>
+                  {gi > 0 && (
+                    <div className="flex items-center justify-center gap-2 py-1">
+                      <span className="h-px flex-1 bg-slate-200" />
+                      <div className="flex rounded-lg bg-slate-100 p-0.5">
+                        {(["and", "or"] as const).map((j) => (
+                          <button key={j} onClick={() => setGroupJoin(g.id, j)}
+                            className={`px-3 py-1 rounded text-[12px] font-black uppercase transition ${(g.join || "and") === j ? "bg-white text-indigo-700 shadow-sm" : "text-slate-400 hover:text-slate-600"}`}>{j}</button>
+                        ))}
+                      </div>
+                      <span className="h-px flex-1 bg-slate-200" />
+                    </div>
                   )}
-                  <div className="relative flex flex-col items-center justify-center gap-1 min-w-[104px] rounded-xl border-2 border-indigo-200 bg-indigo-50/50 px-3 pt-4 pb-2">
-                    {chain.length > 1 && (
-                      <button onClick={() => removeNode(n.id)} title="Remove box"
-                        className="absolute -top-2 -right-2 w-5 h-5 rounded-full bg-white border border-slate-200 text-slate-400 hover:text-rose-600 hover:border-rose-300 flex items-center justify-center shadow-sm">
+                  <div className="relative flex flex-wrap items-stretch gap-2 rounded-xl border-2 border-dashed border-slate-200 p-3">
+                    {groups.length > 1 && (
+                      <button onClick={() => removeGroup(g.id)} title="Remove group"
+                        className="absolute -top-2 -right-2 w-5 h-5 rounded-full bg-white border border-slate-200 text-slate-400 hover:text-rose-600 hover:border-rose-300 flex items-center justify-center shadow-sm z-10">
                         <X className="w-3 h-3" />
                       </button>
                     )}
-                    <select
-                      value={n.kind === "value" ? "__value" : (n.metric || "price")}
-                      onChange={(e) => {
-                        const v = e.target.value;
-                        if (v === "__value") updateNode(n.id, { kind: "value", value: n.value ?? 0, metric: undefined });
-                        else updateNode(n.id, { kind: "metric", metric: v, value: undefined });
-                      }}
-                      className="w-full text-center text-[13px] font-black text-slate-800 bg-transparent outline-none cursor-pointer">
-                      {RULE_METRICS.map((m) => <option key={m.k} value={m.k}>{m.label}</option>)}
-                      <option value="__value">— value —</option>
-                    </select>
-                    {n.kind === "value" && (
-                      <input type="number" value={n.value ?? 0} onChange={(e) => updateNode(n.id, { value: Number(e.target.value) })}
-                        className="w-20 px-1.5 py-0.5 bg-white border border-indigo-200 rounded text-center text-[13px] font-bold outline-none focus:ring-2 focus:ring-indigo-200" />
+                    {g.nodes.length === 0 && (
+                      <span className="text-[13px] text-slate-400 self-center">Empty — click “+ box”.</span>
                     )}
+                    {g.nodes.map((n, i) => (
+                      <React.Fragment key={n.id}>
+                        {i > 0 && (
+                          <select value={n.op || ">"} onChange={(e) => updateNode(g.id, n.id, { op: e.target.value })}
+                            title="Operator"
+                            className="self-center px-2 py-1.5 bg-slate-900 text-white rounded-lg text-[15px] font-black outline-none cursor-pointer focus:ring-2 focus:ring-indigo-300">
+                            {OP_UI.map((o) => <option key={o.v} value={o.v} className="bg-white text-slate-800">{o.l}</option>)}
+                          </select>
+                        )}
+                        <div className="relative flex flex-col items-center justify-center gap-1 min-w-[104px] rounded-xl border-2 border-indigo-200 bg-indigo-50/50 px-3 pt-4 pb-2">
+                          {g.nodes.length > 1 && (
+                            <button onClick={() => removeNode(g.id, n.id)} title="Remove box"
+                              className="absolute -top-2 -right-2 w-5 h-5 rounded-full bg-white border border-slate-200 text-slate-400 hover:text-rose-600 hover:border-rose-300 flex items-center justify-center shadow-sm">
+                              <X className="w-3 h-3" />
+                            </button>
+                          )}
+                          <select
+                            value={n.kind === "value" ? "__value" : (n.metric || "price")}
+                            onChange={(e) => {
+                              const v = e.target.value;
+                              if (v === "__value") updateNode(g.id, n.id, { kind: "value", value: n.value ?? 0, metric: undefined });
+                              else updateNode(g.id, n.id, { kind: "metric", metric: v, value: undefined });
+                            }}
+                            className="w-full text-center text-[13px] font-black text-slate-800 bg-transparent outline-none cursor-pointer">
+                            {RULE_METRICS.map((m) => <option key={m.k} value={m.k}>{m.label}</option>)}
+                            <option value="__value">— value —</option>
+                          </select>
+                          {n.kind === "value" && (
+                            <input type="number" value={n.value ?? 0} onChange={(e) => updateNode(g.id, n.id, { value: Number(e.target.value) })}
+                              className="w-20 px-1.5 py-0.5 bg-white border border-indigo-200 rounded text-center text-[13px] font-bold outline-none focus:ring-2 focus:ring-indigo-200" />
+                          )}
+                        </div>
+                      </React.Fragment>
+                    ))}
+                    <button onClick={() => addNode(g.id)} title="Add box"
+                      className="self-center flex items-center gap-1 px-3 py-2 rounded-xl border-2 border-dashed border-slate-300 text-[13px] font-bold text-slate-500 hover:border-indigo-400 hover:text-indigo-600 transition">
+                      <Plus className="w-4 h-4" /> box
+                    </button>
                   </div>
                 </React.Fragment>
               ))}
-              <button onClick={addNode} title="Add box"
-                className="self-center flex items-center gap-1 px-3 py-2 rounded-xl border-2 border-dashed border-slate-300 text-[13px] font-bold text-slate-500 hover:border-indigo-400 hover:text-indigo-600 transition">
-                <Plus className="w-4 h-4" /> box
-              </button>
             </div>
+
+            {/* Add another group joined by AND / OR */}
+            <button onClick={addGroup} className="mt-2 w-full flex items-center justify-center gap-2 px-3 py-2 border-2 border-dashed border-violet-200 rounded-lg text-[13px] font-bold text-violet-600 hover:border-violet-400 hover:bg-violet-50 transition">
+              <Plus className="w-4 h-4" /> Add group (AND / OR)
+            </button>
 
             {/* Live preview */}
             {chainLinks > 0 && (
