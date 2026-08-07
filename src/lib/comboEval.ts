@@ -54,6 +54,32 @@ function evalRule(r: ComboRaw, rule: any): boolean {
   }
 }
 
+const INVERT: Record<string, string> = { ">": "<", "<": ">", ">=": "<=", "<=": ">=", "=": "=" };
+
+// Compile a chain (boxes joined by operators, e.g. Price < 10-DMA < 20-DMA) into
+// pairwise AND rules. A value box can only sit on the right of a comparison, so
+// a value-then-metric link is flipped (value < metric  ⇔  metric > value).
+// Both-value links are meaningless for screening and are dropped.
+export function chainToRules(chain: any[] | undefined): any[] {
+  const nodes = (chain || []).filter(Boolean);
+  const rules: any[] = [];
+  for (let i = 1; i < nodes.length; i++) {
+    const a = nodes[i - 1], b = nodes[i];
+    const op = b?.op || ">";
+    const aMetric = a?.kind === "metric" ? a.metric : null;
+    const bMetric = b?.kind === "metric" ? b.metric : null;
+    if (aMetric && bMetric) {
+      rules.push({ id: `c${i}`, left: aMetric, op, rightType: "metric", rightMetric: bMetric, join: "and" });
+    } else if (aMetric && !bMetric) {
+      rules.push({ id: `c${i}`, left: aMetric, op, rightType: "value", rightVal: Number(b?.value), join: "and" });
+    } else if (!aMetric && bMetric) {
+      rules.push({ id: `c${i}`, left: bMetric, op: INVERT[op] || op, rightType: "value", rightVal: Number(a?.value), join: "and" });
+    }
+    // both values → skip
+  }
+  return rules;
+}
+
 // Combine rules left-to-right using each rule's connector to the previous one.
 function evalRules(r: ComboRaw, rules: any[] | undefined): { has: boolean; pass: boolean } {
   const valid = (rules || []).filter((x) => x && x.left && x.op);
@@ -101,7 +127,10 @@ export function evalConditions(
   const presetKeys = Object.keys(passed);
   const presetHas = presetKeys.length > 0;
   const presetPass = presetKeys.every((k) => passed[k]);
-  const rules = evalRules(r, (c as any).rules);
+  // The chain builder is the primary source; fall back to legacy freeform rules.
+  const chainRules = chainToRules((c as any).chain);
+  const effectiveRules = chainRules.length ? chainRules : (c as any).rules;
+  const rules = evalRules(r, effectiveRules);
   if (rules.has) passed.rules = rules.pass;
   const match =
     !presetHas && !rules.has

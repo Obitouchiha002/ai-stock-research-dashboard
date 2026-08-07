@@ -18,6 +18,8 @@ import {
   getPriceAlerts,
   savePriceAlert,
   deletePriceAlert,
+  getCombinations,
+  type Combination,
 } from "@/lib/storage";
 import { resolveHolding, resolveCommodity, resolveCrypto } from "@/lib/excelImport";
 
@@ -205,6 +207,7 @@ export default function MarketsPage() {
   const [custom, setCustom] = useState<{ symbol: string; label: string }[]>([]);
   const [marks, setMarks] = useState<Record<string, string>>({});
   const [plans, setPlans] = useState<Record<string, Record<string, string>>>({});
+  const [combos, setCombos] = useState<Combination[]>([]);
   const setPlan = (sym: string, field: string, value: string) => {
     setMarketPlanField(sym, field, value);
     if (field === "condOp" || field === "condVal" || field === "special") {
@@ -272,6 +275,7 @@ export default function MarketsPage() {
     setCustomByGroup(getCustomMarketByGroup());
     setMarks(getMarketMarks());
     setPlans(getMarketPlans());
+    setCombos(getCombinations());
     // Only fetch if the cache is missing or stale — otherwise show it instantly.
     const fresh = Object.keys(mktCache.quotes).length > 0 && Date.now() - mktCache.at < MKT_TTL;
     if (!fresh) load();
@@ -561,13 +565,14 @@ export default function MarketsPage() {
                 <th className="text-center font-medium px-2 py-3 text-emerald-600">T2</th>
                 <th className="text-left font-medium px-3 py-3">Remarks</th>
                 <th className="text-left font-medium px-3 py-3 text-indigo-600">Alert Trigger</th>
+                <th className="text-left font-medium px-3 py-3 text-violet-600">Combo</th>
                 <th className="w-10" />
               </tr>
             </thead>
             <tbody>
               {rows.length === 0 ? (
                 <tr>
-                  <td colSpan={11} className="px-5 py-12 text-center text-slate-400 font-medium">
+                  <td colSpan={12} className="px-5 py-12 text-center text-slate-400 font-medium">
                     {trendFilter !== "all"
                       ? trendLoading
                         ? "Analysing trends…"
@@ -637,6 +642,17 @@ export default function MarketsPage() {
                         </div>
                         {plans[r.symbol]?.condVal != null && String(plans[r.symbol]?.condVal) !== "" && (
                           <div className="text-[10px] text-emerald-600 font-bold mt-0.5">🔔 alert on</div>
+                        )}
+                      </td>
+                      <td className="px-3 py-3.5">
+                        <select value={plans[r.symbol]?.comboId || ""} onChange={(e) => setPlan(r.symbol, "comboId", e.target.value)}
+                          title="Notify me when this matches a saved combination"
+                          className={`max-w-[150px] px-2 py-1 border rounded text-[12px] font-bold outline-none focus:ring-2 focus:ring-violet-200 ${plans[r.symbol]?.comboId ? "bg-violet-50 border-violet-300 text-violet-700" : "bg-slate-50 border-slate-200 text-slate-500"}`}>
+                          <option value="">— attach —</option>
+                          {combos.map((c) => <option key={c.id} value={c.id}>{c.label ? `${c.label} · ` : ""}{c.name}</option>)}
+                        </select>
+                        {plans[r.symbol]?.comboId && combos.some((c) => c.id === plans[r.symbol]?.comboId) && (
+                          <div className="text-[10px] text-violet-600 font-bold mt-0.5">🎯 watching</div>
                         )}
                       </td>
                       <td className="pr-4">

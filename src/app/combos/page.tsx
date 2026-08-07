@@ -54,8 +54,42 @@ const STACK_LEVELS = [
 const stackPreview = (levels: string[]) =>
   STACK_LEVELS.filter((l) => levels.includes(l.v)).map((l) => l.label).join(" > ");
 
-// A sensible default combo, ready to run.
-const DEFAULT_COND: ScreenConditions = { maStack: true, stackLevels: ["price", "10", "20", "50", "200"], nearHigh: true, nearPct: 5, rsiStrong: true, rsiMin: 55, earningsUp: true };
+const opLabel = (v?: string) => OP_UI.find((o) => o.v === v)?.l || v || ">";
+
+// Short human summary of a saved combo (chain preview + count of extra filters).
+function comboSummary(c: ScreenConditions): string {
+  const chain = c.chain || [];
+  const chainStr = chain.length >= 2
+    ? chain.map((n, i) => (i > 0 ? ` ${opLabel(n.op)} ` : "") + (n.kind === "value" ? String(n.value ?? 0) : (RULE_METRICS.find((m) => m.k === n.metric)?.label || n.metric))).join("")
+    : "";
+  const extras = Object.keys(c).filter((k) => (c as any)[k] === true).length;
+  if (chainStr && extras) return `${chainStr} · +${extras} filter${extras === 1 ? "" : "s"}`;
+  if (chainStr) return chainStr;
+  return extras ? `${extras} filter${extras === 1 ? "" : "s"}` : "—";
+}
+
+// Ready-made chains a user can drop in with one click.
+const CHAIN_PRESETS: { label: string; chain: any[] }[] = [
+  { label: "Uptrend stack · P > 20 > 50 > 200", chain: [
+    { kind: "metric", metric: "price" }, { kind: "metric", metric: "dma20", op: ">" },
+    { kind: "metric", metric: "dma50", op: ">" }, { kind: "metric", metric: "dma200", op: ">" }] },
+  { label: "Pullback · P < 10 < 20 DMA", chain: [
+    { kind: "metric", metric: "price" }, { kind: "metric", metric: "dma10", op: "<" },
+    { kind: "metric", metric: "dma20", op: "<" }] },
+  { label: "Golden · 50 > 200 DMA", chain: [
+    { kind: "metric", metric: "dma50" }, { kind: "metric", metric: "dma200", op: ">" }] },
+  { label: "Momentum · RSI > 60", chain: [
+    { kind: "metric", metric: "rsi" }, { kind: "value", value: 60, op: ">" }] },
+];
+
+// A sensible default chain, ready to run: Price above its 20 & 50 DMA.
+const DEFAULT_COND: ScreenConditions = {
+  chain: [
+    { id: "n1", kind: "metric", metric: "price" },
+    { id: "n2", kind: "metric", metric: "dma20", op: ">" },
+    { id: "n3", kind: "metric", metric: "dma50", op: ">" },
+  ],
+};
 
 export default function CombosPage() {
   const [cond, setCond] = useState<ScreenConditions>(DEFAULT_COND);
@@ -77,6 +111,7 @@ export default function CombosPage() {
   useEffect(() => { setCombos(getCombinations()); }, []);
 
   const [addOpen, setAddOpen] = useState(false);
+  const [showExtra, setShowExtra] = useState(false);
   const toggle = (k: keyof ScreenConditions) => setCond((c) => ({ ...c, [k]: !c[k] }));
   const enabledCount = COND_META.filter((m) => cond[m.key]).length;
   const numI = "w-12 px-1.5 py-0.5 bg-white border border-slate-200 rounded text-right text-[12px] outline-none focus:ring-2 focus:ring-indigo-200";
@@ -134,11 +169,19 @@ export default function CombosPage() {
   });
   const curLevels = cond.stackLevels ?? ["price", "10", "20", "50", "200"];
 
-  // Custom rules ("design your own").
+  // ---- Chain builder (primary): boxes joined by operators, all AND-ed ----
+  const chain = cond.chain || [];
+  const setChain = (fn: (ch: any[]) => any[]) => setCond((c) => ({ ...c, chain: fn(c.chain || []) }));
+  const addNode = () => setChain((ch) => [...ch, { id: genId(), kind: "metric", metric: "dma50", op: ">" }]);
+  const updateNode = (id: string, patch: any) => setChain((ch) => ch.map((n) => (n.id === id ? { ...n, ...patch } : n)));
+  const removeNode = (id: string) => setChain((ch) => ch.filter((n) => n.id !== id));
+  const loadChainPreset = (c: any[]) => setCond((prev) => ({ ...prev, chain: c.map((n, i) => ({ ...n, id: `n${i}-${genId()}` })) }));
+  const nodeLabel = (n: any) => (n.kind === "value" ? String(n.value ?? 0) : (RULE_METRICS.find((m) => m.k === n.metric)?.label || n.metric));
+  const chainPreview = chain.map((n, i) => (i > 0 ? ` ${opLabel(n.op)} ` : "") + nodeLabel(n)).join("");
+  const chainLinks = Math.max(0, chain.length - 1); // number of comparisons
+
+  // Legacy freeform rules (kept only so previously-saved combos still evaluate).
   const rules = cond.rules || [];
-  const addRule = () => setCond((c) => ({ ...c, rules: [...(c.rules || []), { id: genId(), left: "price", op: ">" as const, rightType: "value" as const, rightVal: 0, join: "and" as const }] }));
-  const updateRule = (id: string, patch: any) => setCond((c) => ({ ...c, rules: (c.rules || []).map((r) => (r.id === id ? { ...r, ...patch } : r)) }));
-  const removeRule = (id: string) => setCond((c) => ({ ...c, rules: (c.rules || []).filter((r) => r.id !== id) }));
 
   const flash = (m: string) => { setToast(m); setTimeout(() => setToast(""), 1800); };
 
@@ -154,7 +197,7 @@ export default function CombosPage() {
     setErr("");
     const symbols = gatherSymbols();
     if (!symbols.length) { setErr("Pick a universe — add your Watchlist/Portfolio or paste some symbols."); return; }
-    if (enabledCount === 0 && rules.length === 0) { setErr("Add at least one condition or rule."); return; }
+    if (enabledCount === 0 && chainLinks === 0 && rules.length === 0) { setErr("Build a chain (2+ boxes) or add an extra filter."); return; }
     setRunning(true); setResults(null); setMeta(null);
     try {
       const res = await fetch("/api/screen", {
@@ -204,48 +247,77 @@ export default function CombosPage() {
       <div className="grid lg:grid-cols-3 gap-6">
         {/* Builder */}
         <div className="lg:col-span-2 space-y-4">
+          {/* Chain builder — the primary, simple way to build a combo */}
           <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-5">
-            <div className="flex items-center justify-between mb-3">
-              <h3 className="font-black text-slate-800">Conditions <span className="text-slate-400 font-bold text-sm">(all must match)</span></h3>
-              <span className="text-[11px] font-bold text-indigo-600 bg-indigo-50 px-2 py-1 rounded">{enabledCount} on</span>
+            <div className="flex items-center justify-between mb-1">
+              <h3 className="font-black text-slate-800">Build your combination</h3>
+              <span className="text-[11px] font-bold text-indigo-600 bg-indigo-50 px-2 py-1 rounded">{chainLinks} compare{chainLinks === 1 ? "" : "s"}</span>
             </div>
-            {enabledCount === 0 ? (
-              <p className="text-[13px] text-slate-400 py-4 text-center border-2 border-dashed border-slate-200 rounded-xl">No conditions yet — click “Add condition” below to start.</p>
-            ) : (
-              <div className="space-y-1.5">
-                {COND_META.filter((m) => cond[m.key]).map((m) => (
-                  <div key={m.key} className="flex items-center gap-3 rounded-lg border border-indigo-200 bg-indigo-50/40 px-3 py-2">
-                    <span className="text-[13px] font-bold text-slate-800 whitespace-nowrap">{m.label}</span>
-                    <div className="flex-1 min-w-0">{renderControl(m.key)}</div>
-                    <button onClick={() => toggle(m.key)} className="text-slate-300 hover:text-rose-600 shrink-0" title="Remove condition"><X className="w-4 h-4" /></button>
-                  </div>
-                ))}
-              </div>
-            )}
+            <p className="text-[11px] text-slate-400 mb-3">
+              Chain boxes with an operator between each — e.g. <b>Price &lt; 10-DMA &lt; 20-DMA &gt; 50-DMA</b>. Pick a metric (or a plain value) in every box. All links must be true.
+            </p>
 
-            {/* Add condition */}
-            <div className="relative mt-2">
-              <button onClick={() => setAddOpen((v) => !v)} className="w-full flex items-center justify-center gap-2 px-3 py-2 border-2 border-dashed border-slate-200 rounded-lg text-[13px] font-bold text-slate-500 hover:border-indigo-300 hover:text-indigo-600 transition">
-                <Plus className="w-4 h-4" /> Add condition
-              </button>
-              {addOpen && (
-                <>
-                  <div className="fixed inset-0 z-10" onClick={() => setAddOpen(false)} />
-                  <div className="absolute top-full mt-1 left-0 right-0 z-20 bg-white border border-slate-200 rounded-xl shadow-xl p-1.5 max-h-72 overflow-y-auto">
-                    {COND_META.filter((m) => !cond[m.key]).length === 0 ? (
-                      <p className="text-[12px] text-slate-400 p-2 text-center">All conditions added.</p>
-                    ) : (
-                      COND_META.filter((m) => !cond[m.key]).map((m) => (
-                        <button key={m.key} onClick={() => { toggle(m.key); setAddOpen(false); }} className="w-full text-left px-3 py-2 rounded-lg hover:bg-indigo-50 transition">
-                          <div className="text-[13px] font-bold text-slate-800">{m.label}</div>
-                          <div className="text-[11px] text-slate-400">{m.hint}</div>
-                        </button>
-                      ))
+            {/* Quick starts */}
+            <div className="flex flex-wrap gap-1.5 mb-3">
+              {CHAIN_PRESETS.map((p) => (
+                <button key={p.label} onClick={() => loadChainPreset(p.chain)}
+                  className="px-2.5 py-1 rounded-lg text-[11px] font-bold bg-slate-50 border border-slate-200 text-slate-600 hover:border-indigo-300 hover:text-indigo-600 transition">
+                  {p.label}
+                </button>
+              ))}
+            </div>
+
+            {/* The boxes */}
+            <div className="flex flex-wrap items-stretch gap-2 rounded-xl border-2 border-dashed border-slate-200 p-3">
+              {chain.length === 0 && (
+                <span className="text-[13px] text-slate-400 self-center">No boxes yet — click “+ box” to start.</span>
+              )}
+              {chain.map((n, i) => (
+                <React.Fragment key={n.id}>
+                  {i > 0 && (
+                    <select value={n.op || ">"} onChange={(e) => updateNode(n.id, { op: e.target.value })}
+                      title="Operator"
+                      className="self-center px-2 py-1.5 bg-slate-900 text-white rounded-lg text-[15px] font-black outline-none cursor-pointer focus:ring-2 focus:ring-indigo-300">
+                      {OP_UI.map((o) => <option key={o.v} value={o.v} className="bg-white text-slate-800">{o.l}</option>)}
+                    </select>
+                  )}
+                  <div className="relative flex flex-col items-center justify-center gap-1 min-w-[104px] rounded-xl border-2 border-indigo-200 bg-indigo-50/50 px-3 pt-4 pb-2">
+                    {chain.length > 1 && (
+                      <button onClick={() => removeNode(n.id)} title="Remove box"
+                        className="absolute -top-2 -right-2 w-5 h-5 rounded-full bg-white border border-slate-200 text-slate-400 hover:text-rose-600 hover:border-rose-300 flex items-center justify-center shadow-sm">
+                        <X className="w-3 h-3" />
+                      </button>
+                    )}
+                    <select
+                      value={n.kind === "value" ? "__value" : (n.metric || "price")}
+                      onChange={(e) => {
+                        const v = e.target.value;
+                        if (v === "__value") updateNode(n.id, { kind: "value", value: n.value ?? 0, metric: undefined });
+                        else updateNode(n.id, { kind: "metric", metric: v, value: undefined });
+                      }}
+                      className="w-full text-center text-[13px] font-black text-slate-800 bg-transparent outline-none cursor-pointer">
+                      {RULE_METRICS.map((m) => <option key={m.k} value={m.k}>{m.label}</option>)}
+                      <option value="__value">— value —</option>
+                    </select>
+                    {n.kind === "value" && (
+                      <input type="number" value={n.value ?? 0} onChange={(e) => updateNode(n.id, { value: Number(e.target.value) })}
+                        className="w-20 px-1.5 py-0.5 bg-white border border-indigo-200 rounded text-center text-[13px] font-bold outline-none focus:ring-2 focus:ring-indigo-200" />
                     )}
                   </div>
-                </>
-              )}
+                </React.Fragment>
+              ))}
+              <button onClick={addNode} title="Add box"
+                className="self-center flex items-center gap-1 px-3 py-2 rounded-xl border-2 border-dashed border-slate-300 text-[13px] font-bold text-slate-500 hover:border-indigo-400 hover:text-indigo-600 transition">
+                <Plus className="w-4 h-4" /> box
+              </button>
             </div>
+
+            {/* Live preview */}
+            {chainLinks > 0 && (
+              <div className="mt-2 text-[13px] font-bold text-indigo-700 bg-indigo-50 rounded-lg px-3 py-2">
+                {chainPreview}
+              </div>
+            )}
 
             {/* Save combo */}
             <div className="mt-4 pt-4 border-t border-slate-100 flex flex-wrap items-end gap-2">
@@ -261,51 +333,50 @@ export default function CombosPage() {
             </div>
           </div>
 
-          {/* Design your own rules */}
+          {/* Extra filters (optional presets) — collapsed by default */}
           <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-5">
-            <div className="flex items-center justify-between mb-1">
-              <h3 className="font-black text-slate-800">Design your own rules</h3>
-              <span className="text-[11px] font-bold text-slate-400">{rules.length} rule{rules.length === 1 ? "" : "s"}</span>
-            </div>
-            <p className="text-[11px] text-slate-400 mb-3">Compare any metric to a value or another metric — e.g. <b>Price ≥ 200-DMA</b>, <b>RSI &lt; 30</b>. Combine with AND / OR.</p>
-            <div className="space-y-1.5">
-              {rules.map((r, i) => (
-                <div key={r.id}>
-                  {i > 0 && (
-                    <div className="flex justify-center my-1">
-                      <div className="flex rounded-lg bg-slate-100 p-0.5">
-                        {(["and", "or"] as const).map((j) => (
-                          <button key={j} onClick={() => updateRule(r.id, { join: j })} className={`px-2.5 py-0.5 rounded text-[11px] font-black uppercase transition ${(r.join || "and") === j ? "bg-white text-indigo-700 shadow-sm" : "text-slate-400"}`}>{j}</button>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-                  <div className="flex flex-wrap items-center gap-1.5 rounded-lg border border-slate-200 bg-slate-50/50 p-2">
-                    <select value={r.left} onChange={(e) => updateRule(r.id, { left: e.target.value })} className="px-2 py-1 bg-white border border-slate-200 rounded text-[12px] font-semibold outline-none focus:ring-2 focus:ring-indigo-200">
-                      {RULE_METRICS.map((m) => <option key={m.k} value={m.k}>{m.label}</option>)}
-                    </select>
-                    <select value={r.op} onChange={(e) => updateRule(r.id, { op: e.target.value })} className="px-2 py-1 bg-white border border-slate-200 rounded text-[13px] font-black outline-none focus:ring-2 focus:ring-indigo-200">
-                      {OP_UI.map((o) => <option key={o.v} value={o.v}>{o.l}</option>)}
-                    </select>
-                    <select value={r.rightType} onChange={(e) => updateRule(r.id, { rightType: e.target.value, ...(e.target.value === "metric" && !r.rightMetric ? { rightMetric: "dma50" } : {}) })} className="px-2 py-1 bg-white border border-slate-200 rounded text-[12px] font-semibold outline-none focus:ring-2 focus:ring-indigo-200">
-                      <option value="value">value</option>
-                      <option value="metric">metric</option>
-                    </select>
-                    {r.rightType === "metric" ? (
-                      <select value={r.rightMetric || "dma50"} onChange={(e) => updateRule(r.id, { rightMetric: e.target.value })} className="px-2 py-1 bg-white border border-slate-200 rounded text-[12px] font-semibold outline-none focus:ring-2 focus:ring-indigo-200">
-                        {RULE_METRICS.map((m) => <option key={m.k} value={m.k}>{m.label}</option>)}
-                      </select>
-                    ) : (
-                      <input type="number" value={r.rightVal ?? ""} onChange={(e) => updateRule(r.id, { rightVal: Number(e.target.value) })} placeholder="value" className="w-24 px-2 py-1 bg-white border border-slate-200 rounded text-right text-[12px] outline-none focus:ring-2 focus:ring-indigo-200" />
-                    )}
-                    <button onClick={() => removeRule(r.id)} className="ml-auto text-slate-300 hover:text-rose-600" title="Remove rule"><X className="w-4 h-4" /></button>
-                  </div>
-                </div>
-              ))}
-            </div>
-            <button onClick={addRule} className="mt-2 w-full flex items-center justify-center gap-2 px-3 py-2 border-2 border-dashed border-slate-200 rounded-lg text-[13px] font-bold text-slate-500 hover:border-indigo-300 hover:text-indigo-600 transition">
-              <Plus className="w-4 h-4" /> Add rule
+            <button onClick={() => setShowExtra((v) => !v)} className="w-full flex items-center justify-between">
+              <h3 className="font-black text-slate-800">Extra filters <span className="text-slate-400 font-bold text-sm">(optional)</span></h3>
+              <span className="text-[11px] font-bold text-slate-500">{enabledCount > 0 ? `${enabledCount} on · ` : ""}{showExtra ? "hide" : "show"}</span>
             </button>
+            {showExtra && (
+              <div className="mt-3">
+                <p className="text-[11px] text-slate-400 mb-2">Add ready-made filters like Near 52-week high, ADX strength, EPS growth. These AND with your chain above.</p>
+                {enabledCount > 0 && (
+                  <div className="space-y-1.5 mb-2">
+                    {COND_META.filter((m) => cond[m.key]).map((m) => (
+                      <div key={m.key} className="flex items-center gap-3 rounded-lg border border-indigo-200 bg-indigo-50/40 px-3 py-2">
+                        <span className="text-[13px] font-bold text-slate-800 whitespace-nowrap">{m.label}</span>
+                        <div className="flex-1 min-w-0">{renderControl(m.key)}</div>
+                        <button onClick={() => toggle(m.key)} className="text-slate-300 hover:text-rose-600 shrink-0" title="Remove condition"><X className="w-4 h-4" /></button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                <div className="relative">
+                  <button onClick={() => setAddOpen((v) => !v)} className="w-full flex items-center justify-center gap-2 px-3 py-2 border-2 border-dashed border-slate-200 rounded-lg text-[13px] font-bold text-slate-500 hover:border-indigo-300 hover:text-indigo-600 transition">
+                    <Plus className="w-4 h-4" /> Add filter
+                  </button>
+                  {addOpen && (
+                    <>
+                      <div className="fixed inset-0 z-10" onClick={() => setAddOpen(false)} />
+                      <div className="absolute top-full mt-1 left-0 right-0 z-20 bg-white border border-slate-200 rounded-xl shadow-xl p-1.5 max-h-72 overflow-y-auto">
+                        {COND_META.filter((m) => !cond[m.key]).length === 0 ? (
+                          <p className="text-[12px] text-slate-400 p-2 text-center">All filters added.</p>
+                        ) : (
+                          COND_META.filter((m) => !cond[m.key]).map((m) => (
+                            <button key={m.key} onClick={() => { toggle(m.key); setAddOpen(false); }} className="w-full text-left px-3 py-2 rounded-lg hover:bg-indigo-50 transition">
+                              <div className="text-[13px] font-bold text-slate-800">{m.label}</div>
+                              <div className="text-[11px] text-slate-400">{m.hint}</div>
+                            </button>
+                          ))
+                        )}
+                      </div>
+                    </>
+                  )}
+                </div>
+              </div>
+            )}
           </div>
 
           {/* Universe + Run */}
@@ -400,9 +471,10 @@ export default function CombosPage() {
         <div className="space-y-3">
           <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-5">
             <h3 className="font-black text-slate-800 mb-1 flex items-center gap-2"><Bookmark className="w-4 h-4 text-indigo-600" /> Saved combinations</h3>
-            <p className="text-[11px] text-emerald-600 font-semibold mb-3 flex items-center gap-1">
-              <span className="w-1.5 h-1.5 bg-emerald-500 rounded-full" /> Auto-watched in the background — you&apos;ll get a notification when your Watchlist/Portfolio stocks match.
+            <p className="text-[11px] text-emerald-600 font-semibold mb-1 flex items-center gap-1">
+              <span className="w-1.5 h-1.5 bg-emerald-500 rounded-full" /> Auto-watched in the background — when a Watchlist/Portfolio stock matches you get a bell notification, a browser pop-up, and an email.
             </p>
+            <p className="text-[10px] text-slate-400 mb-3">Email uses the address set on the <Link href="/alerts" className="text-indigo-600 font-semibold hover:underline">Alerts</Link> page. Checks run while the app is open (on load, then every 30 min).</p>
             {combos.length === 0 ? (
               <p className="text-[13px] text-slate-400">None yet — build one and hit Save.</p>
             ) : (
@@ -414,7 +486,7 @@ export default function CombosPage() {
                         {c.label && <span className="text-[10px] font-black text-indigo-700 bg-indigo-50 px-1.5 py-0.5 rounded">{c.label}</span>}
                         {c.name}
                       </div>
-                      <div className="text-[11px] text-slate-400">{Object.keys(c.conditions).filter((k) => (c.conditions as any)[k] === true).length} conditions</div>
+                      <div className="text-[11px] text-slate-400 truncate">{comboSummary(c.conditions)}</div>
                     </button>
                     <button onClick={() => delCombo(c.id)} className="opacity-0 group-hover:opacity-100 text-slate-300 hover:text-rose-600"><Trash2 className="w-4 h-4" /></button>
                   </div>

@@ -822,6 +822,19 @@ export type ScreenConditions = {
     rightMetric?: string;
     join?: "and" | "or";
   }[];
+  // Chain builder: a left-to-right sequence of boxes (metric or a plain value)
+  // joined by operators, e.g. Price < 10-DMA < 20-DMA > 50-DMA. Every link is
+  // AND-ed. `op` on a node is the operator connecting it to the PREVIOUS node
+  // (the first node has none). This is the primary, simple builder; it is
+  // compiled to pairwise rules by comboEval.
+  chain?: ChainNode[];
+};
+export type ChainNode = {
+  id: string;
+  kind: "metric" | "value";
+  metric?: string; // when kind === "metric" (a RULE_METRICS key)
+  value?: number; // when kind === "value"
+  op?: ">" | ">=" | "<" | "<=" | "="; // operator to the previous node
 };
 export type Combination = {
   id: string;

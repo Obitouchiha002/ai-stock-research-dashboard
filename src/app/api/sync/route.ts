@@ -98,6 +98,9 @@ export async function POST(req: NextRequest) {
       }
       // Expire untouched bundles after 90 days so abandoned codes clean up.
       await redis(["SET", keyFor(code), payload, "EX", String(90 * 24 * 60 * 60)]);
+      // Register the code so the server-side alert cron can iterate every user's
+      // bundle even when their browser is closed (best-effort; ignore failures).
+      try { await redis(["SADD", "sync:index", code]); } catch { /* non-fatal */ }
       return NextResponse.json({ ok: true, updatedAt });
     }
 

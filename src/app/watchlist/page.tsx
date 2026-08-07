@@ -30,6 +30,8 @@ import {
   getPriceAlerts,
   savePriceAlert,
   deletePriceAlert,
+  getCombinations,
+  type Combination,
 } from "@/lib/storage";
 import {
   resolveHolding,
@@ -124,6 +126,7 @@ export default function WatchlistPage() {
   const [refreshing, setRefreshing] = useState(false);
   const [subcats, setSubcats] = useState<Record<string, string[]>>({});
   const [newSub, setNewSub] = useState("");
+  const [combos, setCombos] = useState<Combination[]>([]);
 
   // Quick Add
   const [showAdd, setShowAdd] = useState(false);
@@ -141,6 +144,7 @@ export default function WatchlistPage() {
   const reload = () => {
     setWatchlist(getWatchlist());
     setSubcats(getWatchlistSubcats());
+    setCombos(getCombinations());
   };
 
   // One-time heal: fix commodity/crypto rows saved with a non-Yahoo symbol
@@ -731,6 +735,7 @@ export default function WatchlistPage() {
                   <th className="p-3 text-xs font-bold text-emerald-600 uppercase tracking-widest whitespace-nowrap text-center">T2</th>
                   <th className="p-3 text-xs font-bold text-slate-500 uppercase tracking-widest whitespace-nowrap">Remarks</th>
                   <th className="p-3 text-xs font-bold text-indigo-600 uppercase tracking-widest whitespace-nowrap">Alert Trigger</th>
+                  <th className="p-3 text-xs font-bold text-violet-600 uppercase tracking-widest whitespace-nowrap">Combo</th>
                   <th className="p-4 text-xs font-bold text-slate-500 uppercase tracking-widest whitespace-nowrap text-right">Actions</th>
                 </tr>
               </thead>
@@ -810,6 +815,20 @@ export default function WatchlistPage() {
                         </div>
                         {item.condVal != null && String(item.condVal) !== "" && (
                           <div className="text-[10px] text-emerald-600 font-bold mt-0.5">🔔 alert on</div>
+                        )}
+                      </td>
+                      <td className="p-3">
+                        <select value={item.comboId || ""} onChange={(e) => updateWL(item, "comboId", e.target.value)}
+                          title="Notify me when this stock matches a saved combination"
+                          className={`max-w-[150px] px-2 py-1 border rounded text-[12px] font-bold outline-none focus:ring-2 focus:ring-violet-200 ${item.comboId ? "bg-violet-50 border-violet-300 text-violet-700" : "bg-slate-50 border-slate-200 text-slate-500"}`}>
+                          <option value="">— attach —</option>
+                          {combos.map((c) => <option key={c.id} value={c.id}>{c.label ? `${c.label} · ` : ""}{c.name}</option>)}
+                        </select>
+                        {item.comboId && !combos.some((c) => c.id === item.comboId) && (
+                          <div className="text-[10px] text-rose-500 mt-0.5">combo deleted</div>
+                        )}
+                        {item.comboId && combos.some((c) => c.id === item.comboId) && (
+                          <div className="text-[10px] text-violet-600 font-bold mt-0.5">🎯 watching</div>
                         )}
                       </td>
                       <td className="p-4 text-right">
