@@ -147,6 +147,9 @@ async function handle(req: NextRequest) {
   }
 
   const origin = url.origin || (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : "");
+  // One-off maintenance: ?reset=1 clears the per-user "already-sent" memory so
+  // whatever currently matches fires (and emails) once on the next evaluation.
+  const reset = url.searchParams.get("reset") === "1";
   const codesRes = await redis(["SMEMBERS", "sync:index"]);
   const codes: string[] = Array.isArray(codesRes?.result) ? codesRes.result : [];
 
@@ -205,12 +208,14 @@ async function handle(req: NextRequest) {
         } catch { /* skip combos this run */ }
       }
 
-      // Load prior seen-state, evaluate, persist.
+      // Load prior seen-state (unless resetting), evaluate, persist.
       let prev: Seen = { levels: [], live: [] };
-      try {
-        const sRes = await redis(["GET", `cronseen:${code}`]);
-        if (sRes?.result) prev = typeof sRes.result === "string" ? JSON.parse(sRes.result) : sRes.result;
-      } catch { /* fresh */ }
+      if (!reset) {
+        try {
+          const sRes = await redis(["GET", `cronseen:${code}`]);
+          if (sRes?.result) prev = typeof sRes.result === "string" ? JSON.parse(sRes.result) : sRes.result;
+        } catch { /* fresh */ }
+      }
 
       const { lines, seen } = evaluate(bundle, quotes, rows, prev);
       await redis(["SET", `cronseen:${code}`, JSON.stringify(seen), "EX", String(30 * 24 * 60 * 60)]);
