@@ -53,6 +53,7 @@ type Leg = { symbol: string; label: string; kind: string; changePct: number; win
 
 export default function ComparePage() {
   const [mode, setMode] = useState<"vs" | "index" | "leaderboard">("vs");
+  const [mkt, setMkt] = useState<"US" | "IN">("US");
   const [base, setBase] = useState("");
   const [peers, setPeers] = useState<string[]>([]);
   const [bench, setBench] = useState("");
@@ -71,6 +72,13 @@ export default function ComparePage() {
 
   const periodLabel = PERIODS.find((p) => p.k === period)?.label || period;
 
+  // Index dropdowns show only the chosen market's indices (+ market-neutral
+  // Global/Commodities/Crypto) so they aren't cluttered with the other market.
+  const indexGroups = useMemo(() => MARKET_INDICES.filter((g) =>
+    g.group === "Global Indices" || g.group === "Commodities" || g.group === "Crypto" ||
+    (mkt === "US" ? g.group === "US Indices" : g.group === "Indian Indices")
+  ), [mkt]);
+
   const restored = useRef(false);
   // Restore the last session (survives refresh + tab switches), else seed from
   // the user's lists / a ?symbol= deep-link.
@@ -82,6 +90,7 @@ export default function ComparePage() {
     if (saved && !deep) {
       restored.current = true;
       if (saved.mode) setMode(saved.mode);
+      if (saved.mkt) setMkt(saved.mkt);
       if (saved.base) setBase(saved.base);
       if (Array.isArray(saved.peers)) setPeers(saved.peers);
       if (saved.bench != null) setBench(saved.bench);
@@ -107,9 +116,9 @@ export default function ComparePage() {
   // Persist everything so a refresh or tab switch keeps the results.
   useEffect(() => {
     try {
-      sessionStorage.setItem("sa_compare_v1", JSON.stringify({ mode, base, peers, bench, period, data, longWin, baseChart }));
+      sessionStorage.setItem("sa_compare_v1", JSON.stringify({ mode, mkt, base, peers, bench, period, data, longWin, baseChart }));
     } catch { /* quota — skip */ }
-  }, [mode, base, peers, bench, period, data, longWin, baseChart]);
+  }, [mode, mkt, base, peers, bench, period, data, longWin, baseChart]);
 
   // autocomplete
   useEffect(() => {
@@ -185,11 +194,20 @@ export default function ComparePage() {
   }, [period, bench, peers]);
 
   // ---- derived ----------------------------------------------------------
-  // Dedupe by symbol (the API's auto-benchmark can collide with a peer the user added).
+  // Dedupe by symbol (the API's auto-benchmark can collide with a peer the user
+  // added), then order the way the user built it: base first, peers in the order
+  // they were added, benchmark (e.g. S&P 500) last.
   const legs: Leg[] = useMemo(() => {
     const seen = new Set<string>();
-    return ((data?.legs || []) as Leg[]).filter((l) => (seen.has(l.symbol) ? false : (seen.add(l.symbol), true)));
-  }, [data]);
+    const deduped = ((data?.legs || []) as Leg[]).filter((l) => (seen.has(l.symbol) ? false : (seen.add(l.symbol), true)));
+    const orderIdx = (l: Leg) => {
+      if (l.kind === "stock") return -1;         // base on top
+      if (l.kind === "benchmark") return 9999;   // benchmark at the bottom
+      const pi = peers.indexOf(l.symbol);         // peers in entered order
+      return pi === -1 ? 5000 : pi;
+    };
+    return deduped.sort((a, b) => orderIdx(a) - orderIdx(b));
+  }, [data, peers]);
   const baseLeg = legs.find((l) => l.kind === "stock");
   const baseReturn = baseLeg?.changePct ?? 0;
   const chartData = useMemo(() => {
@@ -253,6 +271,14 @@ export default function ComparePage() {
       {/* Controls */}
       <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-4 mb-4">
         <div className="flex flex-wrap items-end gap-4">
+          <div>
+            <label className="block text-[11px] font-bold text-slate-400 uppercase tracking-wide mb-1">Market</label>
+            <div className="flex rounded-lg bg-slate-100 p-0.5">
+              {(["US", "IN"] as const).map((m) => (
+                <button key={m} onClick={() => setMkt(m)} className={`px-3 py-1.5 rounded-md text-xs font-black transition ${mkt === m ? "bg-white text-indigo-700 shadow-sm" : "text-slate-500"}`}>{m === "US" ? "🇺🇸 US" : "🇮🇳 Indian"}</button>
+              ))}
+            </div>
+          </div>
           {mode !== "leaderboard" && (
             <div>
               <label className="block text-[11px] font-bold text-slate-400 uppercase tracking-wide mb-1">Base stock</label>
@@ -288,7 +314,7 @@ export default function ComparePage() {
                 <select value="" onChange={(e) => { if (e.target.value) addPeer(e.target.value); }}
                   className="px-2 py-1.5 bg-white border border-dashed border-slate-300 rounded-lg text-[12px] font-bold text-slate-600 outline-none focus:ring-2 focus:ring-indigo-200 cursor-pointer">
                   <option value="">＋ index from Markets</option>
-                  {MARKET_INDICES.map((g) => (
+                  {indexGroups.map((g) => (
                     <optgroup key={g.group} label={g.group}>
                       {g.items.map((it) => <option key={it.v} value={it.v}>{it.label}</option>)}
                     </optgroup>
@@ -307,7 +333,7 @@ export default function ComparePage() {
               <label className="block text-[11px] font-bold text-slate-400 uppercase tracking-wide mb-1">Benchmark (from Markets)</label>
               <select value={bench} onChange={(e) => setBench(e.target.value)} className="px-3 py-2 bg-white border border-slate-200 rounded-lg text-sm font-bold text-slate-700 outline-none focus:ring-2 focus:ring-indigo-200 max-w-[16rem]">
                 <option value="">Auto (broad index)</option>
-                {MARKET_INDICES.map((g) => (
+                {indexGroups.map((g) => (
                   <optgroup key={g.group} label={g.group}>
                     {g.items.map((it) => <option key={it.v} value={it.v}>{it.label}</option>)}
                   </optgroup>
