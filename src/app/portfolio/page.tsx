@@ -129,7 +129,14 @@ export default function PortfolioPage() {
   const [recentSort, setRecentSort] = useState(false);
   const [order, setOrder] = useState<string[]>([]);
   const [dragId, setDragId] = useState<string | null>(null);
-  useEffect(() => { setOrder(getPortfolioOrder()); }, []);
+  useEffect(() => {
+    setOrder(getPortfolioOrder());
+    // Deep-link: /portfolio?view=earnings opens the Earnings Tracker directly.
+    if (typeof window !== "undefined") {
+      const v = new URLSearchParams(window.location.search).get("view");
+      if (v === "earnings" || v === "plan") setView(v);
+    }
+  }, []);
   const reorderHolding = (from: string, to: string) => {
     if (!from || from === to) return;
     const seq = visibleHoldings.map((h) => h.id);

@@ -4,7 +4,7 @@ import React, { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import {
   SlidersHorizontal, Play, Save, Trash2, Bookmark, Check, X, Loader2,
-  Star, Briefcase, Activity, Sparkles, Plus,
+  Star, Briefcase, Activity, Sparkles, Plus, Scale, BarChart3,
 } from "lucide-react";
 import {
   getWatchlist, getPortfolio, saveToWatchlist, inferCategory,
@@ -504,6 +504,8 @@ export default function CombosPage() {
                             <div className="flex items-center justify-end gap-1">
                               <button onClick={() => addWL(r)} className="p-1.5 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg" title="Add to Watchlist"><Star className="w-4 h-4" /></button>
                               <button onClick={() => addPF(r)} className="p-1.5 text-slate-400 hover:text-emerald-600 hover:bg-emerald-50 rounded-lg" title="Add to Portfolio"><Briefcase className="w-4 h-4" /></button>
+                              <Link href={`/compare?symbol=${r.symbol}`} className="p-1.5 text-slate-400 hover:text-violet-600 hover:bg-violet-50 rounded-lg" title="Open in Compare & Relative Strength"><Scale className="w-4 h-4" /></Link>
+                              <Link href={`/portfolio?view=earnings`} className="p-1.5 text-slate-400 hover:text-amber-600 hover:bg-amber-50 rounded-lg" title="Open Earnings Tracker"><BarChart3 className="w-4 h-4" /></Link>
                               <Link href={`/analyze?symbol=${r.symbol}`} className="p-1.5 text-slate-400 hover:text-slate-800 hover:bg-slate-100 rounded-lg" title="Analyze"><Activity className="w-4 h-4" /></Link>
                             </div>
                           </td>

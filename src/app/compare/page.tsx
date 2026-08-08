@@ -67,15 +67,18 @@ export default function ComparePage() {
   const [err, setErr] = useState("");
   const [data, setData] = useState<any | null>(null);
   const [baseChart, setBaseChart] = useState<any | null>(null);
+  const [longWin, setLongWin] = useState<Record<string, Record<string, number | null>>>({}); // 1Y-based windows per symbol
 
   const periodLabel = PERIODS.find((p) => p.k === period)?.label || period;
 
-  // Seed base + peers from the user's own lists.
+  // Seed base + peers from the user's own lists (or a ?symbol= deep-link).
   useEffect(() => {
     const wl = getWatchlist().map((i: any) => i.symbol);
     const pf = getPortfolio().map((h: any) => h.symbol);
     const uniq = Array.from(new Set([...wl, ...pf])).filter(Boolean);
-    if (uniq.length) { setBase((b) => b || uniq[0]); setPeers((p) => (p.length ? p : uniq.slice(1, 4))); }
+    const deep = typeof window !== "undefined" ? new URLSearchParams(window.location.search).get("symbol") : null;
+    if (deep) { setBase(deep.toUpperCase()); setPeers(uniq.filter((s) => s !== deep.toUpperCase()).slice(0, 3)); }
+    else if (uniq.length) { setBase((b) => b || uniq[0]); setPeers((p) => (p.length ? p : uniq.slice(1, 4))); }
     // The user's own Markets symbols become extra pickable indices.
     try {
       const cm = [...getCustomMarketSymbols(), ...Object.values(getCustomMarketByGroup()).flat()] as any[];
@@ -108,15 +111,26 @@ export default function ComparePage() {
     const sym = base.trim().toUpperCase();
     if (!sym) { setErr("Enter a base stock."); return; }
     const send = mode === "index" && bench ? Array.from(new Set([...peers, bench])) : peers;
-    setRunning(true); setData(null); setBaseChart(null);
+    setRunning(true); setData(null); setBaseChart(null); setLongWin({});
     try {
-      const [rsRes, chRes] = await Promise.all([
+      // Primary call over the selected period drives the chart + outperformance.
+      // A second 1-year call gives full trailing windows (1M/3M/6M/1Y) + a stable
+      // RS Rating even when the selected period is short (e.g. 1M).
+      const longNeeded = !["1y", "2y", "5y"].includes(period);
+      const [rsRes, chRes, longRes] = await Promise.all([
         fetch("/api/relative-strength", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ symbol: sym, peers: send, range: period }) }).then((r) => r.json()),
         fetch("/api/chart", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ symbol: sym, range: "1y", interval: "1d" }) }).then((r) => r.json()).catch(() => null),
+        longNeeded
+          ? fetch("/api/relative-strength", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ symbol: sym, peers: send, range: "1y" }) }).then((r) => r.json()).catch(() => null)
+          : Promise.resolve(null),
       ]);
       if (rsRes.error) throw new Error(rsRes.error);
       setData(rsRes);
       if (chRes && !chRes.error) setBaseChart(chRes);
+      const winSrc = longNeeded && longRes && !longRes.error ? longRes : rsRes;
+      const wmap: Record<string, Record<string, number | null>> = {};
+      (winSrc.legs || []).forEach((l: any) => { wmap[l.symbol] = l.windows; });
+      setLongWin(wmap);
     } catch (e: any) { setErr(e?.message || "Could not compare these symbols."); }
     finally { setRunning(false); }
   };
@@ -298,7 +312,7 @@ export default function ComparePage() {
           <p className="text-[11px] text-slate-400 mb-4">Leaders in a group statistically tend to keep leading (momentum persistence) — idea generation, not a buy signal.</p>
           <div className="space-y-2.5">
             {[...legs].sort((a, b) => b.changePct - a.changePct).map((l, i) => {
-              const rating = rsRating(l.windows, l.changePct);
+              const rating = rsRating(longWin[l.symbol] || l.windows, l.changePct);
               return (
                 <div key={l.symbol} className="flex items-center gap-3">
                   <span className="w-5 text-right text-[13px] font-bold text-slate-400">{i + 1}</span>
@@ -371,11 +385,17 @@ export default function ComparePage() {
                   </tr>
                 </thead>
                 <tbody>
+                  <tr className="border-b border-slate-100 bg-indigo-50/40">
+                    <td className="py-2 pr-2 font-bold text-indigo-700">{periodLabel} return</td>
+                    {legs.map((l) => (
+                      <td key={l.symbol} className={`py-2 px-2 text-right tabular-nums font-black ${l.changePct >= 0 ? "text-emerald-600" : "text-rose-600"}`}>{pp(l.changePct)}</td>
+                    ))}
+                  </tr>
                   {[["1M", "1M return"], ["3M", "3M return"], ["6M", "6M return"], ["1Y", "1Y return"]].map(([wk, lbl]) => (
                     <tr key={wk} className="border-b border-slate-100">
                       <td className="py-2 pr-2 font-medium text-slate-600">{lbl}</td>
                       {legs.map((l) => {
-                        const v = l.windows?.[wk];
+                        const v = (longWin[l.symbol] || l.windows)?.[wk];
                         return <td key={l.symbol} className={`py-2 px-2 text-right tabular-nums font-bold ${v == null ? "text-slate-300" : v >= 0 ? "text-emerald-600" : "text-rose-600"}`}>{pp(v)}</td>;
                       })}
                     </tr>
@@ -398,7 +418,7 @@ export default function ComparePage() {
               <p className="text-[11px] text-slate-400 mb-4">Heuristic strength from trailing returns (weighted to recent). 80+ often precedes strong continued moves — a read, not a guarantee.</p>
               <div className="space-y-2.5">
                 {[...legs].filter((l) => l.kind !== "benchmark").sort((a, b) => b.changePct - a.changePct).map((l) => {
-                  const rating = rsRating(l.windows, l.changePct);
+                  const rating = rsRating(longWin[l.symbol] || l.windows, l.changePct);
                   return (
                     <div key={l.symbol} className="flex items-center gap-3">
                       <span className="w-16 font-black text-slate-800 truncate">{l.symbol}</span>
