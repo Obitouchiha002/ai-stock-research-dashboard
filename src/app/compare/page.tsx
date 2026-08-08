@@ -71,14 +71,31 @@ export default function ComparePage() {
 
   const periodLabel = PERIODS.find((p) => p.k === period)?.label || period;
 
-  // Seed base + peers from the user's own lists (or a ?symbol= deep-link).
+  const restored = useRef(false);
+  // Restore the last session (survives refresh + tab switches), else seed from
+  // the user's lists / a ?symbol= deep-link.
   useEffect(() => {
-    const wl = getWatchlist().map((i: any) => i.symbol);
-    const pf = getPortfolio().map((h: any) => h.symbol);
-    const uniq = Array.from(new Set([...wl, ...pf])).filter(Boolean);
+    let saved: any = null;
+    try { saved = JSON.parse(sessionStorage.getItem("sa_compare_v1") || "null"); } catch {}
     const deep = typeof window !== "undefined" ? new URLSearchParams(window.location.search).get("symbol") : null;
-    if (deep) { setBase(deep.toUpperCase()); setPeers(uniq.filter((s) => s !== deep.toUpperCase()).slice(0, 3)); }
-    else if (uniq.length) { setBase((b) => b || uniq[0]); setPeers((p) => (p.length ? p : uniq.slice(1, 4))); }
+
+    if (saved && !deep) {
+      restored.current = true;
+      if (saved.mode) setMode(saved.mode);
+      if (saved.base) setBase(saved.base);
+      if (Array.isArray(saved.peers)) setPeers(saved.peers);
+      if (saved.bench != null) setBench(saved.bench);
+      if (saved.period) setPeriod(saved.period);
+      if (saved.data) setData(saved.data);
+      if (saved.longWin) setLongWin(saved.longWin);
+      if (saved.baseChart) setBaseChart(saved.baseChart);
+    } else {
+      const wl = getWatchlist().map((i: any) => i.symbol);
+      const pf = getPortfolio().map((h: any) => h.symbol);
+      const uniq = Array.from(new Set([...wl, ...pf])).filter(Boolean);
+      if (deep) { setBase(deep.toUpperCase()); setPeers(uniq.filter((s) => s !== deep.toUpperCase()).slice(0, 3)); }
+      else if (uniq.length) { setBase(uniq[0]); setPeers(uniq.slice(1, 4)); }
+    }
     // The user's own Markets symbols become extra pickable indices.
     try {
       const cm = [...getCustomMarketSymbols(), ...Object.values(getCustomMarketByGroup()).flat()] as any[];
@@ -86,6 +103,13 @@ export default function ComparePage() {
       setCustomMkt(cm.filter((c) => c?.symbol && !seen.has(c.symbol) && seen.add(c.symbol)).map((c) => ({ v: c.symbol, label: c.label || c.symbol })));
     } catch {}
   }, []);
+
+  // Persist everything so a refresh or tab switch keeps the results.
+  useEffect(() => {
+    try {
+      sessionStorage.setItem("sa_compare_v1", JSON.stringify({ mode, base, peers, bench, period, data, longWin, baseChart }));
+    } catch { /* quota — skip */ }
+  }, [mode, base, peers, bench, period, data, longWin, baseChart]);
 
   // autocomplete
   useEffect(() => {
@@ -210,7 +234,7 @@ export default function ComparePage() {
       {/* Mode tabs */}
       <div className="flex flex-wrap gap-1.5 mb-4">
         {([["vs", "Stock vs Stock"], ["index", "Stock vs Index / Sector"], ["leaderboard", "Sector / Universe Leaderboard"]] as const).map(([m, lbl]) => (
-          <button key={m} onClick={() => { setMode(m); setData(null); }}
+          <button key={m} onClick={() => setMode(m)}
             className={`px-4 py-2 rounded-lg text-sm font-bold transition ${mode === m ? "bg-indigo-600 text-white" : "bg-white text-slate-600 border border-slate-200 hover:bg-slate-50"}`}>{lbl}</button>
         ))}
       </div>
