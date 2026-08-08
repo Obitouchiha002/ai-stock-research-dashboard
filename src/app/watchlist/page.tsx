@@ -35,7 +35,10 @@ import {
   type Combination,
 } from "@/lib/storage";
 import StockEditor, { parseTriggers, type EditorValue } from "@/components/StockEditor";
+import RemarksEditor from "@/components/RemarksEditor";
 import { Pencil } from "lucide-react";
+
+type RemarksEdit = { title: string; subtitle?: string; value: string; onSave: (t: string) => void };
 import {
   resolveHolding,
   fetchQuotes,
@@ -134,6 +137,7 @@ export default function WatchlistPage() {
   const [newSub, setNewSub] = useState("");
   const [combos, setCombos] = useState<Combination[]>([]);
   const [editItem, setEditItem] = useState<any | null>(null);
+  const [remarksEdit, setRemarksEdit] = useState<RemarksEdit | null>(null);
 
   // Quick Add
   const [showAdd, setShowAdd] = useState(false);
@@ -849,9 +853,9 @@ export default function WatchlistPage() {
                         </td>
                       ))}
                       <td className="p-3">
-                        <button onClick={() => setEditItem(item)} title="Edit"
+                        <button onClick={() => setRemarksEdit({ title: item.symbol, subtitle: item.name, value: item.remarks || "", onSave: (t) => { saveToWatchlist({ ...item, remarks: t, updatedAt: Date.now() }); reload(); } })} title="Add / edit remark (voice)"
                           className="text-left w-full min-w-[8rem] px-2 py-1 rounded text-[12px] text-slate-600 hover:bg-indigo-50">
-                          {item.remarks || <span className="text-slate-300">—</span>}
+                          {item.remarks || <span className="text-slate-300">📝 add note…</span>}
                         </button>
                         {item.updatedAt && (
                           <div className="text-[12px] font-bold text-slate-600 mt-1 whitespace-nowrap">✎ {new Date(Number(item.updatedAt)).toLocaleDateString(undefined, { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" })}</div>
@@ -941,6 +945,15 @@ export default function WatchlistPage() {
           onDelete={() => { handleRemove(editItem.symbol, editItem.category); }}
         />
       )}
+
+      <RemarksEditor
+        open={!!remarksEdit}
+        title={remarksEdit?.title || ""}
+        subtitle={remarksEdit?.subtitle}
+        value={remarksEdit?.value || ""}
+        onSave={(t) => remarksEdit?.onSave(t)}
+        onClose={() => setRemarksEdit(null)}
+      />
     </div>
   );
 }

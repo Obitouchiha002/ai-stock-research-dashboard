@@ -4,6 +4,9 @@ import React, { useEffect, useState, useCallback, useMemo } from "react";
 import Link from "next/link";
 import { Globe, RefreshCw, IndianRupee, Coins, Bitcoin, Plus, Trash2, Star, GripVertical, Search, Pencil } from "lucide-react";
 import StockEditor, { parseTriggers, type EditorValue } from "@/components/StockEditor";
+import RemarksEditor from "@/components/RemarksEditor";
+
+type RemarksEdit = { title: string; subtitle?: string; value: string; onSave: (t: string) => void };
 import {
   getCustomMarketSymbols,
   addCustomMarketSymbol,
@@ -255,6 +258,7 @@ export default function MarketsPage() {
   const [dragSym, setDragSym] = useState<string | null>(null);
   const [hidden, setHidden] = useState<Record<string, string[]>>({});
   const [editSym, setEditSym] = useState<string | null>(null);
+  const [remarksEdit, setRemarksEdit] = useState<RemarksEdit | null>(null);
 
   // Build the editor value for a symbol from its saved plan (migrating a legacy
   // single trigger into the new multi-trigger list).
@@ -799,9 +803,9 @@ export default function MarketsPage() {
                         </td>
                       ))}
                       <td className="px-3 py-3.5">
-                        <button onClick={() => setEditSym(r.symbol)} title="Edit"
+                        <button onClick={() => setRemarksEdit({ title: r.label, subtitle: r.symbol, value: plans[r.symbol]?.remarks || "", onSave: (t) => setPlan(r.symbol, "remarks", t) })} title="Add / edit remark (voice)"
                           className="text-left w-full min-w-[7rem] px-2 py-1 rounded text-[12px] text-slate-600 hover:bg-indigo-50">
-                          {plans[r.symbol]?.remarks || <span className="text-slate-300">—</span>}
+                          {plans[r.symbol]?.remarks || <span className="text-slate-300">📝 add note…</span>}
                         </button>
                       </td>
                       <td className="px-3 py-3.5">
@@ -865,6 +869,15 @@ export default function MarketsPage() {
           />
         );
       })()}
+
+      <RemarksEditor
+        open={!!remarksEdit}
+        title={remarksEdit?.title || ""}
+        subtitle={remarksEdit?.subtitle}
+        value={remarksEdit?.value || ""}
+        onSave={(t) => remarksEdit?.onSave(t)}
+        onClose={() => setRemarksEdit(null)}
+      />
     </div>
   );
 }

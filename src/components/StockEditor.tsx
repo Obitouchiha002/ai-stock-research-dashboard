@@ -1,8 +1,9 @@
 "use client";
 
 import React, { useEffect, useState } from "react";
-import { X, Plus, Trash2, Save } from "lucide-react";
+import { X, Plus, Trash2, Save, Mic, MicOff } from "lucide-react";
 import type { StockTrigger } from "@/lib/storage";
+import { useSpeech } from "@/lib/useSpeech";
 
 // Shared per-stock editor popup used by Markets / Watchlist / Portfolio. Rows are
 // read-only until the user opens this; here they set levels (SL/R/T1/T2), remarks
@@ -45,6 +46,7 @@ export default function StockEditor({
   onDelete?: () => void;
 }) {
   const [v, setV] = useState<EditorValue>(value);
+  const speech = useSpeech((chunk) => setV((s) => ({ ...s, remarks: `${s.remarks || ""}${s.remarks && !s.remarks.endsWith(" ") ? " " : ""}${chunk}` })));
   // Re-seed local state each time the editor opens for a (possibly different) row.
   useEffect(() => {
     if (open) setV({ ...value, triggers: (value.triggers || []).map((t) => ({ ...t })) });
@@ -114,8 +116,17 @@ export default function StockEditor({
           {/* Remarks */}
           <div>
             <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-wide mb-1.5">Remarks</label>
-            <input value={v.remarks || ""} onChange={(e) => set("remarks", e.target.value)} placeholder="notes…"
-              className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm outline-none focus:ring-2 focus:ring-indigo-200" />
+            <div className="flex items-center gap-2">
+              <input value={v.remarks || ""} onChange={(e) => set("remarks", e.target.value)} placeholder="notes… or use the mic"
+                className="flex-1 px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm outline-none focus:ring-2 focus:ring-indigo-200" />
+              {speech.supported && (
+                <button onClick={() => (speech.listening ? speech.stop() : speech.start())} title="Voice note"
+                  className={`p-2 rounded-lg shrink-0 transition ${speech.listening ? "bg-rose-600 text-white" : "bg-indigo-50 text-indigo-700 hover:bg-indigo-100"}`}>
+                  {speech.listening ? <MicOff className="w-4 h-4" /> : <Mic className="w-4 h-4" />}
+                </button>
+              )}
+            </div>
+            {speech.listening && <div className="text-[11px] text-indigo-600 mt-1">🎙 Listening… {speech.interim}</div>}
           </div>
 
           {/* Triggers (multiple — buy / sell separately) */}

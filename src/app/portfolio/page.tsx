@@ -37,7 +37,10 @@ import {
   type PortfolioMarket,
 } from "@/lib/storage";
 import StockEditor, { parseTriggers, type EditorValue } from "@/components/StockEditor";
+import RemarksEditor from "@/components/RemarksEditor";
 import { GripVertical } from "lucide-react";
+
+type RemarksEdit = { title: string; subtitle?: string; value: string; onSave: (t: string) => void };
 import { parseWorkbook, resolveHolding } from "@/lib/excelImport";
 
 const CUR: Record<PortfolioMarket, string> = {
@@ -325,6 +328,7 @@ export default function PortfolioPage() {
 
   // Editor (popup) plumbing for a holding: levels + multiple triggers + save.
   const [editHolding, setEditHolding] = useState<any | null>(null);
+  const [remarksEdit, setRemarksEdit] = useState<RemarksEdit | null>(null);
   const pfBuildValue = (h: any): EditorValue => {
     let triggers = parseTriggers(h.triggers);
     if (!triggers.length && h.condVal != null && String(h.condVal) !== "") {
@@ -877,7 +881,7 @@ PORTFOLIO DATA: ${JSON.stringify(stats)}`;
             { big: pending, lbl: "NOT YET ANALYZED", tone: "text-slate-500" },
           ];
           return (
-            <div>
+            <div className="max-w-[1500px] mx-auto">
               {/* Filters */}
               <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-3 mb-4 flex flex-wrap items-center gap-2">
                 <select value={earnFY} onChange={(e) => setEarnFY(e.target.value)} className="px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm font-bold text-slate-700 outline-none focus:ring-2 focus:ring-indigo-200">
@@ -973,8 +977,10 @@ PORTFOLIO DATA: ${JSON.stringify(stats)}`;
                             </select>
                           </td>
                           <td className="p-3">
-                            <input value={e.remarks || ""} onChange={(ev) => setEarn(h, { remarks: ev.target.value })} placeholder="notes…"
-                              className="w-full min-w-[12rem] px-2 py-1 bg-slate-50 border border-slate-200 rounded text-[12px] outline-none focus:ring-2 focus:ring-indigo-200" />
+                            <button onClick={() => setRemarksEdit({ title: h.symbol, subtitle: `${earnFY} · ${earnQ}`, value: e.remarks || "", onSave: (t) => setEarn(h, { remarks: t }) })} title="Add / edit note (voice)"
+                              className="text-left w-full min-w-[12rem] px-2 py-1.5 rounded-lg text-[12px] text-slate-600 bg-slate-50 border border-slate-200 hover:bg-indigo-50 line-clamp-2">
+                              {e.remarks || <span className="text-slate-400">📝 add note…</span>}
+                            </button>
                           </td>
                           <td className="p-3 text-center">
                             <button onClick={() => setEarn(h, { redFlag: !e.redFlag })} title="Toggle red flag" className="text-lg">
@@ -1063,8 +1069,8 @@ PORTFOLIO DATA: ${JSON.stringify(stats)}`;
                       })()}
                     </td>
                     <td className="p-3">
-                      <button onClick={() => setEditHolding(h)} title="Edit" className="text-left w-full min-w-[7rem] px-2 py-1 rounded text-[12px] text-slate-600 hover:bg-indigo-50">
-                        {h.remarks || <span className="text-slate-300">—</span>}
+                      <button onClick={() => setRemarksEdit({ title: h.symbol, subtitle: h.name, value: h.remarks || "", onSave: (t) => setPlanField(h, "remarks", t) })} title="Add / edit remark (voice)" className="text-left w-full min-w-[7rem] px-2 py-1 rounded text-[12px] text-slate-600 hover:bg-indigo-50">
+                        {h.remarks || <span className="text-slate-300">📝 add note…</span>}
                       </button>
                       {h.updatedAt && (
                         <div className="text-[12px] font-bold text-slate-600 mt-1 whitespace-nowrap">✎ {new Date(Number(h.updatedAt)).toLocaleDateString(undefined, { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" })}</div>
@@ -1231,6 +1237,15 @@ PORTFOLIO DATA: ${JSON.stringify(stats)}`;
           onDelete={() => { deletePortfolioHolding(editHolding.id); setHoldings(getPortfolio()); }}
         />
       )}
+
+      <RemarksEditor
+        open={!!remarksEdit}
+        title={remarksEdit?.title || ""}
+        subtitle={remarksEdit?.subtitle}
+        value={remarksEdit?.value || ""}
+        onSave={(t) => remarksEdit?.onSave(t)}
+        onClose={() => setRemarksEdit(null)}
+      />
     </div>
   );
 }
