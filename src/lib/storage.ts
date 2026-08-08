@@ -247,7 +247,9 @@ export interface PriceAlert {
   fromPortfolio?: boolean;
   // Custom condition alert, e.g. price > 160. Fires once when the condition
   // first becomes true (re-armable).
-  condition?: { metric: "price" | "changePct"; op: ">" | "<" | ">=" | "<=" | "="; value: number };
+  // op/value is the main comparison (CMP op value). An optional lower bound
+  // (lo loOp CMP) turns it into a two-sided range, e.g. 140 < CMP < 150.
+  condition?: { metric: "price" | "changePct"; op: ">" | "<" | ">=" | "<=" | "="; value: number; lo?: number; loOp?: ">" | "<" | ">=" | "<=" | "=" };
   conditionTriggered?: boolean;
   createdAt: number;
   updatedAt?: number;
@@ -797,6 +799,11 @@ export const setMarketOrderForTab = (tab: string, symbols: string[]) => {
   setContext("sa_market_order", all);
 };
 
+// Manual drag order for portfolio holdings (by holding id). Ids not listed keep
+// their natural order after the listed ones.
+export const getPortfolioOrder = (): string[] => getParsedContext<string[]>("sa_portfolio_order", []);
+export const setPortfolioOrder = (ids: string[]) => setContext("sa_portfolio_order", ids);
+
 // Symbols the user chose to hide from a Markets tab (incl. built-in indices).
 export const getMarketHidden = (): Record<string, string[]> =>
   getParsedContext<Record<string, string[]>>("sa_market_hidden", {});
@@ -814,7 +821,7 @@ export const restoreMarketTab = (tab: string) => {
 // Reconcile a stock's MULTIPLE alert triggers to real PriceAlerts. Each trigger
 // becomes an alert id `${prefix}-${SYMBOL}-${triggerId}`; triggers removed by the
 // user are deleted. Used by the shared StockEditor on Markets/Watchlist/Portfolio.
-export type StockTrigger = { id: string; op: string; val: string; action?: string };
+export type StockTrigger = { id: string; op: string; val: string; action?: string; lo?: string; loOp?: string };
 export const syncStockTriggers = (prefix: string, symbol: string, triggers: StockTrigger[]) => {
   const sym = String(symbol || "").toUpperCase();
   const base = `${prefix}-${sym}-`;
@@ -824,11 +831,14 @@ export const syncStockTriggers = (prefix: string, symbol: string, triggers: Stoc
     if (t.val == null || String(t.val) === "" || !Number.isFinite(v)) continue;
     const id = `${base}${t.id}`;
     keep.add(id);
+    const hasLo = t.lo != null && String(t.lo) !== "" && Number.isFinite(Number(t.lo));
+    const loOp = (t.loOp || "<") as any;
+    const label = hasLo ? `${t.lo} ${t.loOp || "<"} CMP ${t.op} ${v}` : `CMP ${t.op} ${v}`;
     savePriceAlert({
       id, symbol: sym,
-      name: t.action ? `CMP ${t.op} ${v} → ${t.action}` : `CMP ${t.op} ${v}`,
+      name: t.action ? `${label} → ${t.action}` : label,
       status: "active", conditionTriggered: false,
-      condition: { metric: "price", op: t.op as any, value: v },
+      condition: { metric: "price", op: t.op as any, value: v, ...(hasLo ? { lo: Number(t.lo), loOp } : {}) },
     });
   }
   getPriceAlerts()

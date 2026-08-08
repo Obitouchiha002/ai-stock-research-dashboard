@@ -31,10 +31,13 @@ import {
   savePriceAlert,
   deletePriceAlert,
   syncStockTriggers,
+  getPortfolioOrder,
+  setPortfolioOrder,
   PORTFOLIO_MARKETS,
   type PortfolioMarket,
 } from "@/lib/storage";
 import StockEditor, { parseTriggers, type EditorValue } from "@/components/StockEditor";
+import { GripVertical } from "lucide-react";
 import { parseWorkbook, resolveHolding } from "@/lib/excelImport";
 
 const CUR: Record<PortfolioMarket, string> = {
@@ -49,6 +52,12 @@ const PF_TREND = [
   { v: "down", label: "↓ Downtrend", cls: "text-rose-700 border-rose-300 bg-rose-50" },
   { v: "side", label: "→ Sideways", cls: "text-amber-700 border-amber-300 bg-amber-50" },
 ];
+// Sharp row highlight by the user's Trend tag (like Markets).
+const PF_TREND_ROW: Record<string, string> = {
+  up: "bg-emerald-200",
+  down: "bg-rose-200",
+  side: "bg-amber-200",
+};
 
 export default function PortfolioPage() {
   const [holdings, setHoldings] = useState<any[]>([]);
@@ -58,6 +67,21 @@ export default function PortfolioPage() {
   const [search, setSearch] = useState("");
   const [trendFilter, setTrendFilter] = useState("all"); // all | up | down | side
   const [recentSort, setRecentSort] = useState(false);
+  const [order, setOrder] = useState<string[]>([]);
+  const [dragId, setDragId] = useState<string | null>(null);
+  useEffect(() => { setOrder(getPortfolioOrder()); }, []);
+  const reorderHolding = (from: string, to: string) => {
+    if (!from || from === to) return;
+    const seq = visibleHoldings.map((h) => h.id);
+    const fi = seq.indexOf(from); if (fi === -1) return;
+    seq.splice(fi, 1);
+    const ti = seq.indexOf(to);
+    seq.splice(ti === -1 ? seq.length : ti, 0, from);
+    // Merge this market's new sequence into the global id order.
+    const others = order.filter((id) => !seq.includes(id));
+    const next = [...seq, ...others];
+    setPortfolioOrder(next); setOrder(next);
+  };
   const [savedMsg, setSavedMsg] = useState(false);
   const [showAdd, setShowAdd] = useState(false);
   const [form, setForm] = useState({ symbol: "", shares: "", price: "" });
@@ -221,7 +245,11 @@ export default function PortfolioPage() {
       if (!(String(h.symbol || "").toLowerCase().includes(s) || String(h.name || "").toLowerCase().includes(s))) return false;
     }
     return true;
-  }).sort((a, b) => (recentSort ? Number(b.updatedAt || 0) - Number(a.updatedAt || 0) : 0));
+  }).sort((a, b) => {
+    if (recentSort) return Number(b.updatedAt || 0) - Number(a.updatedAt || 0);
+    const ia = order.indexOf(a.id), ib = order.indexOf(b.id);
+    return (ia === -1 ? 1e9 : ia) - (ib === -1 ? 1e9 : ib);
+  });
 
   // Save one trade-plan field (SL / R / T1 / T2 / remarks / special) on a holding.
   // These are the user's own manual entries; only the live price is auto-fetched.
@@ -797,10 +825,21 @@ PORTFOLIO DATA: ${JSON.stringify(stats)}`;
                 const numCls = "w-20 px-2 py-1 bg-slate-50 border border-slate-200 rounded text-right text-[13px] tabular-nums focus:ring-2 focus:ring-indigo-200 outline-none";
                 const txtCls = "w-full min-w-[9rem] px-2 py-1 bg-slate-50 border border-slate-200 rounded text-[13px] focus:ring-2 focus:ring-indigo-200 outline-none";
                 return (
-                  <tr key={h.id} className="border-b border-slate-100 hover:bg-slate-50 transition align-top">
+                  <tr key={h.id}
+                    onDragOver={(e) => { if (dragId) e.preventDefault(); }}
+                    onDrop={() => { if (dragId) reorderHolding(dragId, h.id); setDragId(null); }}
+                    className={`border-b-2 border-slate-500 transition align-top group ${dragId === h.id ? "opacity-40" : ""} ${dragId && dragId !== h.id ? "hover:bg-indigo-50" : (PF_TREND_ROW[h.trend || ""] || "hover:bg-slate-50")}`}>
                     <td className="p-3">
-                      <div className="font-black text-slate-900 whitespace-nowrap">{h.name || h.symbol}</div>
-                      <div className="text-[11px] text-slate-400">{h.symbol} · {h.shares} qty</div>
+                      <div className="flex items-center gap-2">
+                        <span draggable onDragStart={() => setDragId(h.id)} onDragEnd={() => setDragId(null)}
+                          title="Drag to reorder" className="cursor-grab active:cursor-grabbing text-slate-300 hover:text-slate-500 shrink-0">
+                          <GripVertical className="w-4 h-4" />
+                        </span>
+                        <div>
+                          <div className="font-black text-slate-900 whitespace-nowrap">{h.name || h.symbol}</div>
+                          <div className="text-[11px] text-slate-400">{h.symbol} · {h.shares} qty</div>
+                        </div>
+                      </div>
                     </td>
                     <td className="p-3 text-right tabular-nums font-bold text-slate-800 whitespace-nowrap">{money(ltp)}</td>
                     <td className="p-3 text-right tabular-nums font-bold text-slate-800 whitespace-nowrap">{money(ltp * h.shares)}</td>
@@ -827,7 +866,7 @@ PORTFOLIO DATA: ${JSON.stringify(stats)}`;
                         {h.remarks || <span className="text-slate-300">—</span>}
                       </button>
                       {h.updatedAt && (
-                        <div className="text-[10px] text-slate-400 mt-0.5 whitespace-nowrap">✎ {new Date(Number(h.updatedAt)).toLocaleDateString(undefined, { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" })}</div>
+                        <div className="text-[12px] font-bold text-slate-600 mt-1 whitespace-nowrap">✎ {new Date(Number(h.updatedAt)).toLocaleDateString(undefined, { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" })}</div>
                       )}
                     </td>
                     <td className="p-3">

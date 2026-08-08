@@ -40,9 +40,9 @@ const TREND_OPTS = [
 // Sharp row highlight when the user tags a trend (My Trend) — a touch stronger
 // than the Watchlist tint so it stands out on the dense Markets table.
 const TREND_ROW: Record<string, string> = {
-  up: "bg-emerald-100",
-  down: "bg-rose-100",
-  side: "bg-amber-100",
+  up: "bg-emerald-200",
+  down: "bg-rose-200",
+  side: "bg-amber-200",
 };
 function TrendSelect({ value, onChange }: { value?: string; onChange: (v: string) => void }) {
   const cur = TREND_OPTS.find((o) => o.v === (value || "")) || TREND_OPTS[0];
@@ -315,7 +315,9 @@ export default function MarketsPage() {
 
   const markTrend = (sym: string, val: string) => {
     setMarketMark(sym, val);
+    setMarketPlanField(sym, "updatedAt", String(Date.now())); // trend change counts as an edit
     setMarks(getMarketMarks());
+    setPlans(getMarketPlans());
   };
 
   useEffect(() => {
@@ -675,7 +677,7 @@ export default function MarketsPage() {
         </div>
 
         {/* Mobile: clean card list — no sideways scrolling, nothing cut off */}
-        <div className="sm:hidden divide-y divide-slate-100">
+        <div className="sm:hidden divide-y-2 divide-slate-500">
           {rows.length === 0 ? (
             <div className="px-4 py-10 text-center text-slate-400 font-medium text-sm">
               {trendFilter !== "all" ? (trendLoading ? "Analysing trends…" : "No stocks match this trend.") : loading ? "Loading live prices…" : isCustomTab ? "No custom symbols yet — add one above." : "Live data unavailable right now."}
@@ -759,7 +761,7 @@ export default function MarketsPage() {
                     <tr key={r.symbol}
                       onDragOver={(e) => { if (dragSym) e.preventDefault(); }}
                       onDrop={() => { if (dragSym) reorder(dragSym, r.symbol); setDragSym(null); }}
-                      className={`border-t border-slate-100 transition group ${dragSym === r.symbol ? "opacity-40" : ""} ${dragSym && dragSym !== r.symbol ? "hover:bg-indigo-50" : (TREND_ROW[marks[r.symbol] || ""] || "hover:bg-slate-50")}`}>
+                      className={`border-t-2 border-slate-500 transition group ${dragSym === r.symbol ? "opacity-40" : ""} ${dragSym && dragSym !== r.symbol ? "hover:bg-indigo-50" : (TREND_ROW[marks[r.symbol] || ""] || "hover:bg-slate-50")}`}>
                       <td className="px-5 py-3.5">
                         <div className="flex items-center gap-2">
                           <span draggable onDragStart={() => setDragSym(r.symbol)} onDragEnd={() => setDragSym(null)}
@@ -773,6 +775,9 @@ export default function MarketsPage() {
                             <span className="min-w-0">
                               <span className="block font-bold text-slate-900 group-hover:text-indigo-600">{r.label}</span>
                               <span className={`block text-[11px] ${noData ? "text-amber-600" : "text-slate-400"}`}>{noData ? "no data — remove & re-add from search" : fmtTime(q.time)}</span>
+                              {plans[r.symbol]?.updatedAt && (
+                                <span className="block text-[12px] font-bold text-indigo-600 mt-0.5 whitespace-nowrap">✎ edited {fmtTime(Number(plans[r.symbol].updatedAt))}</span>
+                              )}
                             </span>
                           </Link>
                         </div>
@@ -798,9 +803,6 @@ export default function MarketsPage() {
                           className="text-left w-full min-w-[7rem] px-2 py-1 rounded text-[12px] text-slate-600 hover:bg-indigo-50">
                           {plans[r.symbol]?.remarks || <span className="text-slate-300">—</span>}
                         </button>
-                        {plans[r.symbol]?.updatedAt && (
-                          <div className="text-[10px] text-slate-400 mt-0.5 whitespace-nowrap">✎ {fmtTime(Number(plans[r.symbol].updatedAt))}</div>
-                        )}
                       </td>
                       <td className="px-3 py-3.5">
                         <button onClick={() => setEditSym(r.symbol)} title="Edit triggers"

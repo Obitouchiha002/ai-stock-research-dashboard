@@ -853,7 +853,7 @@ export default function WatchlistPage() {
                           {item.remarks || <span className="text-slate-300">—</span>}
                         </button>
                         {item.updatedAt && (
-                          <div className="text-[10px] text-slate-400 mt-0.5 whitespace-nowrap">✎ {new Date(Number(item.updatedAt)).toLocaleDateString(undefined, { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" })}</div>
+                          <div className="text-[12px] font-bold text-slate-600 mt-1 whitespace-nowrap">✎ {new Date(Number(item.updatedAt)).toLocaleDateString(undefined, { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" })}</div>
                         )}
                       </td>
                       <td className="p-3">

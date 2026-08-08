@@ -124,12 +124,11 @@ export default function PriceAlertMonitor() {
             const mv = isPct ? q?.changePct : price;
             if (mv != null) {
               const { op, value } = a.condition;
-              const hit =
-                op === ">" ? mv > value
-                : op === "<" ? mv < value
-                : op === ">=" ? mv >= value
-                : op === "<=" ? mv <= value
-                : Math.abs(mv - value) <= Math.abs(value) * 0.001; // "=" within 0.1%
+              const cmp1 = (x: number, o: string, y: number) =>
+                o === ">" ? x > y : o === "<" ? x < y : o === ">=" ? x >= y : o === "<=" ? x <= y : Math.abs(x - y) <= Math.abs(y) * 0.001;
+              // Range support: an optional lower bound (lo loOp CMP) AND-ed with CMP op value.
+              const loOk = a.condition.lo == null || cmp1(a.condition.lo, a.condition.loOp || "<", mv);
+              const hit = loOk && cmp1(mv, op, value);
               if (hit) {
                 const shown = isPct ? `${fmt(mv)}%` : `${cur}${fmt(mv)}`;
                 const target = isPct ? `${value}%` : `${cur}${fmt(value)}`;

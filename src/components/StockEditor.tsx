@@ -120,22 +120,31 @@ export default function StockEditor({
           <div>
             <div className="flex items-center justify-between mb-1.5">
               <label className="text-[11px] font-bold text-indigo-600 uppercase tracking-wide">Alert triggers</label>
-              <span className="text-[10px] text-slate-400">buy / sell alag-alag laga sakte ho</span>
+              <span className="text-[10px] text-slate-400">buy/sell alag; range ke liye min bharo</span>
             </div>
             <div className="space-y-1.5">
               {triggers.length === 0 && (
                 <p className="text-[12px] text-slate-400 text-center py-2 border border-dashed border-slate-200 rounded-lg">No triggers yet — add one below.</p>
               )}
               {triggers.map((t) => (
-                <div key={t.id} className="flex items-center gap-1.5 bg-slate-50 border border-slate-200 rounded-lg p-2">
-                  <span className="text-[11px] font-black text-slate-400">CMP</span>
-                  <select value={t.op} onChange={(e) => updTrig(t.id, { op: e.target.value })} className="px-1.5 py-1 bg-white border border-slate-200 rounded text-[13px] font-black outline-none">
+                <div key={t.id} className="flex flex-wrap items-center gap-1.5 bg-slate-50 border border-slate-200 rounded-lg p-2">
+                  {/* optional lower bound → makes it a range e.g. 140 < CMP < 150 */}
+                  <input type="number" value={t.lo ?? ""} onChange={(e) => updTrig(t.id, { lo: e.target.value })} placeholder="min"
+                    title="Optional lower bound — leave empty for a single condition"
+                    className="w-16 px-2 py-1 bg-white border border-slate-200 rounded text-right text-[12px] tabular-nums outline-none focus:ring-2 focus:ring-indigo-200" />
+                  <select value={t.loOp || "<"} onChange={(e) => updTrig(t.id, { loOp: e.target.value })}
+                    disabled={t.lo == null || String(t.lo) === ""}
+                    className="px-1 py-1 bg-white border border-slate-200 rounded text-[13px] font-black outline-none disabled:opacity-40">
+                    {OPS.map((o) => <option key={o.v} value={o.v}>{o.l}</option>)}
+                  </select>
+                  <span className="text-[12px] font-black text-slate-500">CMP</span>
+                  <select value={t.op} onChange={(e) => updTrig(t.id, { op: e.target.value })} className="px-1 py-1 bg-white border border-slate-200 rounded text-[13px] font-black outline-none">
                     {OPS.map((o) => <option key={o.v} value={o.v}>{o.l}</option>)}
                   </select>
                   <input type="number" value={t.val} onChange={(e) => updTrig(t.id, { val: e.target.value })} placeholder="value"
-                    className="w-24 px-2 py-1 bg-white border border-slate-200 rounded text-right text-[12px] tabular-nums outline-none focus:ring-2 focus:ring-indigo-200" />
+                    className="w-20 px-2 py-1 bg-white border border-slate-200 rounded text-right text-[12px] tabular-nums outline-none focus:ring-2 focus:ring-indigo-200" />
                   <span className="text-slate-400">→</span>
-                  <select value={t.action || "Buy"} onChange={(e) => updTrig(t.id, { action: e.target.value })} className="px-2 py-1 bg-white border border-slate-200 rounded text-[12px] font-bold text-slate-700 outline-none flex-1 min-w-0">
+                  <select value={t.action || "Buy"} onChange={(e) => updTrig(t.id, { action: e.target.value })} className="px-2 py-1 bg-white border border-slate-200 rounded text-[12px] font-bold text-slate-700 outline-none flex-1 min-w-[5rem]">
                     {ACTIONS.map((a) => <option key={a} value={a}>{a}</option>)}
                   </select>
                   <button onClick={() => delTrig(t.id)} className="text-slate-300 hover:text-rose-600 shrink-0"><X className="w-4 h-4" /></button>

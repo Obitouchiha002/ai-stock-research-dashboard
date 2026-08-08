@@ -83,7 +83,8 @@ function evaluate(bundle: any, quotes: Record<string, any>, rows: any[], prev: S
       const isPct = a.condition.metric === "changePct";
       const mv = isPct ? q?.changePct : price;
       if (mv != null) {
-        const hit = cmp(Number(mv), a.condition.op, Number(a.condition.value));
+        const loOk = a.condition.lo == null || cmp(Number(a.condition.lo), a.condition.loOp || "<", Number(mv));
+        const hit = loOk && cmp(Number(mv), a.condition.op, Number(a.condition.value));
         const key = `cond:${a.id}`;
         if (hit) {
           nowLive.add(key);
