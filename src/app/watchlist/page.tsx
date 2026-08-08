@@ -66,13 +66,14 @@ const isIndia = (cat: string) => cat === "Indian Stocks";
 // the whole row (left bar + a matching background tint) so it stands out.
 // Three colour marks with a plain meaning each.
 const MARK_COLORS: { key: string; dot: string; bar: string; row: string; label: string }[] = [
-  { key: "green", dot: "bg-emerald-500", bar: "border-l-emerald-500", row: "bg-emerald-100/80", label: "Uptrend" },
-  { key: "red", dot: "bg-rose-500", bar: "border-l-rose-500", row: "bg-rose-100/80", label: "Downtrend" },
-  { key: "yellow", dot: "bg-amber-400", bar: "border-l-amber-400", row: "bg-amber-100/80", label: "Sideways" },
+  { key: "green", dot: "bg-emerald-500", bar: "border-l-emerald-500", row: "bg-emerald-200", label: "Uptrend" },
+  { key: "red", dot: "bg-rose-500", bar: "border-l-rose-500", row: "bg-rose-200", label: "Downtrend" },
+  { key: "yellow", dot: "bg-amber-400", bar: "border-l-amber-400", row: "bg-amber-200", label: "Sideways" },
 ];
+// Full-row tint only (no left bar) so it matches the Markets/Portfolio look.
 const barClass = (color?: string) => {
   const c = MARK_COLORS.find((x) => x.key === color);
-  return c ? `border-l-4 ${c.bar} ${c.row}` : "border-l-4 border-l-transparent";
+  return c ? c.row : "";
 };
 
 function ColorDots({ value, onPick }: { value?: string; onPick: (c: string) => void }) {
@@ -798,7 +799,7 @@ export default function WatchlistPage() {
                   const chg = q?.changePct;
                   const up = typeof chg === "number" && chg >= 0;
                   return (
-                    <tr key={`${item.symbol}-${item.category}-${idx}`} className={`border-b border-slate-100 transition ${item.color ? "" : "hover:bg-slate-50"} ${barClass(item.color)}`}>
+                    <tr key={`${item.symbol}-${item.category}-${idx}`} className={`border-b-2 border-slate-500 transition ${item.color ? "" : "hover:bg-slate-50"} ${barClass(item.color)}`}>
                       <td className="p-4">
                         <div className="flex items-center gap-3">
                           <button onClick={() => setEditItem(item)} title="Edit trend / colour (opens editor)" className="shrink-0">
