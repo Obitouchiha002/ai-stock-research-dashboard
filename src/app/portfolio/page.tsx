@@ -33,6 +33,8 @@ import {
   syncStockTriggers,
   getPortfolioOrder,
   setPortfolioOrder,
+  getEarnSectors,
+  addEarnSector,
   PORTFOLIO_MARKETS,
   type PortfolioMarket,
 } from "@/lib/storage";
@@ -94,6 +96,7 @@ const EARN_OUTLOOK = [
 ];
 const GOOD_Q = ["Strong", "Good"];
 const BAD_Q = ["Weak", "Poor"];
+const EARN_SECTORS = ["IT/Internet", "Financials", "Consumer", "Manufacturing", "Pharma/Healthcare", "Auto", "Energy", "FMCG", "Metals", "Realty", "Infra", "Telecom", "Chemicals", "Others"];
 
 export default function PortfolioPage() {
   const [holdings, setHoldings] = useState<any[]>([]);
@@ -105,6 +108,15 @@ export default function PortfolioPage() {
   const [earnQ, setEarnQ] = useState("Q1");
   const [earnSector, setEarnSector] = useState("All");
   const [earnStatus, setEarnStatus] = useState("all"); // all | analyzed | pending | redflag
+  const [customSectors, setCustomSectors] = useState<string[]>([]);
+  const [customSectorFor, setCustomSectorFor] = useState<string | null>(null); // holding id typing a new sector
+  useEffect(() => { setCustomSectors(getEarnSectors()); }, []);
+  const allSectors = useMemo(() => Array.from(new Set([...EARN_SECTORS, ...customSectors])), [customSectors]);
+  const addCustomSector = (h: any, val: string) => {
+    const v = val.trim();
+    if (v) { addEarnSector(v); setCustomSectors(getEarnSectors()); setEarn(h, { sector: v }); }
+    setCustomSectorFor(null);
+  };
   const qKey = `${earnFY}|${earnQ}`;
   const getEarn = (h: any) => (h.earnings && h.earnings[qKey]) || {};
   const setEarn = (h: any, patch: any) => {
@@ -936,8 +948,21 @@ PORTFOLIO DATA: ${JSON.stringify(stats)}`;
                             <div className="text-[11px] text-slate-400">{h.symbol}</div>
                           </td>
                           <td className="p-3">
-                            <input value={e.sector || ""} onChange={(ev) => setEarn(h, { sector: ev.target.value })} placeholder="sector"
-                              className="w-24 px-2 py-1 bg-slate-50 border border-slate-200 rounded text-[12px] outline-none focus:ring-2 focus:ring-indigo-200" />
+                            {customSectorFor === h.id ? (
+                              <input autoFocus placeholder="new sector…"
+                                onKeyDown={(ev) => { if (ev.key === "Enter") addCustomSector(h, (ev.target as HTMLInputElement).value); if (ev.key === "Escape") setCustomSectorFor(null); }}
+                                onBlur={(ev) => addCustomSector(h, ev.target.value)}
+                                className="w-28 px-2 py-1 bg-white border border-indigo-300 rounded text-[12px] outline-none focus:ring-2 focus:ring-indigo-200" />
+                            ) : (
+                              <select value={allSectors.includes(e.sector) ? e.sector : (e.sector ? "__has__" : "")}
+                                onChange={(ev) => { if (ev.target.value === "__custom__") setCustomSectorFor(h.id); else setEarn(h, { sector: ev.target.value }); }}
+                                className="w-32 px-2 py-1 bg-slate-50 border border-slate-200 rounded text-[12px] font-semibold text-slate-700 outline-none focus:ring-2 focus:ring-indigo-200 cursor-pointer">
+                                <option value="">— sector</option>
+                                {e.sector && !allSectors.includes(e.sector) && <option value="__has__">{e.sector}</option>}
+                                {allSectors.map((s) => <option key={s} value={s}>{s}</option>)}
+                                <option value="__custom__">➕ Add custom…</option>
+                              </select>
+                            )}
                           </td>
                           <td className="p-3">
                             <input type="date" value={e.resultDate || ""} onChange={(ev) => setEarn(h, { resultDate: ev.target.value })}

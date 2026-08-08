@@ -799,6 +799,14 @@ export const setMarketOrderForTab = (tab: string, symbols: string[]) => {
   setContext("sa_market_order", all);
 };
 
+// Custom sectors the user added in the Earnings Tracker dropdown.
+export const getEarnSectors = (): string[] => getParsedContext<string[]>("sa_earn_sectors", []);
+export const addEarnSector = (s: string) => {
+  const v = String(s || "").trim();
+  const all = getEarnSectors();
+  if (v && !all.includes(v)) setContext("sa_earn_sectors", [...all, v]);
+};
+
 // Manual drag order for portfolio holdings (by holding id). Ids not listed keep
 // their natural order after the listed ones.
 export const getPortfolioOrder = (): string[] => getParsedContext<string[]>("sa_portfolio_order", []);
