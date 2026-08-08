@@ -173,6 +173,17 @@ export default function ComparePage() {
     finally { setRunning(false); }
   };
 
+  // Once a comparison exists, changing period / benchmark / peers auto-updates
+  // the numbers (so they never look stale). Base is re-run via the Compare button.
+  const runRef = useRef(run);
+  runRef.current = run;
+  useEffect(() => {
+    if (!data || running) return;
+    const t = setTimeout(() => runRef.current(), 350);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [period, bench, peers]);
+
   // ---- derived ----------------------------------------------------------
   // Dedupe by symbol (the API's auto-benchmark can collide with a peer the user added).
   const legs: Leg[] = useMemo(() => {
