@@ -797,6 +797,45 @@ export const setMarketOrderForTab = (tab: string, symbols: string[]) => {
   setContext("sa_market_order", all);
 };
 
+// Symbols the user chose to hide from a Markets tab (incl. built-in indices).
+export const getMarketHidden = (): Record<string, string[]> =>
+  getParsedContext<Record<string, string[]>>("sa_market_hidden", {});
+export const hideMarketSymbol = (tab: string, symbol: string) => {
+  const all = getMarketHidden();
+  all[tab] = Array.from(new Set([...(all[tab] || []), symbol]));
+  setContext("sa_market_hidden", all);
+};
+export const restoreMarketTab = (tab: string) => {
+  const all = getMarketHidden();
+  delete all[tab];
+  setContext("sa_market_hidden", all);
+};
+
+// Reconcile a stock's MULTIPLE alert triggers to real PriceAlerts. Each trigger
+// becomes an alert id `${prefix}-${SYMBOL}-${triggerId}`; triggers removed by the
+// user are deleted. Used by the shared StockEditor on Markets/Watchlist/Portfolio.
+export type StockTrigger = { id: string; op: string; val: string; action?: string };
+export const syncStockTriggers = (prefix: string, symbol: string, triggers: StockTrigger[]) => {
+  const sym = String(symbol || "").toUpperCase();
+  const base = `${prefix}-${sym}-`;
+  const keep = new Set<string>();
+  for (const t of triggers || []) {
+    const v = Number(t.val);
+    if (t.val == null || String(t.val) === "" || !Number.isFinite(v)) continue;
+    const id = `${base}${t.id}`;
+    keep.add(id);
+    savePriceAlert({
+      id, symbol: sym,
+      name: t.action ? `CMP ${t.op} ${v} → ${t.action}` : `CMP ${t.op} ${v}`,
+      status: "active", conditionTriggered: false,
+      condition: { metric: "price", op: t.op as any, value: v },
+    });
+  }
+  getPriceAlerts()
+    .filter((a) => a.id.startsWith(base) && !keep.has(a.id))
+    .forEach((a) => deletePriceAlert(a.id));
+};
+
 // COMBINATION SCREENER — user-built sets of technical conditions.
 export type ScreenConditions = {
   maStack?: boolean;

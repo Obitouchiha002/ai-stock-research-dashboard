@@ -2,7 +2,8 @@
 
 import React, { useEffect, useState, useCallback, useMemo } from "react";
 import Link from "next/link";
-import { Globe, RefreshCw, IndianRupee, Coins, Bitcoin, Plus, Trash2, Star, GripVertical, Search } from "lucide-react";
+import { Globe, RefreshCw, IndianRupee, Coins, Bitcoin, Plus, Trash2, Star, GripVertical, Search, Pencil } from "lucide-react";
+import StockEditor, { parseTriggers, type EditorValue } from "@/components/StockEditor";
 import {
   getCustomMarketSymbols,
   addCustomMarketSymbol,
@@ -17,6 +18,10 @@ import {
   setMarketPlanField,
   getMarketOrder,
   setMarketOrderForTab,
+  getMarketHidden,
+  hideMarketSymbol,
+  restoreMarketTab,
+  syncStockTriggers,
   getPriceAlerts,
   savePriceAlert,
   deletePriceAlert,
@@ -212,6 +217,7 @@ export default function MarketsPage() {
   const [combos, setCombos] = useState<Combination[]>([]);
   const setPlan = (sym: string, field: string, value: string) => {
     setMarketPlanField(sym, field, value);
+    setMarketPlanField(sym, "updatedAt", String(Date.now())); // stamp last-edited
     if (field === "condOp" || field === "condVal" || field === "special") {
       const key = sym.toUpperCase();
       const p = getMarketPlans()[key] || {};
@@ -240,6 +246,35 @@ export default function MarketsPage() {
   const [showSug, setShowSug] = useState(false);
   const [order, setOrder] = useState<Record<string, string[]>>({});
   const [dragSym, setDragSym] = useState<string | null>(null);
+  const [hidden, setHidden] = useState<Record<string, string[]>>({});
+  const [editSym, setEditSym] = useState<string | null>(null);
+
+  // Build the editor value for a symbol from its saved plan (migrating a legacy
+  // single trigger into the new multi-trigger list).
+  const buildEditorValue = (sym: string): EditorValue => {
+    const p = getMarketPlans()[String(sym).toUpperCase()] || {};
+    let triggers = parseTriggers(p.triggers);
+    if (!triggers.length && p.condVal != null && String(p.condVal) !== "") {
+      triggers = [{ id: "legacy", op: p.condOp || ">", val: String(p.condVal), action: p.special || "Buy" }];
+    }
+    return { sl: p.sl, r: p.r, t1: p.t1, t2: p.t2, remarks: p.remarks, triggers, updatedAt: p.updatedAt ? Number(p.updatedAt) : undefined };
+  };
+  const saveEditor = (sym: string, v: EditorValue) => {
+    const key = String(sym).toUpperCase();
+    (["sl", "r", "t1", "t2", "remarks"] as const).forEach((f) => setMarketPlanField(sym, f, (v as any)[f] || ""));
+    setMarketPlanField(sym, "triggers", JSON.stringify(v.triggers || []));
+    setMarketPlanField(sym, "updatedAt", String(v.updatedAt || Date.now()));
+    // retire the legacy single-trigger fields + its alert
+    setMarketPlanField(sym, "condVal", ""); setMarketPlanField(sym, "condOp", ""); setMarketPlanField(sym, "special", "");
+    deletePriceAlert(`mk-${key}`);
+    syncStockTriggers("mk", sym, v.triggers || []);
+    setPlans(getMarketPlans());
+  };
+  const trigCount = (sym: string) => {
+    const p = plans[sym] || {};
+    const n = parseTriggers(p.triggers).filter((t) => t.val !== "" && t.val != null).length;
+    return n || (p.condVal != null && String(p.condVal) !== "" ? 1 : 0);
+  };
 
   const load = useCallback(async (extra: string[] = []) => {
     setLoading(true);
@@ -283,6 +318,7 @@ export default function MarketsPage() {
     setPlans(getMarketPlans());
     setCombos(getCombinations());
     setOrder(getMarketOrder());
+    setHidden(getMarketHidden());
     // Only fetch if the cache is missing or stale — otherwise show it instantly.
     const fresh = Object.keys(mktCache.quotes).length > 0 && Date.now() - mktCache.at < MKT_TTL;
     if (!fresh) load();
@@ -343,19 +379,28 @@ export default function MarketsPage() {
       setAdding(false);
     }
   };
-  const removeCustom = (sym: string) => {
-    if (tab === "custom") {
-      removeCustomMarketSymbol(sym);
-      setCustom(getCustomMarketSymbols());
+  // Remove ANY row: a user-added symbol is deleted outright; a built-in index is
+  // hidden for this tab (and can be restored). Either way it leaves the list.
+  const removeCustom = (sym: string, isCustom: boolean) => {
+    if (isCustom) {
+      if (tab === "custom") {
+        removeCustomMarketSymbol(sym);
+        setCustom(getCustomMarketSymbols());
+      } else {
+        removeCustomMarketFromGroup(tab, sym);
+        setCustomByGroup(getCustomMarketByGroup());
+      }
     } else {
-      removeCustomMarketFromGroup(tab, sym);
-      setCustomByGroup(getCustomMarketByGroup());
+      hideMarketSymbol(tab, sym);
+      setHidden(getMarketHidden());
     }
   };
+  const restoreHidden = () => { restoreMarketTab(tab); setHidden(getMarketHidden()); };
 
   const isCustomTab = tab === "custom";
   const active = GROUPS.find((g) => g.key === tab);
   const baseRows = useMemo(() => {
+    const hide = new Set(hidden[tab] || []);
     // Apply the user's saved drag-and-drop order for this tab; symbols not in the
     // saved order keep their natural position after the ordered ones.
     const ord = order[tab] || [];
@@ -368,7 +413,7 @@ export default function MarketsPage() {
     // is never invisible and always has a Remove button. Built-in rows still wait
     // for a price so a curated list never shows blanks.
     if (isCustomTab) {
-      return applyOrder(custom.map((c) => ({
+      return applyOrder(custom.filter((c) => !hide.has(c.symbol)).map((c) => ({
         symbol: c.symbol,
         label: quotes[c.symbol]?.name || c.label,
         custom: true,
@@ -376,16 +421,17 @@ export default function MarketsPage() {
       })));
     }
     const base = (active?.items || [])
+      .filter((it) => !hide.has(it.symbol))
       .map((it) => ({ ...it, custom: false, q: quotes[it.symbol] }))
       .filter((r) => r.q && r.q.price != null);
-    const mine = (customByGroup[tab] || []).map((c) => ({
+    const mine = (customByGroup[tab] || []).filter((c) => !hide.has(c.symbol)).map((c) => ({
       symbol: c.symbol,
       label: quotes[c.symbol]?.name || c.label,
       custom: true,
       q: quotes[c.symbol],
     }));
     return applyOrder([...base, ...mine]);
-  }, [active, quotes, isCustomTab, custom, customByGroup, tab, order]);
+  }, [active, quotes, isCustomTab, custom, customByGroup, tab, order, hidden]);
 
   // Drag-and-drop: move `from` symbol to just before `to`, persist per tab.
   const reorder = (from: string, to: string) => {
@@ -588,6 +634,11 @@ export default function MarketsPage() {
           {trendFilter !== "all" && !trendLoading && (
             <span className="text-[11px] text-slate-400">{rows.length} match</span>
           )}
+          {(hidden[tab]?.length || 0) > 0 && (
+            <button onClick={restoreHidden} className="text-[11px] font-bold text-slate-500 hover:text-indigo-600 bg-slate-100 hover:bg-indigo-50 rounded-lg px-2.5 py-1.5 ml-1">
+              ↩ Restore {hidden[tab].length} hidden
+            </button>
+          )}
           {combos.length > 0 && (
             <>
               <span className="text-[11px] font-bold text-violet-500 uppercase tracking-wide ml-2">Combo</span>
@@ -640,11 +691,9 @@ export default function MarketsPage() {
                     )}
                   </div>
                   <div className="shrink-0"><TrendSelect value={marks[r.symbol]} onChange={(v) => markTrend(r.symbol, v)} /></div>
-                  {r.custom && (
-                    <button onClick={() => removeCustom(r.symbol)} className="p-1.5 text-slate-300 hover:text-rose-600 shrink-0" title="Remove">
-                      <Trash2 className="w-4 h-4" />
-                    </button>
-                  )}
+                  <button onClick={() => removeCustom(r.symbol, !!r.custom)} className="p-1.5 text-slate-300 hover:text-rose-600 shrink-0" title={r.custom ? "Remove" : "Hide"}>
+                    <Trash2 className="w-4 h-4" />
+                  </button>
                 </div>
               );
             })
@@ -723,36 +772,29 @@ export default function MarketsPage() {
                       </td>
                       {(["sl", "r", "t1", "t2"] as const).map((f) => (
                         <td key={f} className="px-2 py-3.5 text-center">
-                          <input value={plans[r.symbol]?.[f] || ""} onChange={(e) => setPlan(r.symbol, f, e.target.value)} placeholder="—"
-                            className="w-16 px-2 py-1 bg-slate-50 border border-slate-200 rounded text-right text-[12px] tabular-nums focus:ring-2 focus:ring-indigo-200 outline-none" />
+                          <button onClick={() => setEditSym(r.symbol)} title="Edit"
+                            className="w-16 px-2 py-1 rounded text-[12px] tabular-nums text-slate-700 hover:bg-indigo-50">
+                            {plans[r.symbol]?.[f] || "—"}
+                          </button>
                         </td>
                       ))}
                       <td className="px-3 py-3.5">
-                        <input value={plans[r.symbol]?.remarks || ""} onChange={(e) => setPlan(r.symbol, "remarks", e.target.value)} placeholder="notes…"
-                          className="w-full min-w-[7rem] px-2 py-1 bg-slate-50 border border-slate-200 rounded text-[12px] outline-none focus:ring-2 focus:ring-indigo-200" />
+                        <button onClick={() => setEditSym(r.symbol)} title="Edit"
+                          className="text-left w-full min-w-[7rem] px-2 py-1 rounded text-[12px] text-slate-600 hover:bg-indigo-50">
+                          {plans[r.symbol]?.remarks || <span className="text-slate-300">—</span>}
+                        </button>
+                        {plans[r.symbol]?.updatedAt && (
+                          <div className="text-[10px] text-slate-400 mt-0.5 whitespace-nowrap">✎ {fmtTime(Number(plans[r.symbol].updatedAt))}</div>
+                        )}
                       </td>
                       <td className="px-3 py-3.5">
-                        <div className="flex items-center gap-1.5">
-                          <span className="text-[11px] font-black text-slate-400">CMP</span>
-                          <select value={plans[r.symbol]?.condOp || ">"} onChange={(e) => setPlan(r.symbol, "condOp", e.target.value)}
-                            className="px-1.5 py-1 bg-white border border-slate-200 rounded text-[13px] font-black outline-none focus:ring-2 focus:ring-indigo-200">
-                            <option value=">">{">"}</option><option value=">=">{"≥"}</option><option value="<">{"<"}</option><option value="<=">{"≤"}</option><option value="=">{"="}</option>
-                          </select>
-                          <input type="number" value={plans[r.symbol]?.condVal ?? ""} onChange={(e) => setPlan(r.symbol, "condVal", e.target.value)} placeholder="value"
-                            className="w-20 px-2 py-1 bg-slate-50 border border-slate-200 rounded text-right text-[12px] tabular-nums outline-none focus:ring-2 focus:ring-indigo-200" />
-                          <select value={plans[r.symbol]?.special || ""} onChange={(e) => setPlan(r.symbol, "special", e.target.value)}
-                            className="px-2 py-1 bg-slate-50 border border-slate-200 rounded text-[12px] font-bold text-slate-700 outline-none focus:ring-2 focus:ring-indigo-200">
-                            <option value="">→ action</option>
-                            <option value="Buy">Buy</option>
-                            <option value="Sell">Sell</option>
-                            <option value="Book profit">Book profit</option>
-                            <option value="Add more">Add more</option>
-                            <option value="Watch">Watch</option>
-                          </select>
-                        </div>
-                        {plans[r.symbol]?.condVal != null && String(plans[r.symbol]?.condVal) !== "" && (
-                          <div className="text-[10px] text-emerald-600 font-bold mt-0.5">🔔 alert on</div>
-                        )}
+                        <button onClick={() => setEditSym(r.symbol)} title="Edit triggers"
+                          className="flex items-center gap-1.5 px-2 py-1.5 rounded-lg hover:bg-indigo-50 text-left">
+                          <Pencil className="w-3.5 h-3.5 text-slate-400" />
+                          {trigCount(r.symbol) > 0
+                            ? <span className="text-[11px] font-bold text-emerald-600">🔔 {trigCount(r.symbol)} trigger{trigCount(r.symbol) === 1 ? "" : "s"}</span>
+                            : <span className="text-[11px] font-bold text-slate-400">+ add trigger</span>}
+                        </button>
                       </td>
                       <td className="px-3 py-3.5">
                         <select value={plans[r.symbol]?.comboId || ""} onChange={(e) => setPlan(r.symbol, "comboId", e.target.value)}
@@ -766,15 +808,13 @@ export default function MarketsPage() {
                         )}
                       </td>
                       <td className="pr-4">
-                        {r.custom && (
-                          <button
-                            onClick={() => removeCustom(r.symbol)}
-                            title="Remove"
-                            className="p-1.5 text-slate-300 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition"
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </button>
-                        )}
+                        <button
+                          onClick={() => removeCustom(r.symbol, !!r.custom)}
+                          title={r.custom ? "Remove" : "Hide from this tab"}
+                          className="p-1.5 text-slate-300 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition opacity-0 group-hover:opacity-100"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
                       </td>
                     </tr>
                   );
@@ -789,6 +829,25 @@ export default function MarketsPage() {
         Live prices via Yahoo Finance (may be delayed ~15 min). Click any row to open its chart. Research support only.
         Not buy/sell advice. Always verify data independently.
       </p>
+
+      {editSym && (() => {
+        const row = baseRows.find((r) => r.symbol === editSym);
+        const q = quotes[editSym] || {};
+        const isCustom = !!row?.custom;
+        return (
+          <StockEditor
+            open
+            symbol={editSym}
+            name={q.name || row?.label}
+            price={q.price}
+            currency={q.currency}
+            value={buildEditorValue(editSym)}
+            onClose={() => setEditSym(null)}
+            onSave={(v) => saveEditor(editSym, v)}
+            onDelete={() => removeCustom(editSym, isCustom)}
+          />
+        );
+      })()}
     </div>
   );
 }

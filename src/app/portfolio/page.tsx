@@ -17,6 +17,7 @@ import {
   Search,
   Save,
   Check,
+  Pencil,
 } from "lucide-react";
 import {
   getPortfolio,
@@ -29,9 +30,11 @@ import {
   getPriceAlerts,
   savePriceAlert,
   deletePriceAlert,
+  syncStockTriggers,
   PORTFOLIO_MARKETS,
   type PortfolioMarket,
 } from "@/lib/storage";
+import StockEditor, { parseTriggers, type EditorValue } from "@/components/StockEditor";
 import { parseWorkbook, resolveHolding } from "@/lib/excelImport";
 
 const CUR: Record<PortfolioMarket, string> = {
@@ -244,6 +247,26 @@ export default function PortfolioPage() {
       }
     }
     setHoldings(getPortfolio());
+  };
+
+  // Editor (popup) plumbing for a holding: levels + multiple triggers + save.
+  const [editHolding, setEditHolding] = useState<any | null>(null);
+  const pfBuildValue = (h: any): EditorValue => {
+    let triggers = parseTriggers(h.triggers);
+    if (!triggers.length && h.condVal != null && String(h.condVal) !== "") {
+      triggers = [{ id: "legacy", op: h.condOp || ">", val: String(h.condVal), action: h.special || "Buy" }];
+    }
+    return { sl: h.sl, r: h.r, t1: h.t1, t2: h.t2, remarks: h.remarks, triggers, updatedAt: h.updatedAt ? Number(h.updatedAt) : undefined };
+  };
+  const pfSave = (h: any, v: EditorValue) => {
+    savePortfolioHolding({ ...h, sl: v.sl || "", r: v.r || "", t1: v.t1 || "", t2: v.t2 || "", remarks: v.remarks || "", triggers: v.triggers || [], updatedAt: v.updatedAt || Date.now(), condVal: "", condOp: "", special: "" });
+    deletePriceAlert(`pf-${h.id}`);
+    syncStockTriggers(`pf-${h.id}`, h.symbol, v.triggers || []);
+    setHoldings(getPortfolio());
+  };
+  const pfTrigCount = (h: any) => {
+    const n = parseTriggers(h.triggers).filter((t) => t.val !== "" && t.val != null).length;
+    return n || (h.condVal != null && String(h.condVal) !== "" ? 1 : 0);
   };
 
   const [adding, setAdding] = useState(false);
@@ -789,33 +812,29 @@ PORTFOLIO DATA: ${JSON.stringify(stats)}`;
                         );
                       })()}
                     </td>
-                    <td className="p-3 text-right"><input value={h.sl || ""} onChange={(e) => setPlanField(h, "sl", e.target.value)} placeholder="—" className={numCls} /></td>
-                    <td className="p-3 text-right"><input value={h.r || ""} onChange={(e) => setPlanField(h, "r", e.target.value)} placeholder="—" className={numCls} /></td>
-                    <td className="p-3 text-right"><input value={h.t1 || ""} onChange={(e) => setPlanField(h, "t1", e.target.value)} placeholder="—" className={numCls} /></td>
-                    <td className="p-3 text-right"><input value={h.t2 || ""} onChange={(e) => setPlanField(h, "t2", e.target.value)} placeholder="—" className={numCls} /></td>
-                    <td className="p-3"><input value={h.remarks || ""} onChange={(e) => setPlanField(h, "remarks", e.target.value)} placeholder="notes…" className={txtCls} /></td>
+                    {(["sl", "r", "t1", "t2"] as const).map((f) => (
+                      <td key={f} className="p-3 text-right">
+                        <button onClick={() => setEditHolding(h)} title="Edit" className="w-16 px-2 py-1 rounded text-[12px] tabular-nums text-slate-700 hover:bg-indigo-50">
+                          {h[f] || "—"}
+                        </button>
+                      </td>
+                    ))}
                     <td className="p-3">
-                      <div className="flex items-center gap-1.5">
-                        <span className="text-[11px] font-black text-slate-400">CMP</span>
-                        <select value={h.condOp || ">"} onChange={(e) => setPlanField(h, "condOp", e.target.value)}
-                          className="px-1.5 py-1 bg-white border border-slate-200 rounded text-[13px] font-black outline-none focus:ring-2 focus:ring-indigo-200">
-                          <option value=">">{">"}</option><option value=">=">{"≥"}</option><option value="<">{"<"}</option><option value="<=">{"≤"}</option><option value="=">{"="}</option>
-                        </select>
-                        <input type="number" value={h.condVal ?? ""} onChange={(e) => setPlanField(h, "condVal", e.target.value)} placeholder="value"
-                          className="w-20 px-2 py-1 bg-slate-50 border border-slate-200 rounded text-right text-[12px] tabular-nums outline-none focus:ring-2 focus:ring-indigo-200" />
-                        <select value={h.special || ""} onChange={(e) => setPlanField(h, "special", e.target.value)}
-                          className="px-2 py-1 bg-slate-50 border border-slate-200 rounded text-[12px] font-bold text-slate-700 outline-none focus:ring-2 focus:ring-indigo-200">
-                          <option value="">→ action</option>
-                          <option value="Buy">Buy</option>
-                          <option value="Sell">Sell</option>
-                          <option value="Book profit">Book profit</option>
-                          <option value="Add more">Add more</option>
-                          <option value="Watch">Watch</option>
-                        </select>
-                      </div>
-                      {h.condVal != null && String(h.condVal) !== "" && (
-                        <div className="text-[10px] text-emerald-600 font-bold mt-0.5">🔔 alert on</div>
+                      <button onClick={() => setEditHolding(h)} title="Edit" className="text-left w-full min-w-[7rem] px-2 py-1 rounded text-[12px] text-slate-600 hover:bg-indigo-50">
+                        {h.remarks || <span className="text-slate-300">—</span>}
+                      </button>
+                      {h.updatedAt && (
+                        <div className="text-[10px] text-slate-400 mt-0.5 whitespace-nowrap">✎ {new Date(Number(h.updatedAt)).toLocaleDateString(undefined, { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" })}</div>
                       )}
+                    </td>
+                    <td className="p-3">
+                      <button onClick={() => setEditHolding(h)} title="Edit triggers"
+                        className="flex items-center gap-1.5 px-2 py-1.5 rounded-lg hover:bg-indigo-50 text-left">
+                        <Pencil className="w-3.5 h-3.5 text-slate-400" />
+                        {pfTrigCount(h) > 0
+                          ? <span className="text-[11px] font-bold text-emerald-600">🔔 {pfTrigCount(h)} trigger{pfTrigCount(h) === 1 ? "" : "s"}</span>
+                          : <span className="text-[11px] font-bold text-slate-400">+ add trigger</span>}
+                      </button>
                     </td>
                   </tr>
                 );
@@ -954,6 +973,20 @@ PORTFOLIO DATA: ${JSON.stringify(stats)}`;
         Market Value = Qty × current price · Cost Value = Qty × purchase price · Unrealised Gain = Market Value − Cost
         Value. Live prices via Yahoo Finance. Research support only. Not buy/sell advice.
       </p>
+
+      {editHolding && (
+        <StockEditor
+          open
+          symbol={editHolding.symbol}
+          name={editHolding.name}
+          price={editHolding.currentPrice}
+          currency={editHolding.market === "Indian Stocks" ? "INR" : "USD"}
+          value={pfBuildValue(editHolding)}
+          onClose={() => setEditHolding(null)}
+          onSave={(v) => pfSave(editHolding, v)}
+          onDelete={() => { deletePortfolioHolding(editHolding.id); setHoldings(getPortfolio()); }}
+        />
+      )}
     </div>
   );
 }

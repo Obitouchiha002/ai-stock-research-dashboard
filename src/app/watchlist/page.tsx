@@ -31,8 +31,11 @@ import {
   savePriceAlert,
   deletePriceAlert,
   getCombinations,
+  syncStockTriggers,
   type Combination,
 } from "@/lib/storage";
+import StockEditor, { parseTriggers, type EditorValue } from "@/components/StockEditor";
+import { Pencil } from "lucide-react";
 import {
   resolveHolding,
   fetchQuotes,
@@ -128,6 +131,7 @@ export default function WatchlistPage() {
   const [subcats, setSubcats] = useState<Record<string, string[]>>({});
   const [newSub, setNewSub] = useState("");
   const [combos, setCombos] = useState<Combination[]>([]);
+  const [editItem, setEditItem] = useState<any | null>(null);
 
   // Quick Add
   const [showAdd, setShowAdd] = useState(false);
@@ -269,6 +273,25 @@ export default function WatchlistPage() {
   const setColor = (item: any, color: string) => {
     saveToWatchlist({ ...item, color });
     reload();
+  };
+
+  // Editor (popup) plumbing for the watchlist row.
+  const wlBuildValue = (item: any): EditorValue => {
+    let triggers = parseTriggers(item.triggers);
+    if (!triggers.length && item.condVal != null && String(item.condVal) !== "") {
+      triggers = [{ id: "legacy", op: item.condOp || ">", val: String(item.condVal), action: item.special || "Buy" }];
+    }
+    return { sl: item.sl, r: item.r, t1: item.t1, t2: item.t2, remarks: item.remarks, triggers, updatedAt: item.updatedAt ? Number(item.updatedAt) : undefined };
+  };
+  const wlSave = (item: any, v: EditorValue) => {
+    saveToWatchlist({ ...item, sl: v.sl || "", r: v.r || "", t1: v.t1 || "", t2: v.t2 || "", remarks: v.remarks || "", triggers: v.triggers || [], updatedAt: v.updatedAt || Date.now(), condVal: "", condOp: "", special: "" });
+    deletePriceAlert(`wl-${item.symbol}-${item.category}`);
+    syncStockTriggers(`wl-${item.category}`, item.symbol, v.triggers || []);
+    reload();
+  };
+  const wlTrigCount = (item: any) => {
+    const n = parseTriggers(item.triggers).filter((t) => t.val !== "" && t.val != null).length;
+    return n || (item.condVal != null && String(item.condVal) !== "" ? 1 : 0);
   };
 
   const handleBulkAdd = async () => {
@@ -811,36 +834,29 @@ export default function WatchlistPage() {
                       </td>
                       {(["sl", "r", "t1", "t2"] as const).map((f) => (
                         <td key={f} className="p-3 text-center">
-                          <input value={item[f] || ""} onChange={(e) => updateWL(item, f, e.target.value)} placeholder="—"
-                            className="w-16 px-2 py-1 bg-slate-50 border border-slate-200 rounded text-right text-[12px] tabular-nums outline-none focus:ring-2 focus:ring-indigo-200" />
+                          <button onClick={() => setEditItem(item)} title="Edit"
+                            className="w-16 px-2 py-1 rounded text-[12px] tabular-nums text-slate-700 hover:bg-indigo-50">
+                            {item[f] || "—"}
+                          </button>
                         </td>
                       ))}
                       <td className="p-3">
-                        <input value={item.remarks || ""} onChange={(e) => updateWL(item, "remarks", e.target.value)} placeholder="notes…"
-                          className="w-full min-w-[8rem] px-2 py-1 bg-slate-50 border border-slate-200 rounded text-[12px] outline-none focus:ring-2 focus:ring-indigo-200" />
+                        <button onClick={() => setEditItem(item)} title="Edit"
+                          className="text-left w-full min-w-[8rem] px-2 py-1 rounded text-[12px] text-slate-600 hover:bg-indigo-50">
+                          {item.remarks || <span className="text-slate-300">—</span>}
+                        </button>
+                        {item.updatedAt && (
+                          <div className="text-[10px] text-slate-400 mt-0.5 whitespace-nowrap">✎ {new Date(Number(item.updatedAt)).toLocaleDateString(undefined, { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" })}</div>
+                        )}
                       </td>
                       <td className="p-3">
-                        <div className="flex items-center gap-1.5">
-                          <span className="text-[11px] font-black text-slate-400">CMP</span>
-                          <select value={item.condOp || ">"} onChange={(e) => updateWL(item, "condOp", e.target.value)}
-                            className="px-1.5 py-1 bg-white border border-slate-200 rounded text-[13px] font-black outline-none focus:ring-2 focus:ring-indigo-200">
-                            <option value=">">{">"}</option><option value=">=">{"≥"}</option><option value="<">{"<"}</option><option value="<=">{"≤"}</option><option value="=">{"="}</option>
-                          </select>
-                          <input type="number" value={item.condVal ?? ""} onChange={(e) => updateWL(item, "condVal", e.target.value)} placeholder="value"
-                            className="w-20 px-2 py-1 bg-slate-50 border border-slate-200 rounded text-right text-[12px] tabular-nums outline-none focus:ring-2 focus:ring-indigo-200" />
-                          <select value={item.special || ""} onChange={(e) => updateWL(item, "special", e.target.value)}
-                            className="px-2 py-1 bg-slate-50 border border-slate-200 rounded text-[12px] font-bold text-slate-700 outline-none focus:ring-2 focus:ring-indigo-200">
-                            <option value="">→ action</option>
-                            <option value="Buy">Buy</option>
-                            <option value="Sell">Sell</option>
-                            <option value="Book profit">Book profit</option>
-                            <option value="Add more">Add more</option>
-                            <option value="Watch">Watch</option>
-                          </select>
-                        </div>
-                        {item.condVal != null && String(item.condVal) !== "" && (
-                          <div className="text-[10px] text-emerald-600 font-bold mt-0.5">🔔 alert on</div>
-                        )}
+                        <button onClick={() => setEditItem(item)} title="Edit triggers"
+                          className="flex items-center gap-1.5 px-2 py-1.5 rounded-lg hover:bg-indigo-50 text-left">
+                          <Pencil className="w-3.5 h-3.5 text-slate-400" />
+                          {wlTrigCount(item) > 0
+                            ? <span className="text-[11px] font-bold text-emerald-600">🔔 {wlTrigCount(item)} trigger{wlTrigCount(item) === 1 ? "" : "s"}</span>
+                            : <span className="text-[11px] font-bold text-slate-400">+ add trigger</span>}
+                        </button>
                       </td>
                       <td className="p-3">
                         <select value={item.comboId || ""} onChange={(e) => updateWL(item, "comboId", e.target.value)}
@@ -902,6 +918,20 @@ export default function WatchlistPage() {
       <p className="mt-4 text-[11px] text-slate-400 italic">
         Live prices via Yahoo Finance. Research support only. Not buy/sell advice. Always verify data independently.
       </p>
+
+      {editItem && (
+        <StockEditor
+          open
+          symbol={editItem.symbol}
+          name={quotes[editItem.symbol]?.name || editItem.name}
+          price={quotes[editItem.symbol]?.price}
+          currency={quotes[editItem.symbol]?.currency}
+          value={wlBuildValue(editItem)}
+          onClose={() => setEditItem(null)}
+          onSave={(v) => wlSave(editItem, v)}
+          onDelete={() => { handleRemove(editItem.symbol, editItem.category); }}
+        />
+      )}
     </div>
   );
 }
