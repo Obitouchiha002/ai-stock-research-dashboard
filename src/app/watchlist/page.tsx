@@ -126,6 +126,7 @@ export default function WatchlistPage() {
   const [search, setSearch] = useState("");
   const [markFilter, setMarkFilter] = useState("all"); // all | green | red | yellow | unmarked
   const [comboFilter, setComboFilter] = useState("all"); // all | __attached | __none | <comboId>
+  const [recentSort, setRecentSort] = useState(false);
   const [quotes, setQuotes] = useState<Record<string, any>>({});
   const [refreshing, setRefreshing] = useState(false);
   const [subcats, setSubcats] = useState<Record<string, string[]>>({});
@@ -228,7 +229,7 @@ export default function WatchlistPage() {
       item.symbol.toLowerCase().includes(s) ||
       (item.name || "").toLowerCase().includes(s)
     );
-  });
+  }).sort((a, b) => (recentSort ? Number(b.updatedAt || 0) - Number(a.updatedAt || 0) : 0));
 
   // sub-list chips: ST/MT always available, plus saved + in-use custom ones
   const activeSubcats = useMemo(() => {
@@ -281,10 +282,10 @@ export default function WatchlistPage() {
     if (!triggers.length && item.condVal != null && String(item.condVal) !== "") {
       triggers = [{ id: "legacy", op: item.condOp || ">", val: String(item.condVal), action: item.special || "Buy" }];
     }
-    return { sl: item.sl, r: item.r, t1: item.t1, t2: item.t2, remarks: item.remarks, triggers, updatedAt: item.updatedAt ? Number(item.updatedAt) : undefined };
+    return { sl: item.sl, r: item.r, t1: item.t1, t2: item.t2, remarks: item.remarks, triggers, color: item.color || "", updatedAt: item.updatedAt ? Number(item.updatedAt) : undefined };
   };
   const wlSave = (item: any, v: EditorValue) => {
-    saveToWatchlist({ ...item, sl: v.sl || "", r: v.r || "", t1: v.t1 || "", t2: v.t2 || "", remarks: v.remarks || "", triggers: v.triggers || [], updatedAt: v.updatedAt || Date.now(), condVal: "", condOp: "", special: "" });
+    saveToWatchlist({ ...item, sl: v.sl || "", r: v.r || "", t1: v.t1 || "", t2: v.t2 || "", remarks: v.remarks || "", triggers: v.triggers || [], color: v.color || "", updatedAt: v.updatedAt || Date.now(), condVal: "", condOp: "", special: "" });
     deletePriceAlert(`wl-${item.symbol}-${item.category}`);
     syncStockTriggers(`wl-${item.category}`, item.symbol, v.triggers || []);
     reload();
@@ -690,6 +691,8 @@ export default function WatchlistPage() {
         ))}
         <button onClick={() => setMarkFilter(markFilter === "unmarked" ? "all" : "unmarked")}
           className={`px-2.5 py-1 rounded-lg text-xs font-bold transition ${markFilter === "unmarked" ? "bg-slate-900 text-white" : "bg-white text-slate-400 border border-slate-200 hover:bg-slate-50"}`}>Unmarked</button>
+        <button onClick={() => setRecentSort((v) => !v)}
+          className={`px-2.5 py-1 rounded-lg text-xs font-bold transition border ml-1 ${recentSort ? "bg-indigo-600 text-white border-indigo-600" : "bg-white text-slate-600 border-slate-200 hover:bg-slate-50"}`}>🕐 Recently changed</button>
       </div>
 
       {/* Combination filter — see which stocks a saved combo is attached to */}
@@ -737,7 +740,9 @@ export default function WatchlistPage() {
             const up = typeof chg === "number" && chg >= 0;
             return (
               <div key={`m-${item.symbol}-${item.category}-${idx}`} className={`bg-white rounded-xl border border-slate-200 shadow-sm p-3 flex items-center gap-2.5 ${barClass(item.color)}`}>
-                <div className="shrink-0"><ColorDots value={item.color} onPick={(c) => setColor(item, c)} /></div>
+                <div className="shrink-0"><button onClick={() => setEditItem(item)} title="Edit trend / colour (opens editor)" className="shrink-0">
+                            <span className={`w-3.5 h-3.5 rounded-full inline-block ${item.color ? (MARK_COLORS.find((c) => c.key === item.color)?.dot || "bg-slate-300") : "bg-slate-200 border border-slate-300"}`} />
+                          </button></div>
                 <Link href={`/analyze?symbol=${item.symbol}`} className="flex items-center gap-3 flex-1 min-w-0">
                   <div className="w-9 h-9 rounded-lg bg-indigo-50 border border-indigo-100 flex items-center justify-center font-bold text-indigo-700 text-[12px] shrink-0">
                     {item.symbol.substring(0, 2)}
@@ -796,7 +801,9 @@ export default function WatchlistPage() {
                     <tr key={`${item.symbol}-${item.category}-${idx}`} className={`border-b border-slate-100 transition ${item.color ? "" : "hover:bg-slate-50"} ${barClass(item.color)}`}>
                       <td className="p-4">
                         <div className="flex items-center gap-3">
-                          <ColorDots value={item.color} onPick={(c) => setColor(item, c)} />
+                          <button onClick={() => setEditItem(item)} title="Edit trend / colour (opens editor)" className="shrink-0">
+                            <span className={`w-3.5 h-3.5 rounded-full inline-block ${item.color ? (MARK_COLORS.find((c) => c.key === item.color)?.dot || "bg-slate-300") : "bg-slate-200 border border-slate-300"}`} />
+                          </button>
                           <div className="w-10 h-10 rounded-lg bg-indigo-50 border border-indigo-100 flex items-center justify-center font-bold text-indigo-700">
                             {item.symbol.substring(0, 2)}
                           </div>
@@ -927,6 +934,7 @@ export default function WatchlistPage() {
           price={quotes[editItem.symbol]?.price}
           currency={quotes[editItem.symbol]?.currency}
           value={wlBuildValue(editItem)}
+          showColor
           onClose={() => setEditItem(null)}
           onSave={(v) => wlSave(editItem, v)}
           onDelete={() => { handleRemove(editItem.symbol, editItem.category); }}

@@ -37,6 +37,13 @@ const TREND_OPTS = [
   { v: "down", label: "↓ Downtrend", cls: "text-rose-700 border-rose-300 bg-rose-50" },
   { v: "side", label: "→ Sideways", cls: "text-amber-700 border-amber-300 bg-amber-50" },
 ];
+// Sharp row highlight when the user tags a trend (My Trend) — a touch stronger
+// than the Watchlist tint so it stands out on the dense Markets table.
+const TREND_ROW: Record<string, string> = {
+  up: "bg-emerald-100",
+  down: "bg-rose-100",
+  side: "bg-amber-100",
+};
 function TrendSelect({ value, onChange }: { value?: string; onChange: (v: string) => void }) {
   const cur = TREND_OPTS.find((o) => o.v === (value || "")) || TREND_OPTS[0];
   return (
@@ -449,6 +456,7 @@ export default function MarketsPage() {
   // --- Trend filter (uptrend / downtrend / sideways / no-trend) ---
   const [trendFilter, setTrendFilter] = useState("all");
   const [comboFilter, setComboFilter] = useState("all"); // all | __attached | __none | <comboId>
+  const [recentSort, setRecentSort] = useState(false); // when on, most-recently-edited on top
   const [trendMap, setTrendMap] = useState<Record<string, string>>({});
   const [trendLoading, setTrendLoading] = useState(false);
 
@@ -487,7 +495,10 @@ export default function MarketsPage() {
       if (comboFilter === "__none") return !cid;
       return cid === comboFilter;
     };
-    if (trendFilter === "all") return baseRows.filter(byCombo);
+    const recent = (arr: any[]) => recentSort
+      ? [...arr].sort((a, b) => Number(plans[b.symbol]?.updatedAt || 0) - Number(plans[a.symbol]?.updatedAt || 0))
+      : arr;
+    if (trendFilter === "all") return recent(baseRows.filter(byCombo));
     const up = ["up", "strong_up"];
     const down = ["down", "strong_down"];
     const match = (st?: string) => {
@@ -501,8 +512,8 @@ export default function MarketsPage() {
         default: return true;
       }
     };
-    return baseRows.filter((r) => match(trendMap[r.symbol]) && byCombo(r));
-  }, [baseRows, trendFilter, trendMap, plans, comboFilter]);
+    return recent(baseRows.filter((r) => match(trendMap[r.symbol]) && byCombo(r)));
+  }, [baseRows, trendFilter, trendMap, plans, comboFilter, recentSort]);
 
   const TREND_OPTIONS = [
     { key: "all", label: "All trends" },
@@ -634,6 +645,10 @@ export default function MarketsPage() {
           {trendFilter !== "all" && !trendLoading && (
             <span className="text-[11px] text-slate-400">{rows.length} match</span>
           )}
+          <button onClick={() => setRecentSort((v) => !v)}
+            className={`text-[11px] font-bold rounded-lg px-2.5 py-1.5 border transition ${recentSort ? "bg-indigo-600 text-white border-indigo-600" : "bg-white text-slate-600 border-slate-200 hover:bg-slate-50"}`}>
+            🕐 Recently changed
+          </button>
           {(hidden[tab]?.length || 0) > 0 && (
             <button onClick={restoreHidden} className="text-[11px] font-bold text-slate-500 hover:text-indigo-600 bg-slate-100 hover:bg-indigo-50 rounded-lg px-2.5 py-1.5 ml-1">
               ↩ Restore {hidden[tab].length} hidden
@@ -672,7 +687,7 @@ export default function MarketsPage() {
               const up = (q.changePct ?? 0) >= 0;
               const cur = curSymbol(q.currency);
               return (
-                <div key={`m-${r.symbol}`} className="flex items-center gap-3 px-4 py-3">
+                <div key={`m-${r.symbol}`} className={`flex items-center gap-3 px-4 py-3 ${TREND_ROW[marks[r.symbol] || ""] || ""}`}>
                   <Link href={`/charts?symbol=${encodeURIComponent(r.symbol)}`} className="flex items-center gap-3 flex-1 min-w-0">
                     <span className={`w-9 h-9 rounded-lg flex items-center justify-center text-[10px] font-black shrink-0 ${badgeColor(r.symbol)}`}>
                       {initials(r.label)}
@@ -744,7 +759,7 @@ export default function MarketsPage() {
                     <tr key={r.symbol}
                       onDragOver={(e) => { if (dragSym) e.preventDefault(); }}
                       onDrop={() => { if (dragSym) reorder(dragSym, r.symbol); setDragSym(null); }}
-                      className={`border-t border-slate-100 transition group ${dragSym === r.symbol ? "opacity-40" : "hover:bg-slate-50"} ${dragSym && dragSym !== r.symbol ? "hover:bg-indigo-50" : ""}`}>
+                      className={`border-t border-slate-100 transition group ${dragSym === r.symbol ? "opacity-40" : ""} ${dragSym && dragSym !== r.symbol ? "hover:bg-indigo-50" : (TREND_ROW[marks[r.symbol] || ""] || "hover:bg-slate-50")}`}>
                       <td className="px-5 py-3.5">
                         <div className="flex items-center gap-2">
                           <span draggable onDragStart={() => setDragSym(r.symbol)} onDragEnd={() => setDragSym(null)}

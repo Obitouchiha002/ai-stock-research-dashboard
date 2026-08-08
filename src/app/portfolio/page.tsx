@@ -57,6 +57,7 @@ export default function PortfolioPage() {
   const [view, setView] = useState<"holdings" | "plan">("holdings");
   const [search, setSearch] = useState("");
   const [trendFilter, setTrendFilter] = useState("all"); // all | up | down | side
+  const [recentSort, setRecentSort] = useState(false);
   const [savedMsg, setSavedMsg] = useState(false);
   const [showAdd, setShowAdd] = useState(false);
   const [form, setForm] = useState({ symbol: "", shares: "", price: "" });
@@ -220,7 +221,7 @@ export default function PortfolioPage() {
       if (!(String(h.symbol || "").toLowerCase().includes(s) || String(h.name || "").toLowerCase().includes(s))) return false;
     }
     return true;
-  });
+  }).sort((a, b) => (recentSort ? Number(b.updatedAt || 0) - Number(a.updatedAt || 0) : 0));
 
   // Save one trade-plan field (SL / R / T1 / T2 / remarks / special) on a holding.
   // These are the user's own manual entries; only the live price is auto-fetched.
@@ -752,6 +753,8 @@ PORTFOLIO DATA: ${JSON.stringify(stats)}`;
               {t.label}
             </button>
           ))}
+          <button onClick={() => setRecentSort((v) => !v)}
+            className={`px-2.5 py-1 rounded-lg text-xs font-bold transition border ml-1 ${recentSort ? "bg-indigo-600 text-white border-indigo-600" : "bg-white text-slate-600 border-slate-200 hover:bg-slate-50"}`}>🕐 Recently changed</button>
         </div>
         {view === "plan" && (
           <>

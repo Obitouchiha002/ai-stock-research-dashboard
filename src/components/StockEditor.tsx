@@ -11,8 +11,16 @@ export type EditorValue = {
   sl?: string; r?: string; t1?: string; t2?: string;
   remarks?: string;
   triggers?: StockTrigger[];
+  color?: string; // "" | green | red | yellow (trend mark)
   updatedAt?: number;
 };
+
+const COLOR_OPTS = [
+  { v: "", label: "None", dot: "bg-white border-2 border-slate-300" },
+  { v: "green", label: "Uptrend", dot: "bg-emerald-500" },
+  { v: "red", label: "Downtrend", dot: "bg-rose-500" },
+  { v: "yellow", label: "Sideways", dot: "bg-amber-500" },
+];
 
 const OPS = [
   { v: ">", l: ">" }, { v: ">=", l: "≥" }, { v: "<", l: "<" }, { v: "<=", l: "≤" }, { v: "=", l: "=" },
@@ -21,7 +29,7 @@ const ACTIONS = ["Buy", "Sell", "Book profit", "Add more", "Watch"];
 const genId = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
 
 export default function StockEditor({
-  open, symbol, name, price, currency, value, levelsLabel, onClose, onSave, onDelete,
+  open, symbol, name, price, currency, value, levelsLabel, showColor, onClose, onSave, onDelete,
 }: {
   open: boolean;
   symbol: string;
@@ -30,6 +38,7 @@ export default function StockEditor({
   currency?: string;
   value: EditorValue;
   levelsLabel?: string;
+  showColor?: boolean;
   onClose: () => void;
   onSave: (v: EditorValue) => void;
   onDelete?: () => void;
@@ -71,6 +80,21 @@ export default function StockEditor({
         </div>
 
         <div className="p-5 space-y-4">
+          {/* Trend / colour mark (only where the row is colour-coded) */}
+          {showColor && (
+            <div>
+              <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-wide mb-1.5">Trend mark</label>
+              <div className="flex flex-wrap gap-1.5">
+                {COLOR_OPTS.map((o) => (
+                  <button key={o.v} onClick={() => set("color", o.v)}
+                    className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border text-[12px] font-bold transition ${(v.color || "") === o.v ? "border-indigo-400 bg-indigo-50 text-indigo-700" : "border-slate-200 bg-white text-slate-600 hover:bg-slate-50"}`}>
+                    <span className={`w-3 h-3 rounded-full ${o.dot}`} /> {o.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
           {/* Levels */}
           <div>
             <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-wide mb-1.5">{levelsLabel || "Levels"}</label>
