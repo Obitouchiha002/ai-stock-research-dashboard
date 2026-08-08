@@ -16,19 +16,24 @@ const PERIODS: { k: string; label: string }[] = [
 const MARKET_INDICES: { group: string; items: { v: string; label: string }[] }[] = [
   { group: "US Indices", items: [
     { v: "^GSPC", label: "S&P 500" }, { v: "^DJI", label: "Dow Jones" }, { v: "^IXIC", label: "Nasdaq Composite" },
-    { v: "^NDX", label: "Nasdaq 100" }, { v: "^RUT", label: "Russell 2000" }, { v: "^SOX", label: "SOX (Semis)" }, { v: "^VIX", label: "VIX" } ] },
+    { v: "^NDX", label: "Nasdaq 100" }, { v: "^RUT", label: "Russell 2000" }, { v: "^NYA", label: "NYSE Composite" },
+    { v: "^SOX", label: "SOX (Semis)" }, { v: "^VIX", label: "VIX" } ] },
   { group: "Indian Indices", items: [
     { v: "^NSEI", label: "Nifty 50" }, { v: "^NSEBANK", label: "Nifty Bank" }, { v: "^BSESN", label: "BSE Sensex" },
     { v: "^CNXIT", label: "Nifty IT" }, { v: "^CNXAUTO", label: "Nifty Auto" }, { v: "^CNXPHARMA", label: "Nifty Pharma" },
-    { v: "^CNXFMCG", label: "Nifty FMCG" }, { v: "^CNXMETAL", label: "Nifty Metal" }, { v: "^INDIAVIX", label: "India VIX" } ] },
+    { v: "^CNXFMCG", label: "Nifty FMCG" }, { v: "^CNXMETAL", label: "Nifty Metal" }, { v: "^CNXENERGY", label: "Nifty Energy" },
+    { v: "^CNXREALTY", label: "Nifty Realty" }, { v: "^NSMIDCP", label: "Nifty Midcap" }, { v: "^INDIAVIX", label: "India VIX" } ] },
   { group: "Global Indices", items: [
-    { v: "^FTSE", label: "FTSE 100" }, { v: "^GDAXI", label: "DAX" }, { v: "^FCHI", label: "CAC 40" },
-    { v: "^N225", label: "Nikkei 225" }, { v: "^HSI", label: "Hang Seng" }, { v: "^KS11", label: "KOSPI" } ] },
+    { v: "^FTSE", label: "FTSE 100" }, { v: "^GDAXI", label: "DAX" }, { v: "^FCHI", label: "CAC 40" }, { v: "^STOXX50E", label: "Euro Stoxx 50" },
+    { v: "^N225", label: "Nikkei 225" }, { v: "^HSI", label: "Hang Seng" }, { v: "^KS11", label: "KOSPI" }, { v: "^AXJO", label: "ASX 200" } ] },
   { group: "Commodities", items: [
-    { v: "GC=F", label: "Gold" }, { v: "SI=F", label: "Silver" }, { v: "HG=F", label: "Copper" },
-    { v: "CL=F", label: "Crude Oil" }, { v: "BZ=F", label: "Brent" }, { v: "NG=F", label: "Natural Gas" } ] },
+    { v: "GC=F", label: "Gold" }, { v: "SI=F", label: "Silver" }, { v: "PL=F", label: "Platinum" }, { v: "HG=F", label: "Copper" },
+    { v: "CL=F", label: "Crude Oil" }, { v: "BZ=F", label: "Brent" }, { v: "NG=F", label: "Natural Gas" },
+    { v: "ZC=F", label: "Corn" }, { v: "ZW=F", label: "Wheat" }, { v: "KC=F", label: "Coffee" } ] },
   { group: "Crypto", items: [
-    { v: "BTC-USD", label: "Bitcoin" }, { v: "ETH-USD", label: "Ethereum" }, { v: "SOL-USD", label: "Solana" }, { v: "XRP-USD", label: "XRP" } ] },
+    { v: "BTC-USD", label: "Bitcoin" }, { v: "ETH-USD", label: "Ethereum" }, { v: "BNB-USD", label: "BNB" }, { v: "SOL-USD", label: "Solana" },
+    { v: "XRP-USD", label: "XRP" }, { v: "ADA-USD", label: "Cardano" }, { v: "DOGE-USD", label: "Dogecoin" }, { v: "AVAX-USD", label: "Avalanche" },
+    { v: "DOT-USD", label: "Polkadot" }, { v: "LINK-USD", label: "Chainlink" } ] },
 ];
 // A calm, distinct colour per series (base first).
 const SERIES_COLORS = ["#4f46e5", "#059669", "#e11d48", "#d97706", "#7c3aed", "#0891b2"];
@@ -383,7 +388,7 @@ export default function ComparePage() {
               return (
                 <div key={l.symbol} className="flex items-center gap-3">
                   <span className="w-5 text-right text-[13px] font-bold text-slate-400">{i + 1}</span>
-                  <Link href={`/analyze?symbol=${l.symbol}`} className="w-24 font-black text-slate-800 hover:text-indigo-600 truncate">{l.symbol}</Link>
+                  <Link href={`/charts?symbol=${encodeURIComponent(l.symbol)}`} className="w-24 font-black text-slate-800 hover:text-indigo-600 truncate" title="Open in Chart Analytics">{l.symbol}</Link>
                   <div className="flex-1 h-3 bg-slate-100 rounded-full overflow-hidden"><div className={`h-full rounded-full ${rsColor(rating)}`} style={{ width: `${rating}%` }} /></div>
                   <span className={`w-10 text-right font-black ${rsText(rating)}`}>{rating}</span>
                   <span className={`w-16 text-right text-[13px] font-bold ${l.changePct >= 0 ? "text-emerald-600" : "text-rose-600"}`}>{pp(l.changePct)}</span>
@@ -415,10 +420,11 @@ export default function ComparePage() {
             </div>
             <div className="flex flex-wrap gap-x-4 gap-y-1 mt-2">
               {legs.map((l, i) => (
-                <span key={l.symbol} className="inline-flex items-center gap-1.5 text-[12px] font-bold">
+                <Link key={l.symbol} href={`/charts?symbol=${encodeURIComponent(l.symbol)}`} title="Open in Chart Analytics"
+                  className="inline-flex items-center gap-1.5 text-[12px] font-bold hover:underline">
                   <span className="w-3 h-3 rounded-full" style={{ background: SERIES_COLORS[i % SERIES_COLORS.length] }} />
                   {l.label}{l.kind === "benchmark" ? " (benchmark)" : ""} <span className={l.changePct >= 0 ? "text-emerald-600" : "text-rose-600"}>{pp(l.changePct)}</span>
-                </span>
+                </Link>
               ))}
             </div>
           </div>
@@ -448,7 +454,7 @@ export default function ComparePage() {
                 <thead>
                   <tr className="text-[11px] font-bold text-slate-400 uppercase tracking-wide border-b border-slate-200">
                     <th className="text-left py-2 pr-2">Metric</th>
-                    {legs.map((l) => <th key={l.symbol} className="text-right py-2 px-2">{l.symbol}</th>)}
+                    {legs.map((l) => <th key={l.symbol} className="text-right py-2 px-2"><Link href={`/charts?symbol=${encodeURIComponent(l.symbol)}`} className="hover:text-indigo-600 hover:underline" title="Open in Chart Analytics">{l.symbol}</Link></th>)}
                   </tr>
                 </thead>
                 <tbody>
@@ -488,7 +494,7 @@ export default function ComparePage() {
                   const rating = rsRating(longWin[l.symbol] || l.windows, l.changePct);
                   return (
                     <div key={l.symbol} className="flex items-center gap-3">
-                      <span className="w-16 font-black text-slate-800 truncate">{l.symbol}</span>
+                      <Link href={`/charts?symbol=${encodeURIComponent(l.symbol)}`} className="w-16 font-black text-slate-800 truncate hover:text-indigo-600" title="Open in Chart Analytics">{l.symbol}</Link>
                       <div className="flex-1 h-3 bg-slate-100 rounded-full overflow-hidden"><div className={`h-full rounded-full ${rsColor(rating)}`} style={{ width: `${rating}%` }} /></div>
                       <span className={`w-8 text-right font-black ${rsText(rating)}`}>{rating}</span>
                     </div>
