@@ -122,6 +122,7 @@ export default function WatchlistPage() {
   const [activeSub, setActiveSub] = useState<string>("All"); // sub-list within a category
   const [search, setSearch] = useState("");
   const [markFilter, setMarkFilter] = useState("all"); // all | green | red | yellow | unmarked
+  const [comboFilter, setComboFilter] = useState("all"); // all | __attached | __none | <comboId>
   const [quotes, setQuotes] = useState<Record<string, any>>({});
   const [refreshing, setRefreshing] = useState(false);
   const [subcats, setSubcats] = useState<Record<string, string[]>>({});
@@ -213,6 +214,10 @@ export default function WatchlistPage() {
     // trend-mark filter
     if (markFilter === "unmarked") { if (item.color) return false; }
     else if (markFilter !== "all" && item.color !== markFilter) return false;
+    // combo-attachment filter
+    if (comboFilter === "__attached") { if (!item.comboId) return false; }
+    else if (comboFilter === "__none") { if (item.comboId) return false; }
+    else if (comboFilter !== "all" && item.comboId !== comboFilter) return false;
     if (!search) return true;
     const s = search.toLowerCase();
     return (
@@ -663,6 +668,26 @@ export default function WatchlistPage() {
         <button onClick={() => setMarkFilter(markFilter === "unmarked" ? "all" : "unmarked")}
           className={`px-2.5 py-1 rounded-lg text-xs font-bold transition ${markFilter === "unmarked" ? "bg-slate-900 text-white" : "bg-white text-slate-400 border border-slate-200 hover:bg-slate-50"}`}>Unmarked</button>
       </div>
+
+      {/* Combination filter — see which stocks a saved combo is attached to */}
+      {combos.length > 0 && (
+        <div className="flex items-center gap-2 mb-4 flex-wrap">
+          <span className="text-[11px] font-bold text-violet-500 uppercase tracking-wide">Combo:</span>
+          <select value={comboFilter} onChange={(e) => setComboFilter(e.target.value)}
+            className={`px-2.5 py-1.5 rounded-lg text-xs font-bold border outline-none focus:ring-2 focus:ring-violet-200 cursor-pointer ${comboFilter !== "all" ? "bg-violet-50 border-violet-300 text-violet-700" : "bg-white border-slate-200 text-slate-600"}`}>
+            <option value="all">All stocks</option>
+            <option value="__attached">🎯 Any combo attached ({watchlist.filter((i) => i.comboId).length})</option>
+            <option value="__none">No combo attached</option>
+            {combos.map((c) => {
+              const n = watchlist.filter((i) => i.comboId === c.id).length;
+              return <option key={c.id} value={c.id}>{c.label ? `${c.label} · ` : ""}{c.name} ({n})</option>;
+            })}
+          </select>
+          {comboFilter !== "all" && (
+            <button onClick={() => setComboFilter("all")} className="text-[11px] font-bold text-slate-400 hover:text-rose-600">clear</button>
+          )}
+        </div>
+      )}
 
       {/* Empty state */}
       {watchlist.length === 0 ? (

@@ -346,6 +346,7 @@ export default function MarketsPage() {
 
   // --- Trend filter (uptrend / downtrend / sideways / no-trend) ---
   const [trendFilter, setTrendFilter] = useState("all");
+  const [comboFilter, setComboFilter] = useState("all"); // all | __attached | __none | <comboId>
   const [trendMap, setTrendMap] = useState<Record<string, string>>({});
   const [trendLoading, setTrendLoading] = useState(false);
 
@@ -377,7 +378,14 @@ export default function MarketsPage() {
   }, [trendFilter, baseRows, trendMap]);
 
   const rows = useMemo(() => {
-    if (trendFilter === "all") return baseRows;
+    const byCombo = (r: any) => {
+      const cid = plans[r.symbol]?.comboId;
+      if (comboFilter === "all") return true;
+      if (comboFilter === "__attached") return !!cid;
+      if (comboFilter === "__none") return !cid;
+      return cid === comboFilter;
+    };
+    if (trendFilter === "all") return baseRows.filter(byCombo);
     const up = ["up", "strong_up"];
     const down = ["down", "strong_down"];
     const match = (st?: string) => {
@@ -391,8 +399,8 @@ export default function MarketsPage() {
         default: return true;
       }
     };
-    return baseRows.filter((r) => match(trendMap[r.symbol]));
-  }, [baseRows, trendFilter, trendMap]);
+    return baseRows.filter((r) => match(trendMap[r.symbol]) && byCombo(r));
+  }, [baseRows, trendFilter, trendMap, plans, comboFilter]);
 
   const TREND_OPTIONS = [
     { key: "all", label: "All trends" },
@@ -504,6 +512,24 @@ export default function MarketsPage() {
           {trendLoading && <span className="text-[11px] text-slate-400 flex items-center gap-1"><RefreshCw className="w-3 h-3 animate-spin" /> analysing trends…</span>}
           {trendFilter !== "all" && !trendLoading && (
             <span className="text-[11px] text-slate-400">{rows.length} match</span>
+          )}
+          {combos.length > 0 && (
+            <>
+              <span className="text-[11px] font-bold text-violet-500 uppercase tracking-wide ml-2">Combo</span>
+              <select
+                value={comboFilter}
+                onChange={(e) => setComboFilter(e.target.value)}
+                className={`text-xs font-bold rounded-lg px-2.5 py-1.5 border outline-none focus:ring-2 focus:ring-violet-200 cursor-pointer ${comboFilter !== "all" ? "bg-violet-50 border-violet-300 text-violet-700" : "bg-white border-slate-200 text-slate-700"}`}
+              >
+                <option value="all">All</option>
+                <option value="__attached">🎯 Any attached ({Object.values(plans).filter((p) => p?.comboId).length})</option>
+                <option value="__none">No combo</option>
+                {combos.map((c) => {
+                  const n = Object.values(plans).filter((p) => p?.comboId === c.id).length;
+                  return <option key={c.id} value={c.id}>{c.label ? `${c.label} · ` : ""}{c.name} ({n})</option>;
+                })}
+              </select>
+            </>
           )}
         </div>
 
