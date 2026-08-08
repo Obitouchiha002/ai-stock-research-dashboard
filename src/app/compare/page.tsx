@@ -63,7 +63,8 @@ export default function ComparePage() {
   const [sug, setSug] = useState<any[]>([]);
   const [showSug, setShowSug] = useState(false);
 
-  const [customMkt, setCustomMkt] = useState<{ v: string; label: string }[]>([]);
+  const [customByGrp, setCustomByGrp] = useState<Record<string, any[]>>({});
+  const [customPlain, setCustomPlain] = useState<any[]>([]);
   const [running, setRunning] = useState(false);
   const [err, setErr] = useState("");
   const [data, setData] = useState<any | null>(null);
@@ -78,6 +79,15 @@ export default function ComparePage() {
     g.group === "Global Indices" || g.group === "Commodities" || g.group === "Crypto" ||
     (mkt === "US" ? g.group === "US Indices" : g.group === "Indian Indices")
   ), [mkt]);
+
+  // The user's OWN Markets symbols, filtered to the selected market (their custom
+  // US symbols under US, Indian under Indian) + any plain custom symbols.
+  const customForMkt = useMemo(() => {
+    const grp = mkt === "US" ? "us" : "in";
+    const list = [...(customByGrp[grp] || []), ...customPlain] as any[];
+    const seen = new Set<string>();
+    return list.filter((c) => c?.symbol && !seen.has(c.symbol) && seen.add(c.symbol)).map((c) => ({ v: c.symbol, label: c.label || c.symbol }));
+  }, [customByGrp, customPlain, mkt]);
 
   const restored = useRef(false);
   // Restore the last session (survives refresh + tab switches), else seed from
@@ -105,12 +115,8 @@ export default function ComparePage() {
       if (deep) { setBase(deep.toUpperCase()); setPeers(uniq.filter((s) => s !== deep.toUpperCase()).slice(0, 3)); }
       else if (uniq.length) { setBase(uniq[0]); setPeers(uniq.slice(1, 4)); }
     }
-    // The user's own Markets symbols become extra pickable indices.
-    try {
-      const cm = [...getCustomMarketSymbols(), ...Object.values(getCustomMarketByGroup()).flat()] as any[];
-      const seen = new Set<string>();
-      setCustomMkt(cm.filter((c) => c?.symbol && !seen.has(c.symbol) && seen.add(c.symbol)).map((c) => ({ v: c.symbol, label: c.label || c.symbol })));
-    } catch {}
+    // The user's own Markets symbols become extra pickable indices (per market).
+    try { setCustomByGrp(getCustomMarketByGroup()); setCustomPlain(getCustomMarketSymbols()); } catch {}
   }, []);
 
   // Persist everything so a refresh or tab switch keeps the results.
@@ -319,9 +325,9 @@ export default function ComparePage() {
                       {g.items.map((it) => <option key={it.v} value={it.v}>{it.label}</option>)}
                     </optgroup>
                   ))}
-                  {customMkt.length > 0 && (
+                  {customForMkt.length > 0 && (
                     <optgroup label="My Markets">
-                      {customMkt.map((it) => <option key={it.v} value={it.v}>{it.label}</option>)}
+                      {customForMkt.map((it) => <option key={it.v} value={it.v}>{it.label}</option>)}
                     </optgroup>
                   )}
                 </select>
@@ -338,9 +344,9 @@ export default function ComparePage() {
                     {g.items.map((it) => <option key={it.v} value={it.v}>{it.label}</option>)}
                   </optgroup>
                 ))}
-                {customMkt.length > 0 && (
+                {customForMkt.length > 0 && (
                   <optgroup label="My Markets">
-                    {customMkt.map((it) => <option key={it.v} value={it.v}>{it.label}</option>)}
+                    {customForMkt.map((it) => <option key={it.v} value={it.v}>{it.label}</option>)}
                   </optgroup>
                 )}
               </select>
