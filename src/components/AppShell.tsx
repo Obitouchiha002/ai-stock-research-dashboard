@@ -94,7 +94,6 @@ const PRIMARY_NAV = [
   { name: "Markets", href: "/markets", icon: Globe },
   { name: "Watchlist", href: "/watchlist", icon: Star },
   { name: "Portfolio", href: "/portfolio", icon: Briefcase },
-  { name: "Market News", href: "/news", icon: Newspaper },
 ];
 
 // Power-user destinations, still grouped, revealed under "More tools".
@@ -102,7 +101,6 @@ const MORE_GROUPS = [
   {
     label: "Research tools",
     items: [
-      { name: "Screener", href: "/screener", icon: Filter },
       { name: "Combinations", href: "/combos", icon: SlidersHorizontal },
       { name: "Compare Stocks", href: "/compare", icon: ArrowLeftRight },
       { name: "AI Research", href: "/ai-chat", icon: MessageSquare },
