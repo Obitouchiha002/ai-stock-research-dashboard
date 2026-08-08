@@ -169,7 +169,7 @@ export default function TrendAlertsPage() {
   );
 
   return (
-    <div className="max-w-screen-2xl mx-auto px-4 py-8">
+    <div className="max-w-full mx-auto px-4 py-8">
       {/* Header */}
       <div className="flex flex-col md:flex-row md:items-center justify-between mb-5 gap-4">
         <div>

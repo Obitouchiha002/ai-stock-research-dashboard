@@ -1109,7 +1109,7 @@ function AnalyzeContent() {
     <div className="analyze-page min-h-screen bg-slate-50 flex flex-col font-sans text-slate-900 pb-12 overflow-x-hidden">
       {/* 1. Analyze Space Top Control Bar */}
       <div className="bg-white border-b border-slate-200 sticky top-0 z-40 print:hidden relative isolate">
-        <div className="max-w-screen-2xl mx-auto px-4 py-3">
+        <div className="max-w-full mx-auto px-4 py-3">
           <div className="flex flex-col xl:flex-row gap-4 items-center justify-between">
             <div className="flex flex-1 w-full gap-3 items-center">
               <div className="w-8 h-8 bg-indigo-600 rounded-lg flex items-center justify-center text-white shrink-0 shadow-sm">
@@ -1233,7 +1233,7 @@ function AnalyzeContent() {
       </div>
 
       {error && (
-        <div className="max-w-screen-2xl mx-auto px-4 mt-6">
+        <div className="max-w-full mx-auto px-4 mt-6">
           <div className="bg-rose-50 border border-rose-200 text-rose-700 p-4 rounded-xl flex items-center gap-3 mb-4">
             <AlertTriangle className="h-5 w-5" />
             <p className="text-sm font-medium">{error}</p>
@@ -1277,7 +1277,7 @@ function AnalyzeContent() {
       )}
 
       {loading && !data && (
-        <div className="max-w-screen-2xl mx-auto px-4 mt-6">
+        <div className="max-w-full mx-auto px-4 mt-6">
           <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-16 text-center w-full max-w-3xl mx-auto mt-12 animate-pulse">
             <div className="h-10 w-10 border-3 border-indigo-100 border-t-indigo-600 rounded-full animate-spin mx-auto mb-6" />
             <h3 className="text-xl font-bold text-slate-800 mb-2">
@@ -1350,7 +1350,7 @@ function AnalyzeContent() {
       )}
 
       {data && !loading && (
-        <div className="max-w-screen-2xl mx-auto px-4 w-full flex flex-col pt-6 pb-20">
+        <div className="max-w-full mx-auto px-4 w-full flex flex-col pt-6 pb-20">
           {/* OFFSCREEN PDF EXPORT CANVAS */}
           <div
             id="pdf-report-content"

@@ -327,7 +327,7 @@ export default function ChartsPage() {
   const up = (meta?.changePct ?? 0) >= 0;
 
   return (
-    <div className="max-w-screen-2xl mx-auto px-4 py-8">
+    <div className="max-w-full mx-auto px-4 py-8">
       {/* Header */}
       <div className="flex flex-col lg:flex-row lg:items-center justify-between mb-5 gap-4">
         <div>

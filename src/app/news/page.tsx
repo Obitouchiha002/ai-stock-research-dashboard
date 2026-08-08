@@ -92,7 +92,7 @@ export default function NewsPage() {
   };
 
   return (
-    <div className="max-w-screen-2xl mx-auto px-4 py-8">
+    <div className="max-w-full mx-auto px-4 py-8">
       {/* Header */}
       <div className="mb-6">
         <h1 className="text-3xl font-black text-slate-900 tracking-tight flex items-center gap-2">

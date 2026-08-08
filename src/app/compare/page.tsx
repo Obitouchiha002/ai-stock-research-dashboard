@@ -66,7 +66,7 @@ export default function ComparePage() {
   };
 
   return (
-    <div className="max-w-screen-2xl mx-auto px-4 py-8">
+    <div className="max-w-full mx-auto px-4 py-8">
       <div className="mb-8">
         <h1 className="text-3xl font-black text-slate-900 tracking-tight flex items-center gap-2">
           <GitCompare className="w-8 h-8 text-indigo-600" /> Compare Stocks

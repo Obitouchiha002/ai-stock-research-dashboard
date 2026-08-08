@@ -250,7 +250,7 @@ export default function CombosPage() {
   const money = (r: any) => `${r.currency === "INR" ? "₹" : "$"}${Number(r.price).toLocaleString(undefined, { maximumFractionDigits: 2 })}`;
 
   return (
-    <div className="max-w-screen-xl mx-auto px-4 py-8">
+    <div className="max-w-full mx-auto px-4 py-8">
       <div className="mb-6">
         <h1 className="text-3xl font-black text-slate-900 tracking-tight flex items-center gap-2">
           <SlidersHorizontal className="w-8 h-8 text-indigo-600" /> Combinations

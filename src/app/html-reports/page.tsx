@@ -147,7 +147,7 @@ export default function HtmlReportsPage() {
   const totalSize = reports.reduce((a, r) => a + r.size, 0);
 
   return (
-    <div className="max-w-screen-2xl mx-auto px-4 py-8">
+    <div className="max-w-full mx-auto px-4 py-8">
       <div className="flex flex-col md:flex-row md:items-center justify-between mb-6 gap-4">
         <div>
           <h1 className="text-3xl font-black text-slate-900 tracking-tight flex items-center gap-2">
