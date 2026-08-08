@@ -72,7 +72,7 @@ const PF_STANCE = [
 ];
 
 // ---- Earnings Tracker option sets ----
-const EARN_FY = ["FY 2025-26", "FY 2024-25", "FY 2023-24"];
+const EARN_FY = ["FY 2027-28", "FY 2026-27", "FY 2025-26", "FY 2024-25", "FY 2023-24", "FY 2022-23"];
 const EARN_Q = ["Q1", "Q2", "Q3", "Q4"];
 const EARN_QUALITY = [
   { v: "", label: "—", cls: "text-slate-400 bg-white border-slate-200" },
