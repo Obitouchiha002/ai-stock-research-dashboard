@@ -2,7 +2,7 @@
 
 import React, { useEffect, useState, useCallback, useMemo } from "react";
 import Link from "next/link";
-import { Globe, RefreshCw, IndianRupee, Coins, Bitcoin, Plus, Trash2, Star } from "lucide-react";
+import { Globe, RefreshCw, IndianRupee, Coins, Bitcoin, Plus, Trash2, Star, GripVertical, Search } from "lucide-react";
 import {
   getCustomMarketSymbols,
   addCustomMarketSymbol,
@@ -15,6 +15,8 @@ import {
   setMarketMark,
   getMarketPlans,
   setMarketPlanField,
+  getMarketOrder,
+  setMarketOrderForTab,
   getPriceAlerts,
   savePriceAlert,
   deletePriceAlert,
@@ -234,6 +236,10 @@ export default function MarketsPage() {
   const [customByGroup, setCustomByGroup] = useState<Record<string, { symbol: string; label: string }[]>>({});
   const [addInput, setAddInput] = useState("");
   const [adding, setAdding] = useState(false);
+  const [suggestions, setSuggestions] = useState<any[]>([]);
+  const [showSug, setShowSug] = useState(false);
+  const [order, setOrder] = useState<Record<string, string[]>>({});
+  const [dragSym, setDragSym] = useState<string | null>(null);
 
   const load = useCallback(async (extra: string[] = []) => {
     setLoading(true);
@@ -276,6 +282,7 @@ export default function MarketsPage() {
     setMarks(getMarketMarks());
     setPlans(getMarketPlans());
     setCombos(getCombinations());
+    setOrder(getMarketOrder());
     // Only fetch if the cache is missing or stale — otherwise show it instantly.
     const fresh = Object.keys(mktCache.quotes).length > 0 && Date.now() - mktCache.at < MKT_TTL;
     if (!fresh) load();
@@ -285,6 +292,34 @@ export default function MarketsPage() {
     const id = setInterval(() => load(), 30000);
     return () => clearInterval(id);
   }, [auto, load]);
+
+  // Add an exact Yahoo symbol (from a picked suggestion) — no resolution needed.
+  const addSymbolDirect = async (sym: string, label?: string) => {
+    if (!sym) return;
+    if (tab === "custom") {
+      addCustomMarketSymbol(sym, label || sym);
+      setCustom(getCustomMarketSymbols());
+    } else {
+      addCustomMarketToGroup(tab, sym, label || sym);
+      setCustomByGroup(getCustomMarketByGroup());
+    }
+    setAddInput(""); setSuggestions([]); setShowSug(false);
+    await load([sym]);
+  };
+
+  // Debounced typo-tolerant suggestions from Yahoo search as the user types.
+  useEffect(() => {
+    const q = addInput.trim();
+    if (q.length < 2) { setSuggestions([]); return; }
+    const t = setTimeout(async () => {
+      try {
+        const j = await (await fetch(`/api/search-stock?query=${encodeURIComponent(q)}`)).json();
+        setSuggestions((j.matches || []).slice(0, 8));
+        setShowSug(true);
+      } catch { /* keep old */ }
+    }, 250);
+    return () => clearTimeout(t);
+  }, [addInput]);
 
   // Add a symbol to the Custom tab: resolve names ("apple" -> AAPL) first.
   const addCustom = async () => {
@@ -302,7 +337,7 @@ export default function MarketsPage() {
         addCustomMarketToGroup(tab, sym, label);
         setCustomByGroup(getCustomMarketByGroup());
       }
-      setAddInput("");
+      setAddInput(""); setSuggestions([]); setShowSug(false);
       await load([sym]);
     } finally {
       setAdding(false);
@@ -321,16 +356,24 @@ export default function MarketsPage() {
   const isCustomTab = tab === "custom";
   const active = GROUPS.find((g) => g.key === tab);
   const baseRows = useMemo(() => {
+    // Apply the user's saved drag-and-drop order for this tab; symbols not in the
+    // saved order keep their natural position after the ordered ones.
+    const ord = order[tab] || [];
+    const applyOrder = (arr: any[]) => {
+      if (!ord.length) return arr;
+      const idx = (s: string) => { const i = ord.indexOf(s); return i === -1 ? 1e9 : i; };
+      return arr.map((r, i) => ({ r, i })).sort((a, b) => (idx(a.r.symbol) - idx(b.r.symbol)) || (a.i - b.i)).map((x) => x.r);
+    };
     // Custom rows are ALWAYS shown — even before/without a live price — so an add
     // is never invisible and always has a Remove button. Built-in rows still wait
     // for a price so a curated list never shows blanks.
     if (isCustomTab) {
-      return custom.map((c) => ({
+      return applyOrder(custom.map((c) => ({
         symbol: c.symbol,
         label: quotes[c.symbol]?.name || c.label,
         custom: true,
         q: quotes[c.symbol],
-      }));
+      })));
     }
     const base = (active?.items || [])
       .map((it) => ({ ...it, custom: false, q: quotes[it.symbol] }))
@@ -341,8 +384,21 @@ export default function MarketsPage() {
       custom: true,
       q: quotes[c.symbol],
     }));
-    return [...base, ...mine];
-  }, [active, quotes, isCustomTab, custom, customByGroup, tab]);
+    return applyOrder([...base, ...mine]);
+  }, [active, quotes, isCustomTab, custom, customByGroup, tab, order]);
+
+  // Drag-and-drop: move `from` symbol to just before `to`, persist per tab.
+  const reorder = (from: string, to: string) => {
+    if (!from || from === to) return;
+    const seq = baseRows.map((r) => r.symbol);
+    const fi = seq.indexOf(from);
+    if (fi === -1) return;
+    seq.splice(fi, 1);
+    const ti = seq.indexOf(to);
+    seq.splice(ti === -1 ? seq.length : ti, 0, from);
+    setMarketOrderForTab(tab, seq);
+    setOrder(getMarketOrder());
+  };
 
   // --- Trend filter (uptrend / downtrend / sideways / no-trend) ---
   const [trendFilter, setTrendFilter] = useState("all");
@@ -482,13 +538,32 @@ export default function MarketsPage() {
             <span className="text-[11px] font-black uppercase tracking-wide text-slate-400">
               Add to {isCustomTab ? "Custom" : active?.title}
             </span>
-            <input
-              value={addInput}
-              onChange={(e) => setAddInput(e.target.value)}
-              onKeyDown={(e) => e.key === "Enter" && addCustom()}
-              placeholder="Symbol or name — e.g. ^FTSE, apple, RELIANCE.NS, BTC-USD"
-              className="flex-1 min-w-[220px] px-3 py-2 border border-slate-200 rounded-lg text-sm font-medium focus:ring-2 focus:ring-indigo-500 outline-none"
-            />
+            <div className="relative flex-1 min-w-[220px]">
+              <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+              <input
+                value={addInput}
+                onChange={(e) => setAddInput(e.target.value)}
+                onKeyDown={(e) => e.key === "Enter" && addCustom()}
+                onFocus={() => addInput && setShowSug(true)}
+                onBlur={() => setTimeout(() => setShowSug(false), 200)}
+                placeholder="Type a name or symbol — e.g. apple, nifty, real estate, bitcoin…"
+                className="w-full pl-9 pr-3 py-2 border border-slate-200 rounded-lg text-sm font-medium focus:ring-2 focus:ring-indigo-500 outline-none"
+              />
+              {showSug && suggestions.length > 0 && (
+                <div className="absolute z-50 mt-1 left-0 right-0 bg-white border border-slate-200 rounded-xl shadow-lg overflow-hidden max-h-72 overflow-y-auto">
+                  {suggestions.map((r) => (
+                    <button key={r.symbol} onMouseDown={() => addSymbolDirect(r.symbol, r.name)}
+                      className="w-full text-left px-3 py-2 hover:bg-indigo-50 flex items-center justify-between gap-2 border-b border-slate-50 last:border-0">
+                      <span className="flex items-center gap-2 min-w-0">
+                        <span className="font-black text-slate-800 text-[13px] shrink-0">{r.symbol}</span>
+                        <span className="text-[12px] text-slate-500 truncate">{r.name}</span>
+                      </span>
+                      {r.exchange && <span className="text-[10px] font-bold text-slate-400 shrink-0">{r.exchange}</span>}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
             <button
               onClick={addCustom}
               disabled={!addInput.trim() || adding}
@@ -617,17 +692,26 @@ export default function MarketsPage() {
                   const up = (q.changePct ?? 0) >= 0;
                   const cur = curSymbol(q.currency);
                   return (
-                    <tr key={r.symbol} className="border-t border-slate-100 hover:bg-slate-50 transition group">
+                    <tr key={r.symbol}
+                      onDragOver={(e) => { if (dragSym) e.preventDefault(); }}
+                      onDrop={() => { if (dragSym) reorder(dragSym, r.symbol); setDragSym(null); }}
+                      className={`border-t border-slate-100 transition group ${dragSym === r.symbol ? "opacity-40" : "hover:bg-slate-50"} ${dragSym && dragSym !== r.symbol ? "hover:bg-indigo-50" : ""}`}>
                       <td className="px-5 py-3.5">
-                        <Link href={`/charts?symbol=${encodeURIComponent(r.symbol)}`} className="flex items-center gap-3">
-                          <span className={`w-8 h-8 sm:w-9 sm:h-9 rounded-lg flex items-center justify-center text-[10px] sm:text-[11px] font-black shrink-0 ${badgeColor(r.symbol)}`}>
-                            {initials(r.label)}
+                        <div className="flex items-center gap-2">
+                          <span draggable onDragStart={() => setDragSym(r.symbol)} onDragEnd={() => setDragSym(null)}
+                            title="Drag to reorder" className="cursor-grab active:cursor-grabbing text-slate-300 hover:text-slate-500 shrink-0 touch-none">
+                            <GripVertical className="w-4 h-4" />
                           </span>
-                          <span>
-                            <span className="block font-bold text-slate-900 group-hover:text-indigo-600">{r.label}</span>
-                            <span className={`block text-[11px] ${noData ? "text-amber-600" : "text-slate-400"}`}>{noData ? "no data — check symbol" : fmtTime(q.time)}</span>
-                          </span>
-                        </Link>
+                          <Link href={`/charts?symbol=${encodeURIComponent(r.symbol)}`} className="flex items-center gap-3 min-w-0">
+                            <span className={`w-8 h-8 sm:w-9 sm:h-9 rounded-lg flex items-center justify-center text-[10px] sm:text-[11px] font-black shrink-0 ${badgeColor(r.symbol)}`}>
+                              {initials(r.label)}
+                            </span>
+                            <span className="min-w-0">
+                              <span className="block font-bold text-slate-900 group-hover:text-indigo-600">{r.label}</span>
+                              <span className={`block text-[11px] ${noData ? "text-amber-600" : "text-slate-400"}`}>{noData ? "no data — remove & re-add from search" : fmtTime(q.time)}</span>
+                            </span>
+                          </Link>
+                        </div>
                       </td>
                       <td className="px-5 py-3.5 text-right tabular-nums font-bold text-slate-900">{fmt(q.price, cur)}</td>
                       <td className={`px-5 py-3.5 text-right tabular-nums font-bold ${up ? "text-emerald-600" : "text-rose-600"}`}>

@@ -787,6 +787,16 @@ export const setMarketPlanField = (symbol: string, field: string, value: string)
   setContext("sa_market_plans", all);
 };
 
+// User's manual row order per Markets tab (drag-and-drop). Symbols not listed
+// keep their natural order after the listed ones.
+export const getMarketOrder = (): Record<string, string[]> =>
+  getParsedContext<Record<string, string[]>>("sa_market_order", {});
+export const setMarketOrderForTab = (tab: string, symbols: string[]) => {
+  const all = getMarketOrder();
+  all[tab] = symbols;
+  setContext("sa_market_order", all);
+};
+
 // COMBINATION SCREENER — user-built sets of technical conditions.
 export type ScreenConditions = {
   maStack?: boolean;
