@@ -29,7 +29,7 @@ const ACTIONS = ["Buy", "Sell", "Book profit", "Add more", "Watch"];
 const genId = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
 
 export default function StockEditor({
-  open, symbol, name, price, currency, value, levelsLabel, showColor, onClose, onSave, onDelete,
+  open, symbol, name, price, currency, value, levelsLabel, showColor, hideT2, onClose, onSave, onDelete,
 }: {
   open: boolean;
   symbol: string;
@@ -39,6 +39,7 @@ export default function StockEditor({
   value: EditorValue;
   levelsLabel?: string;
   showColor?: boolean;
+  hideT2?: boolean;
   onClose: () => void;
   onSave: (v: EditorValue) => void;
   onDelete?: () => void;
@@ -61,7 +62,8 @@ export default function StockEditor({
 
   const LEVELS: [keyof EditorValue, string, string][] = [
     ["sl", "SL", "text-rose-600"], ["r", "R", "text-slate-500"],
-    ["t1", "T1", "text-emerald-600"], ["t2", "T2", "text-emerald-600"],
+    ["t1", "T1", "text-emerald-600"],
+    ...(hideT2 ? [] : [["t2", "T2", "text-emerald-600"] as [keyof EditorValue, string, string]]),
   ];
 
   return (
@@ -98,7 +100,7 @@ export default function StockEditor({
           {/* Levels */}
           <div>
             <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-wide mb-1.5">{levelsLabel || "Levels"}</label>
-            <div className="grid grid-cols-4 gap-2">
+            <div className={`grid ${hideT2 ? "grid-cols-3" : "grid-cols-4"} gap-2`}>
               {LEVELS.map(([k, lab, cls]) => (
                 <div key={k}>
                   <div className={`text-[10px] font-black uppercase ${cls} mb-0.5`}>{lab}</div>

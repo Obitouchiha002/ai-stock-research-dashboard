@@ -58,12 +58,57 @@ const PF_TREND_ROW: Record<string, string> = {
   down: "bg-rose-200",
   side: "bg-amber-200",
 };
+// What the user plans to do with the position.
+const PF_STANCE = [
+  { v: "", label: "— action", cls: "text-slate-400 border-slate-200 bg-white" },
+  { v: "add", label: "➕ Add", cls: "text-emerald-700 border-emerald-300 bg-emerald-50" },
+  { v: "reduce", label: "➖ Reduce", cls: "text-rose-700 border-rose-300 bg-rose-50" },
+  { v: "none", label: "No action", cls: "text-slate-600 border-slate-200 bg-slate-50" },
+];
+
+// ---- Earnings Tracker option sets ----
+const EARN_FY = ["FY 2025-26", "FY 2024-25", "FY 2023-24"];
+const EARN_Q = ["Q1", "Q2", "Q3", "Q4"];
+const EARN_QUALITY = [
+  { v: "", label: "—", cls: "text-slate-400 bg-white border-slate-200" },
+  { v: "Strong", label: "Strong", cls: "text-emerald-700 bg-emerald-50 border-emerald-300" },
+  { v: "Good", label: "Good", cls: "text-emerald-700 bg-emerald-50 border-emerald-200" },
+  { v: "Neutral", label: "Neutral", cls: "text-amber-700 bg-amber-50 border-amber-300" },
+  { v: "Weak", label: "Weak", cls: "text-orange-700 bg-orange-50 border-orange-300" },
+  { v: "Poor", label: "Poor", cls: "text-rose-700 bg-rose-100 border-rose-300" },
+];
+const EARN_CONVICTION = [
+  { v: "", label: "—", cls: "text-slate-400 bg-white border-slate-200" },
+  { v: "High", label: "High", cls: "text-emerald-700 bg-emerald-50 border-emerald-300" },
+  { v: "Medium", label: "Medium", cls: "text-amber-700 bg-amber-50 border-amber-300" },
+  { v: "Low", label: "Low", cls: "text-rose-700 bg-rose-50 border-rose-300" },
+];
+const EARN_OUTLOOK = [
+  { v: "", label: "—", dot: "bg-slate-300", text: "text-slate-400" },
+  { v: "Positive", label: "Positive", dot: "bg-emerald-500", text: "text-emerald-600" },
+  { v: "Neutral", label: "Neutral", dot: "bg-amber-500", text: "text-amber-600" },
+  { v: "Negative", label: "Negative", dot: "bg-rose-500", text: "text-rose-600" },
+];
+const GOOD_Q = ["Strong", "Good"];
+const BAD_Q = ["Weak", "Poor"];
 
 export default function PortfolioPage() {
   const [holdings, setHoldings] = useState<any[]>([]);
   const [market, setMarket] = useState<PortfolioMarket>("US Stocks");
   // Holdings vs the user's own trade plan (SL / R / targets / notes).
-  const [view, setView] = useState<"holdings" | "plan">("holdings");
+  const [view, setView] = useState<"holdings" | "plan" | "earnings">("holdings");
+  // Earnings Tracker state
+  const [earnFY, setEarnFY] = useState("FY 2025-26");
+  const [earnQ, setEarnQ] = useState("Q1");
+  const [earnSector, setEarnSector] = useState("All");
+  const [earnStatus, setEarnStatus] = useState("all"); // all | analyzed | pending | redflag
+  const qKey = `${earnFY}|${earnQ}`;
+  const getEarn = (h: any) => (h.earnings && h.earnings[qKey]) || {};
+  const setEarn = (h: any, patch: any) => {
+    const cur = getEarn(h);
+    savePortfolioHolding({ ...h, earnings: { ...(h.earnings || {}), [qKey]: { ...cur, ...patch } }, updatedAt: Date.now() });
+    setHoldings(getPortfolio());
+  };
   const [search, setSearch] = useState("");
   const [trendFilter, setTrendFilter] = useState("all"); // all | up | down | side
   const [recentSort, setRecentSort] = useState(false);
@@ -760,10 +805,10 @@ PORTFOLIO DATA: ${JSON.stringify(stats)}`;
       {/* View toggle: Holdings ↔ Trade Plan */}
       <div className="flex flex-wrap items-center gap-3 mb-3">
         <div className="flex rounded-lg bg-slate-100 p-1">
-          {(["holdings", "plan"] as const).map((v) => (
+          {(["holdings", "plan", "earnings"] as const).map((v) => (
             <button key={v} onClick={() => setView(v)}
               className={`px-3.5 py-1.5 rounded-md text-xs font-black transition ${view === v ? "bg-white text-indigo-700 shadow-sm" : "text-slate-500 hover:text-slate-700"}`}>
-              {v === "holdings" ? "Holdings" : "Trade Plan"}
+              {v === "holdings" ? "Holdings" : v === "plan" ? "Trade Plan" : "📊 Earnings Tracker"}
             </button>
           ))}
         </div>
@@ -801,6 +846,151 @@ PORTFOLIO DATA: ${JSON.stringify(stats)}`;
         <div className="bg-white border border-slate-200 rounded-2xl p-16 text-center text-slate-500 font-medium">
           No {market} holdings yet. Click &quot;Add Holding&quot; to start tracking.
         </div>
+      ) : view === "earnings" ? (
+        (() => {
+          const sectors = Array.from(new Set(marketHoldings.map((h) => getEarn(h).sector).filter(Boolean)));
+          const rows = marketHoldings.filter((h) => {
+            const e = getEarn(h);
+            if (earnSector !== "All" && (e.sector || "") !== earnSector) return false;
+            if (earnStatus === "analyzed" && e.analyzed !== "yes") return false;
+            if (earnStatus === "pending" && e.analyzed === "yes") return false;
+            if (earnStatus === "redflag" && !e.redFlag) return false;
+            if (search.trim()) {
+              const s = search.trim().toLowerCase();
+              if (!(String(h.symbol || "").toLowerCase().includes(s) || String(h.name || "").toLowerCase().includes(s))) return false;
+            }
+            return true;
+          });
+          const all = marketHoldings.map(getEarn);
+          const analyzed = all.filter((e) => e.analyzed === "yes").length;
+          const strong = all.filter((e) => GOOD_Q.includes(e.quality)).length;
+          const neutral = all.filter((e) => e.quality === "Neutral").length;
+          const weak = all.filter((e) => BAD_Q.includes(e.quality)).length;
+          const reds = all.filter((e) => e.redFlag).length;
+          const pending = marketHoldings.length - analyzed;
+          const TILES = [
+            { big: `${analyzed} / ${marketHoldings.length}`, lbl: "ANALYZED THIS QUARTER", tone: "text-slate-900", bar: true },
+            { big: strong, lbl: "STRONG / GOOD", tone: "text-emerald-600" },
+            { big: neutral, lbl: "NEUTRAL", tone: "text-amber-600" },
+            { big: weak, lbl: "WEAK / POOR", tone: "text-rose-600" },
+            { big: reds, lbl: "RED FLAGS", tone: "text-orange-600" },
+            { big: pending, lbl: "NOT YET ANALYZED", tone: "text-slate-500" },
+          ];
+          return (
+            <div>
+              {/* Filters */}
+              <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-3 mb-4 flex flex-wrap items-center gap-2">
+                <select value={earnFY} onChange={(e) => setEarnFY(e.target.value)} className="px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm font-bold text-slate-700 outline-none focus:ring-2 focus:ring-indigo-200">
+                  {EARN_FY.map((f) => <option key={f} value={f}>{f}</option>)}
+                </select>
+                <select value={earnQ} onChange={(e) => setEarnQ(e.target.value)} className="px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm font-bold text-slate-700 outline-none focus:ring-2 focus:ring-indigo-200">
+                  {EARN_Q.map((q) => <option key={q} value={q}>{q}</option>)}
+                </select>
+                <select value={earnSector} onChange={(e) => setEarnSector(e.target.value)} className="px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm font-bold text-slate-700 outline-none focus:ring-2 focus:ring-indigo-200">
+                  <option value="All">All Sectors</option>
+                  {sectors.map((s) => <option key={s} value={s}>{s}</option>)}
+                </select>
+                <div className="ml-auto flex items-center gap-1.5">
+                  {[["all", `All (${marketHoldings.length})`], ["analyzed", `Analyzed (${analyzed})`], ["pending", `Pending (${pending})`], ["redflag", `🚩 Red flags (${reds})`]].map(([v, lbl]) => (
+                    <button key={v} onClick={() => setEarnStatus(v)}
+                      className={`px-3 py-1.5 rounded-lg text-xs font-bold border transition ${earnStatus === v ? "bg-indigo-600 text-white border-indigo-600" : "bg-white text-slate-600 border-slate-200 hover:bg-slate-50"}`}>{lbl}</button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Stat tiles */}
+              <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3 mb-4">
+                {TILES.map((t) => (
+                  <div key={t.lbl} className="bg-white rounded-2xl border border-slate-200 shadow-sm p-4">
+                    <div className={`text-2xl font-black ${t.tone}`}>{t.big}</div>
+                    <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wide mt-0.5">{t.lbl}</div>
+                    {t.bar && <div className="mt-2 h-1.5 bg-slate-100 rounded-full overflow-hidden"><div className="h-full bg-emerald-500 rounded-full" style={{ width: `${marketHoldings.length ? (analyzed / marketHoldings.length) * 100 : 0}%` }} /></div>}
+                  </div>
+                ))}
+              </div>
+
+              {/* Earnings table */}
+              <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-x-auto">
+                <table className="w-full text-left border-collapse text-sm">
+                  <thead>
+                    <tr className="bg-slate-50 border-b border-slate-200 [&_th]:p-3 [&_th]:text-xs [&_th]:font-bold [&_th]:text-slate-500 [&_th]:uppercase [&_th]:tracking-wide">
+                      <th>Stock</th><th>Sector</th><th>Result Date</th><th className="text-center">Analyzed?</th>
+                      <th>Quality</th><th className="text-right">Valuation (P/E vs sector)</th>
+                      <th>Conviction</th><th>Outlook</th><th>Remarks</th><th className="text-center">🚩</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {rows.map((h) => {
+                      const e = getEarn(h);
+                      const qcls = EARN_QUALITY.find((x) => x.v === (e.quality || "")) || EARN_QUALITY[0];
+                      const ccls = EARN_CONVICTION.find((x) => x.v === (e.conviction || "")) || EARN_CONVICTION[0];
+                      const ocls = EARN_OUTLOOK.find((x) => x.v === (e.outlook || "")) || EARN_OUTLOOK[0];
+                      return (
+                        <tr key={h.id} className={`border-b-2 border-slate-300 align-top ${e.redFlag ? "bg-rose-50/60" : "hover:bg-slate-50"}`}>
+                          <td className="p-3">
+                            <div className="font-black text-slate-900 whitespace-nowrap">{h.name || h.symbol}</div>
+                            <div className="text-[11px] text-slate-400">{h.symbol}</div>
+                          </td>
+                          <td className="p-3">
+                            <input value={e.sector || ""} onChange={(ev) => setEarn(h, { sector: ev.target.value })} placeholder="sector"
+                              className="w-24 px-2 py-1 bg-slate-50 border border-slate-200 rounded text-[12px] outline-none focus:ring-2 focus:ring-indigo-200" />
+                          </td>
+                          <td className="p-3">
+                            <input type="date" value={e.resultDate || ""} onChange={(ev) => setEarn(h, { resultDate: ev.target.value })}
+                              className="px-2 py-1 bg-slate-50 border border-slate-200 rounded text-[12px] outline-none focus:ring-2 focus:ring-indigo-200" />
+                          </td>
+                          <td className="p-3 text-center">
+                            <div className="inline-flex rounded-lg bg-slate-100 p-0.5">
+                              {[["yes", "Yes"], ["no", "No"], ["pend", "Pend"]].map(([v, lbl]) => (
+                                <button key={v} onClick={() => setEarn(h, { analyzed: v })}
+                                  className={`px-2 py-0.5 rounded text-[11px] font-bold transition ${(e.analyzed || "pend") === v ? (v === "yes" ? "bg-emerald-600 text-white" : v === "no" ? "bg-rose-500 text-white" : "bg-white text-slate-600 shadow-sm") : "text-slate-400"}`}>{lbl}</button>
+                              ))}
+                            </div>
+                          </td>
+                          <td className="p-3">
+                            <select value={e.quality || ""} onChange={(ev) => setEarn(h, { quality: ev.target.value })}
+                              className={`text-[11px] font-bold rounded-lg border px-2 py-1 outline-none cursor-pointer ${qcls.cls}`}>
+                              {EARN_QUALITY.map((o) => <option key={o.v} value={o.v}>{o.label}</option>)}
+                            </select>
+                          </td>
+                          <td className="p-3 text-right whitespace-nowrap">
+                            <input value={e.pe || ""} onChange={(ev) => setEarn(h, { pe: ev.target.value })} placeholder="P/E"
+                              className="w-14 px-1.5 py-1 bg-slate-50 border border-slate-200 rounded text-right text-[12px] tabular-nums outline-none focus:ring-2 focus:ring-indigo-200" />
+                            <span className="text-[11px] text-slate-400"> vs </span>
+                            <input value={e.sectorPe || ""} onChange={(ev) => setEarn(h, { sectorPe: ev.target.value })} placeholder="sec"
+                              className="w-14 px-1.5 py-1 bg-slate-50 border border-slate-200 rounded text-right text-[12px] tabular-nums outline-none focus:ring-2 focus:ring-indigo-200" />
+                          </td>
+                          <td className="p-3">
+                            <select value={e.conviction || ""} onChange={(ev) => setEarn(h, { conviction: ev.target.value })}
+                              className={`text-[11px] font-bold rounded-lg border px-2 py-1 outline-none cursor-pointer ${ccls.cls}`}>
+                              {EARN_CONVICTION.map((o) => <option key={o.v} value={o.v}>{o.label}</option>)}
+                            </select>
+                          </td>
+                          <td className="p-3">
+                            <select value={e.outlook || ""} onChange={(ev) => setEarn(h, { outlook: ev.target.value })}
+                              className={`text-[11px] font-bold bg-white rounded-lg border border-slate-200 px-2 py-1 outline-none cursor-pointer ${ocls.text}`}>
+                              {EARN_OUTLOOK.map((o) => <option key={o.v} value={o.v}>{o.label}</option>)}
+                            </select>
+                          </td>
+                          <td className="p-3">
+                            <input value={e.remarks || ""} onChange={(ev) => setEarn(h, { remarks: ev.target.value })} placeholder="notes…"
+                              className="w-full min-w-[12rem] px-2 py-1 bg-slate-50 border border-slate-200 rounded text-[12px] outline-none focus:ring-2 focus:ring-indigo-200" />
+                          </td>
+                          <td className="p-3 text-center">
+                            <button onClick={() => setEarn(h, { redFlag: !e.redFlag })} title="Toggle red flag" className="text-lg">
+                              {e.redFlag ? "🚩" : <span className="opacity-25">🏳️</span>}
+                            </button>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+              <p className="mt-3 text-[11px] text-slate-400 italic">Earnings notes save per stock, per quarter (FY + Q). Research support only — not buy/sell advice.</p>
+            </div>
+          );
+        })()
       ) : view === "plan" ? (
         <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-x-auto">
           <table className="w-full text-left border-collapse text-sm">
@@ -813,7 +1003,7 @@ PORTFOLIO DATA: ${JSON.stringify(stats)}`;
                 <th className="p-3 text-xs font-bold text-rose-500 uppercase tracking-wide text-right">SL</th>
                 <th className="p-3 text-xs font-bold text-slate-500 uppercase tracking-wide text-right">R</th>
                 <th className="p-3 text-xs font-bold text-emerald-600 uppercase tracking-wide text-right">T1</th>
-                <th className="p-3 text-xs font-bold text-emerald-600 uppercase tracking-wide text-right">T2</th>
+                <th className="p-3 text-xs font-bold text-indigo-600 uppercase tracking-wide text-center">Action</th>
                 <th className="p-3 text-xs font-bold text-slate-500 uppercase tracking-wide">Remarks</th>
                 <th className="p-3 text-xs font-bold text-indigo-600 uppercase tracking-wide">Alert Trigger</th>
               </tr>
@@ -854,13 +1044,24 @@ PORTFOLIO DATA: ${JSON.stringify(stats)}`;
                         );
                       })()}
                     </td>
-                    {(["sl", "r", "t1", "t2"] as const).map((f) => (
+                    {(["sl", "r", "t1"] as const).map((f) => (
                       <td key={f} className="p-3 text-right">
                         <button onClick={() => setEditHolding(h)} title="Edit" className="w-16 px-2 py-1 rounded text-[12px] tabular-nums text-slate-700 hover:bg-indigo-50">
                           {h[f] || "—"}
                         </button>
                       </td>
                     ))}
+                    <td className="p-3 text-center">
+                      {(() => {
+                        const st = PF_STANCE.find((x) => x.v === (h.stance || "")) || PF_STANCE[0];
+                        return (
+                          <select value={h.stance || ""} onChange={(e) => setPlanField(h, "stance", e.target.value)}
+                            className={`text-[11px] font-bold rounded-lg border px-2 py-1 outline-none focus:ring-2 focus:ring-indigo-200 cursor-pointer ${st.cls}`}>
+                            {PF_STANCE.map((o) => <option key={o.v} value={o.v}>{o.label}</option>)}
+                          </select>
+                        );
+                      })()}
+                    </td>
                     <td className="p-3">
                       <button onClick={() => setEditHolding(h)} title="Edit" className="text-left w-full min-w-[7rem] px-2 py-1 rounded text-[12px] text-slate-600 hover:bg-indigo-50">
                         {h.remarks || <span className="text-slate-300">—</span>}
@@ -1024,6 +1225,7 @@ PORTFOLIO DATA: ${JSON.stringify(stats)}`;
           price={editHolding.currentPrice}
           currency={editHolding.market === "Indian Stocks" ? "INR" : "USD"}
           value={pfBuildValue(editHolding)}
+          hideT2
           onClose={() => setEditHolding(null)}
           onSave={(v) => pfSave(editHolding, v)}
           onDelete={() => { deletePortfolioHolding(editHolding.id); setHoldings(getPortfolio()); }}
