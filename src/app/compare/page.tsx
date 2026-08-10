@@ -222,18 +222,14 @@ export default function ComparePage() {
   const baseLeg = legs.find((l) => l.kind === "stock");
   const baseReturn = baseLeg?.changePct ?? 0;
 
-  // Green = up / winning, red = down / losing. Every line that ended positive is
-  // a shade of green (best = darkest), every negative one a shade of red (worst =
-  // darkest) — so the top line is green with a green value, a losing line is red.
-  // The line, its legend dot and its return value all share this colour.
+  // One DISTINCT colour per line (like TradingView / the mockup), assigned in the
+  // order the user built it. The line, its legend dot and its return value all
+  // share the SAME colour — so the green line's value is green, the blue line's
+  // value is blue, etc. (no more mismatched red value on a green line).
   const legColor = useMemo(() => {
-    const greens = ["#047857", "#059669", "#10b981", "#34d399", "#6ee7b7"]; // dark → light
-    const reds = ["#be123c", "#e11d48", "#f43f5e", "#fb7185", "#fda4af"];
-    const pos = legs.filter((l) => l.changePct >= 0).sort((a, b) => b.changePct - a.changePct);
-    const neg = legs.filter((l) => l.changePct < 0).sort((a, b) => a.changePct - b.changePct); // worst first
+    const PALETTE = ["#10b981", "#3b82f6", "#ef4444", "#f59e0b", "#8b5cf6", "#06b6d4"]; // green, blue, red, amber, violet, cyan
     const map: Record<string, string> = {};
-    pos.forEach((l, i) => { map[l.symbol] = greens[Math.min(i, greens.length - 1)]; });
-    neg.forEach((l, i) => { map[l.symbol] = reds[Math.min(i, reds.length - 1)]; });
+    legs.forEach((l, i) => { map[l.symbol] = PALETTE[i % PALETTE.length]; });
     return map;
   }, [legs]);
   const chartData = useMemo(() => {
