@@ -257,10 +257,10 @@ function AnalyzeContent() {
   // (Overview, Valuation, Risk, Top-down, Scorecard, Fundamentals removed.)
   const [moreTabOpen, setMoreTabOpen] = useState(false);
   const TAB_LABELS: Record<string, string> = {
-    chart: "Chart", technical: "Technical", momentum: "Momentum", analytics: "Analytics",
+    chart: "Chart", technical: "Technical",
     news: "News", "ai-report": "AI Report", evaluation: "Evaluation", research: "Research", notes: "Notes",
   };
-  const PRIMARY_TABS = ["chart", "technical", "momentum", "analytics"];
+  const PRIMARY_TABS = ["chart", "technical"];
   const MORE_TABS = ["news", "ai-report", "evaluation", "research", "notes"];
   const ALL_TABS = [...PRIMARY_TABS, ...MORE_TABS];
   // A saved/URL tab that no longer exists (e.g. the removed "overview") falls
@@ -1336,8 +1336,8 @@ function AnalyzeContent() {
               {[
                 { icon: CandlestickChart, label: "Live Charts" },
                 { icon: Activity, label: "Technicals" },
-                { icon: BarChart2, label: "Momentum" },
                 { icon: Zap, label: "AI Report" },
+                { icon: FileText, label: "Research" },
               ].map((f, i) => (
                 <div key={f.label} className="bg-white border border-slate-200 rounded-xl px-3 py-4 flex flex-col items-center gap-2 hover:shadow-sm transition" style={{ animation: `fadeInUp 0.4s ease ${i * 0.06}s both` }}>
                   <f.icon className="w-5 h-5 text-indigo-500" />
@@ -1774,6 +1774,10 @@ function AnalyzeContent() {
                   <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-indigo-50 text-indigo-600 uppercase tracking-widest">
                     {data.stock.exchange}:{data.stock.ticker}
                   </span>
+                  <a href={`/compare?symbol=${encodeURIComponent(data.stock.ticker)}`} title="Compare & Relative Strength"
+                    className="text-[10px] font-bold px-2 py-0.5 rounded bg-violet-50 text-violet-600 uppercase tracking-widest hover:bg-violet-100 transition inline-flex items-center gap-1">
+                    ⚖ Compare
+                  </a>
                 </div>
                 <h1 className="text-xl sm:text-2xl font-black text-slate-900 tracking-tight flex items-baseline gap-2 truncate">
                   <span className="truncate">{data.stock.name}</span>
