@@ -175,9 +175,10 @@ export default function ChartsPage() {
       s.setData(candles.filter((c) => c[key] != null).map((c) => ({ time: c.time, value: c[key] })) as any);
       overlays.push({ label, color, series: s });
     };
+    // Shared MA palette (matches Analyze Stock): 10=sky, 20=amber, 50=violet, 200=red.
     if (ind.ma10) addLine("sma10", "#0ea5e9", "MA 10");
-    if (ind.ma20) addLine("sma20", "#2563eb", "MA 20");
-    if (ind.ma50) addLine("sma50", "#f59e0b", "MA 50");
+    if (ind.ma20) addLine("sma20", "#f59e0b", "MA 20");
+    if (ind.ma50) addLine("sma50", "#8b5cf6", "MA 50");
     if (ind.ma200) addLine("sma200", "#dc2626", "MA 200");
 
     chart.timeScale().fitContent();

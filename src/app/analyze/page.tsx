@@ -261,10 +261,10 @@ function AnalyzeContent() {
   const [moreTabOpen, setMoreTabOpen] = useState(false);
   const TAB_LABELS: Record<string, string> = {
     chart: "Chart", technical: "Technical",
-    news: "News", "ai-report": "AI Report", evaluation: "Evaluation", research: "Research", notes: "Notes",
+    evaluation: "Evaluation", research: "Research", notes: "Notes",
   };
   const PRIMARY_TABS = ["chart", "technical"];
-  const MORE_TABS = ["news", "ai-report", "evaluation", "research", "notes"];
+  const MORE_TABS = ["evaluation", "research", "notes"];
   const ALL_TABS = [...PRIMARY_TABS, ...MORE_TABS];
   // A saved/URL tab that no longer exists (e.g. the removed "overview") falls
   // back to Chart so the page never lands on a blank tab.

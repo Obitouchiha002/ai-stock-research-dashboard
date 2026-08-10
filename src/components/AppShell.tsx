@@ -347,30 +347,16 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           <div className="space-y-1">{PRIMARY_NAV.map(renderNavItem)}</div>
 
           {!isCollapsed || mobileOpen ? (
-            /* Expanded rail: one tidy "More tools" toggle hides the advanced set */
-            <div className="mt-4">
-              <button
-                onClick={() => setMoreOpen((o) => !o)}
-                className="w-full flex items-center justify-between gap-3 px-3 py-2.5 rounded-xl text-slate-400 font-bold hover:bg-white/5 hover:text-white transition-all"
-              >
-                <span className="flex items-center gap-3">
-                  <LayoutGrid className="w-5 h-5 flex-shrink-0 text-slate-400" />
-                  <span>More tools</span>
-                </span>
-                <ChevronDown className={`w-4 h-4 transition-transform ${moreOpen ? "rotate-180" : ""}`} />
-              </button>
-              {moreOpen && (
-                <div className="mt-1.5 space-y-4">
-                  {MORE_GROUPS.map((group) => (
-                    <div key={group.label}>
-                      <div className="px-3 mb-1.5 text-[10px] font-bold uppercase tracking-wider text-slate-500">
-                        {group.label}
-                      </div>
-                      <div className="space-y-1">{group.items.map(renderNavItem)}</div>
-                    </div>
-                  ))}
+            /* Expanded rail: everything visible in one flat, grouped list. */
+            <div className="mt-3 space-y-4">
+              {MORE_GROUPS.map((group) => (
+                <div key={group.label}>
+                  <div className="px-3 mb-1.5 text-[10px] font-bold uppercase tracking-wider text-slate-500">
+                    {group.label}
+                  </div>
+                  <div className="space-y-1">{group.items.map(renderNavItem)}</div>
                 </div>
-              )}
+              ))}
             </div>
           ) : (
             /* Collapsed icon rail: advanced items sit below a divider as icons */
