@@ -56,6 +56,22 @@ export default function PromptsPage() {
   const speech = useSpeech((chunk) => insertIntoElement(bodyRef.current, chunk.trim()));
 
   useEffect(() => {
+    // Seed a few ready-made starter prompts the first time, so the library is
+    // useful out of the box instead of an empty page. Only once — if the user
+    // clears them, they stay cleared.
+    try {
+      if (getPrompts().length === 0 && !localStorage.getItem("sa_prompts_seeded")) {
+        addPromptsBulk([
+          { title: "Explain this report in simple terms", body: "Explain this stock analysis in plain, simple language a beginner can understand. Avoid jargon; use short bullet points.", category: "General", subcategory: "Templates", tags: ["beginner", "explain"] },
+          { title: "Top 3 risks", body: "From the data provided, what are the 3 biggest risks for this stock right now? Be specific and cite the numbers.", category: "Stock Analysis", subcategory: "Risk", tags: ["risk"] },
+          { title: "Momentum vs valuation", body: "Compare this stock's momentum (trend, RSI, relative strength) against its valuation (P/E, growth). Is the strength justified by fundamentals?", category: "Stock Analysis", subcategory: "Valuation", tags: ["momentum", "valuation"] },
+          { title: "Bull & bear case", body: "Summarise the bull case and the bear case for this stock in 5 concise bullets total. Research language only, no buy/sell advice.", category: "Stock Analysis", subcategory: "Fundamental", tags: ["bull", "bear"] },
+          { title: "What to track next quarter", body: "Based on this analysis, what specific things should I watch over the next quarter (earnings, levels, catalysts)? List them.", category: "Market Research", subcategory: "News & Events", tags: ["watchlist", "catalysts"] },
+          { title: "Cheaper or pricier than sector?", body: "Is this stock cheaper or more expensive than its sector on P/E and growth? Explain the answer simply in 2-3 lines.", category: "Stock Analysis", subcategory: "Valuation", tags: ["sector", "valuation"] },
+        ]);
+        localStorage.setItem("sa_prompts_seeded", "1");
+      }
+    } catch { /* storage blocked */ }
     setPrompts(getPrompts());
     setCustomCats(getCustomPromptCats());
   }, []);
