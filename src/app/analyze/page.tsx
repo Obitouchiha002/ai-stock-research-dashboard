@@ -263,8 +263,8 @@ function AnalyzeContent() {
     chart: "Chart", technical: "Technical",
     evaluation: "Evaluation", research: "Research", notes: "Notes",
   };
-  const PRIMARY_TABS = ["chart", "technical"];
-  const MORE_TABS = ["evaluation", "research", "notes"];
+  const PRIMARY_TABS = ["chart", "technical", "evaluation", "research", "notes"];
+  const MORE_TABS: string[] = [];
   const ALL_TABS = [...PRIMARY_TABS, ...MORE_TABS];
   // A saved/URL tab that no longer exists (e.g. the removed "overview") falls
   // back to Chart so the page never lands on a blank tab.
@@ -1886,6 +1886,7 @@ function AnalyzeContent() {
                   ))}
                 </div>
                 {/* More — the remaining deep-dive tabs, one click away */}
+                {MORE_TABS.length > 0 && (
                 <div className="relative shrink-0">
                   <button
                     onClick={() => setMoreTabOpen((o) => !o)}
@@ -1918,6 +1919,7 @@ function AnalyzeContent() {
                     </>
                   )}
                 </div>
+                )}
               </div>
               <div className="hidden sm:flex gap-2 print:hidden">
                 <button
