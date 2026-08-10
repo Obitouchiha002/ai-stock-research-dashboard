@@ -202,62 +202,101 @@ export default function EvaluationTab({ symbol, market }: { symbol: string; mark
     earnings: y.earnings,
   }));
 
+  // Decision drivers derived from the CAN SLIM checks (no AI needed).
+  const crit: any[] = ev.canSlim?.criteria || [];
+  const strengths = crit.filter((c) => c.status === "Pass");
+  const watchouts = crit.filter((c) => c.status === "Watch" || c.status === "Fail");
+  const missing = crit.filter((c) => c.status === "Data insufficient" || c.status === "No data");
+  const rating: number | null = h.compositeRating ?? null;
+  const headline = rating == null ? "Evaluation snapshot"
+    : rating >= 80 ? "Strong profile"
+    : rating >= 60 ? "Solid, with gaps to confirm"
+    : rating >= 40 ? "Mixed signals" : "Weak profile";
+  const subcopy = `${ev.canSlim?.passes ?? 0} of ${crit.length} CAN SLIM checks pass; ${(ev.canSlim?.watches ?? 0) + (ev.canSlim?.fails ?? 0)} to confirm, ${ev.canSlim?.insufficient ?? missing.length} without data.`;
+  const ringColor = rating == null ? "#94a3b8" : rating >= 70 ? "#079455" : rating >= 45 ? "#b54708" : "#d92d20";
+  const ringPct = rating != null ? Math.max(0, Math.min(100, rating)) : 0;
+  const C = 2 * Math.PI * 34;
+
   return (
-    <div className="space-y-5">
+    <div className="space-y-4">
+      {/* Toolbar */}
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="min-w-0">
+          <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wide">AI stock evaluation</p>
+          <h2 className="text-xl font-black text-slate-900 truncate">{symbol} evaluation snapshot</h2>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          <button onClick={runAi} disabled={aiLoading} className="px-3 py-1.5 bg-indigo-600 text-white rounded-lg text-xs font-bold flex items-center gap-1.5 hover:bg-indigo-700 disabled:opacity-50">
+            {aiLoading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Sparkles className="w-3.5 h-3.5" />}
+            AI Evaluation
+            <span className="text-[9px] font-black text-amber-200 bg-amber-500/30 px-1.5 py-0.5 rounded">PAID</span>
+          </button>
+          <button onClick={exportData} className="px-3 py-1.5 bg-white border border-slate-200 text-slate-600 rounded-lg text-xs font-bold flex items-center gap-1.5 hover:bg-slate-50">
+            <Download className="w-3.5 h-3.5" /> Export
+          </button>
+          <button onClick={exportExcel} className="px-3 py-1.5 bg-white border border-slate-200 text-slate-600 rounded-lg text-xs font-bold flex items-center gap-1.5 hover:bg-slate-50">
+            <Download className="w-3.5 h-3.5" /> Excel
+          </button>
+        </div>
+      </div>
+
       {/* Disclaimer */}
       <div className="flex items-start gap-2 text-[11px] text-amber-800 bg-amber-50 border border-amber-200 rounded-xl px-3 py-2 font-medium">
         <AlertTriangle className="w-3.5 h-3.5 shrink-0 mt-0.5" />
         {ev.disclaimer}
       </div>
 
-      {/* Actions */}
-      <div className="flex flex-wrap items-center justify-end gap-2">
-        <button onClick={runAi} disabled={aiLoading} className="px-3 py-1.5 bg-indigo-600 text-white rounded-lg text-xs font-bold flex items-center gap-1.5 hover:bg-indigo-700 disabled:opacity-50">
-          {aiLoading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Sparkles className="w-3.5 h-3.5" />}
-          AI Stock Evaluation
-          <span className="text-[9px] font-black text-amber-200 bg-amber-500/30 px-1.5 py-0.5 rounded">PAID</span>
-        </button>
-        <button onClick={exportData} className="px-3 py-1.5 bg-white border border-slate-200 text-slate-600 rounded-lg text-xs font-bold flex items-center gap-1.5 hover:bg-slate-50">
-          <Download className="w-3.5 h-3.5" /> Export Evaluation
-        </button>
-        <button onClick={exportExcel} className="px-3 py-1.5 bg-white border border-slate-200 text-slate-600 rounded-lg text-xs font-bold flex items-center gap-1.5 hover:bg-slate-50">
-          <Download className="w-3.5 h-3.5" /> Excel
-        </button>
-      </div>
+      {/* Verdict panel — score ring + drivers */}
+      <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-5 grid lg:grid-cols-[1.05fr_1fr] gap-5">
+        <div>
+          <div className="flex items-center gap-4">
+            <div className="relative w-[92px] h-[92px] shrink-0">
+              <svg className="w-full h-full -rotate-90" viewBox="0 0 80 80">
+                <circle cx="40" cy="40" r="34" fill="none" stroke="#eef2f7" strokeWidth="8" />
+                <circle cx="40" cy="40" r="34" fill="none" stroke={ringColor} strokeWidth="8" strokeLinecap="round" strokeDasharray={C} strokeDashoffset={C * (1 - ringPct / 100)} />
+              </svg>
+              <div className="absolute inset-0 flex items-center justify-center">
+                <span className="text-2xl font-black text-slate-900">{rating ?? "—"}</span>
+              </div>
+            </div>
+            <div className="min-w-0">
+              <span className="inline-block text-[11px] font-black uppercase tracking-wide text-indigo-700 bg-indigo-50 px-2 py-0.5 rounded">{h.compositeLabel}</span>
+              <h3 className="text-lg font-black text-slate-900 leading-snug mt-1">{headline}</h3>
+              <p className="text-[13px] text-slate-500 mt-0.5 leading-snug">{subcopy}</p>
+            </div>
+          </div>
+          <div className="grid grid-cols-3 gap-2 mt-4">
+            {[
+              { label: "CAN SLIM", value: h.canSlimScore ?? "—", sub: `${h.canSlimPasses} pass` },
+              { label: "Data coverage", value: `${ev.composite?.coverage ?? "—"}%`, sub: "of signals" },
+              { label: "Composite", value: `${rating ?? "—"}`, sub: "/ 100" },
+            ].map((m) => (
+              <div key={m.label} className="rounded-xl border border-slate-100 bg-slate-50/60 px-3 py-2">
+                <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wide">{m.label}</div>
+                <div className="text-[15px] font-black text-slate-900">{m.value} <span className="text-[11px] font-bold text-slate-400">{m.sub}</span></div>
+              </div>
+            ))}
+          </div>
+        </div>
 
-      {/* Headline ratings */}
-      <div className="bg-gradient-to-br from-indigo-50 to-white rounded-2xl border border-indigo-100 shadow-sm p-5">
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 text-center">
-          <div className="sm:border-r border-indigo-100">
-            <div className="text-[10px] font-bold text-slate-400 uppercase">Composite</div>
-            <div className="text-3xl font-black text-indigo-700">{h.compositeRating ?? "—"}</div>
-            <div className="text-[10px] font-bold text-slate-500">{h.compositeLabel}</div>
-          </div>
-          <div className="sm:border-r border-indigo-100">
-            <div className="text-[10px] font-bold text-slate-400 uppercase">CAN SLIM</div>
-            <div className="text-3xl font-black text-slate-800">{h.canSlimScore ?? "—"}</div>
-            <div className="text-[10px] font-bold text-slate-500">{h.canSlimPasses} pass</div>
-          </div>
-          <div className="sm:border-r border-indigo-100">
-            <div className="text-[10px] font-bold text-slate-400 uppercase">Acc/Dis</div>
-            <div className={`text-3xl font-black ${gradeColor(h.accDisGrade)}`}>{h.accDisGrade}</div>
-            <div className="text-[10px] font-bold text-slate-500">demand grade</div>
-          </div>
-          <div className="sm:border-r border-indigo-100">
-            <div className="text-[10px] font-bold text-slate-400 uppercase">SMR</div>
-            <div className={`text-3xl font-black ${gradeColor(h.smrGrade)}`}>{h.smrGrade}</div>
-            <div className="text-[10px] font-bold text-slate-500">quality grade</div>
-          </div>
-          <div className="sm:border-r border-indigo-100">
-            <div className="text-[10px] font-bold text-slate-400 uppercase">Beta</div>
-            <div className="text-3xl font-black text-slate-800">{h.beta}</div>
-            <div className="text-[10px] font-bold text-slate-500">vs index</div>
-          </div>
-          <div>
-            <div className="text-[10px] font-bold text-slate-400 uppercase">Alpha</div>
-            <div className="text-2xl font-black text-slate-800">{h.alpha}</div>
-            <div className="text-[10px] font-bold text-slate-500">annualized</div>
-          </div>
+        <div className="grid gap-2 content-start">
+          {[
+            { title: "Strengths", items: strengths, tone: "emerald", tag: `${strengths.length} strong` },
+            { title: "Watchouts", items: watchouts, tone: "amber", tag: `${watchouts.length} watch` },
+            { title: "Missing signals", items: missing, tone: "slate", tag: `${missing.length} gaps` },
+          ].filter((d) => d.items.length > 0).map((d) => (
+            <div key={d.title} className={`rounded-xl border p-3 ${d.tone === "emerald" ? "border-emerald-100 bg-emerald-50/40" : d.tone === "amber" ? "border-amber-100 bg-amber-50/40" : "border-slate-100 bg-slate-50/60"}`}>
+              <h4 className="text-xs font-black text-slate-800 flex items-center gap-2 mb-1.5">
+                {d.title}
+                <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${d.tone === "emerald" ? "text-emerald-700 bg-emerald-100" : d.tone === "amber" ? "text-amber-700 bg-amber-100" : "text-slate-500 bg-slate-200"}`}>{d.tag}</span>
+              </h4>
+              <ul className="space-y-1">
+                {d.items.slice(0, 3).map((c: any) => (
+                  <li key={c.code} className="text-[12px] text-slate-600 leading-snug">• {c.detail || c.name}</li>
+                ))}
+              </ul>
+            </div>
+          ))}
         </div>
       </div>
 
@@ -301,117 +340,183 @@ export default function EvaluationTab({ symbol, market }: { symbol: string; mark
         </div>
       )}
 
-      {/* CAN SLIM Checklist */}
-      <Card title="CAN SLIM Checklist" icon={<Award className="w-4 h-4" />} badge={`${ev.canSlim.summaryLabel}`}>
-        <div className="grid md:grid-cols-2 gap-3">
-          {ev.canSlim.criteria.map((c: any) => {
-            const meta = statusMeta[c.status] || statusMeta["Data insufficient"];
-            return (
-              <div key={c.code} className="flex items-start gap-3 rounded-xl border border-slate-100 p-3">
-                <span className="w-8 h-8 rounded-lg bg-slate-100 text-slate-700 font-black flex items-center justify-center shrink-0">{c.code}</span>
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center justify-between gap-2">
-                    <span className="text-xs font-bold text-slate-800">{c.name}</span>
-                    <span className={`text-[10px] font-black px-2 py-0.5 rounded-md border inline-flex items-center gap-1 ${meta.color}`}>
-                      <meta.Icon className="w-3 h-3" /> {c.status}
-                    </span>
+      {/* Checklist + Score breakdown */}
+      <div className="grid lg:grid-cols-[1.5fr_1fr] gap-4">
+        {/* CAN SLIM checklist as a scan-friendly table */}
+        <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+          <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100">
+            <div>
+              <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wide">Checklist</p>
+              <h3 className="text-base font-black text-slate-800">CAN SLIM factors</h3>
+            </div>
+            <span className="text-[11px] font-bold text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-2 py-1">{ev.canSlim.summaryLabel}</span>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm border-collapse">
+              <thead>
+                <tr className="bg-slate-50 border-b border-slate-200 text-[11px] font-bold text-slate-400 uppercase tracking-wide">
+                  <th className="text-left px-4 py-2 w-10">Item</th>
+                  <th className="text-left px-3 py-2">Factor</th>
+                  <th className="text-left px-3 py-2">Actual value</th>
+                  <th className="text-right px-4 py-2">Status</th>
+                </tr>
+              </thead>
+              <tbody>
+                {ev.canSlim.criteria.map((c: any) => {
+                  const meta = statusMeta[c.status] || statusMeta["Data insufficient"];
+                  return (
+                    <tr key={c.code} className="border-b border-slate-100 last:border-0">
+                      <td className="px-4 py-2.5"><span className="w-7 h-7 rounded-lg bg-slate-100 text-slate-700 font-black text-[13px] flex items-center justify-center">{c.code}</span></td>
+                      <td className="px-3 py-2.5 font-bold text-slate-800">{c.name}</td>
+                      <td className="px-3 py-2.5 text-[13px] text-slate-600">{c.detail}</td>
+                      <td className="px-4 py-2.5 text-right">
+                        <span className={`text-[10px] font-black px-2 py-0.5 rounded-md border inline-flex items-center gap-1 ${meta.color}`}>
+                          <meta.Icon className="w-3 h-3" /> {c.status}
+                        </span>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+          <p className="px-5 py-3 text-[11px] text-slate-400 border-t border-slate-100">
+            {ev.canSlim.passes} pass · {ev.canSlim.watches} watch · {ev.canSlim.fails} fail · {ev.canSlim.insufficient} no data. CAN SLIM® is William O&apos;Neil&apos;s growth framework; each row shows one computed value.
+          </p>
+        </div>
+
+        {/* Score breakdown as bars */}
+        <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+          <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100">
+            <div>
+              <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wide">Composite</p>
+              <h3 className="text-base font-black text-slate-800">Score breakdown</h3>
+            </div>
+            <span className="text-[11px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-lg px-2 py-1">{ev.composite.rating ?? "—"} / 100</span>
+          </div>
+          <div className="p-5 space-y-3.5">
+            {ev.composite.breakdown.map((b: any) => {
+              const pts = parseFloat(String(b.points).replace(/[^\d.-]/g, ""));
+              const wt = parseFloat(String(b.weight).replace(/[^\d.-]/g, ""));
+              const pct = b.available && Number.isFinite(pts) && wt ? Math.max(0, Math.min(100, (pts / wt) * 100)) : 0;
+              return (
+                <div key={b.component}>
+                  <div className="flex items-center justify-between text-[12px] mb-1">
+                    <span className="font-semibold text-slate-600">{b.component}</span>
+                    <span className={`font-bold ${b.available ? "text-slate-800" : "text-slate-400 italic"}`}>{b.available ? b.points : "No data"}</span>
                   </div>
-                  <div className="text-[11px] text-slate-500 mt-1">{c.detail}</div>
+                  <div className="h-2 rounded-full bg-slate-100 overflow-hidden">
+                    <div className={`h-full rounded-full ${!b.available ? "bg-amber-300" : pct >= 85 ? "bg-emerald-500" : "bg-indigo-500"}`} style={{ width: `${pct}%` }} />
+                  </div>
                 </div>
-              </div>
-            );
-          })}
-        </div>
-        <div className="mt-3 text-[11px] text-slate-400">
-          {ev.canSlim.passes} Pass · {ev.canSlim.watches} Watch · {ev.canSlim.fails} Fail · {ev.canSlim.insufficient} insufficient. CAN SLIM® is William O'Neil's growth-stock framework; each line shows the actual computed value.
-        </div>
-      </Card>
-
-      <div className="grid lg:grid-cols-2 gap-5">
-        {/* Composite breakdown */}
-        <Card title="Composite Evaluation Rating" icon={<Gauge className="w-4 h-4" />} badge={`${ev.composite.rating ?? "—"} / 100`}>
-          <div className="space-y-2">
-            {ev.composite.breakdown.map((b: any) => (
-              <div key={b.component} className="flex items-center justify-between text-xs">
-                <span className="font-medium text-slate-600">{b.component} <span className="text-slate-400">({b.note})</span></span>
-                <span className={`font-bold ${b.available ? "text-slate-800" : "text-slate-400 italic"}`}>{b.points}</span>
-              </div>
-            ))}
+              );
+            })}
+            <div className="pt-3 border-t border-slate-100">
+              <div className="flex items-center justify-between text-[12px] mb-1"><span className="font-semibold text-slate-600">Data coverage</span><strong className="text-indigo-600">{ev.composite.coverage}%</strong></div>
+              <div className="h-2 rounded-full bg-slate-100 overflow-hidden"><div className="h-full rounded-full bg-indigo-500" style={{ width: `${ev.composite.coverage || 0}%` }} /></div>
+            </div>
+            <p className="text-[10px] text-slate-400 italic">{ev.composite.note}</p>
           </div>
-          <div className="mt-3 pt-3 border-t border-slate-100 flex items-center justify-between text-xs">
-            <span className="text-slate-500">Data coverage</span>
-            <span className="font-bold text-indigo-600">{ev.composite.coverage}%</span>
-          </div>
-          <p className="mt-2 text-[10px] text-slate-400 italic">{ev.composite.note}</p>
-        </Card>
+        </div>
+      </div>
 
+      {/* Quality + Fundamentals */}
+      <div className="grid lg:grid-cols-2 gap-4">
         {/* SMR + Acc/Dis */}
-        <Card title="Quality (SMR) & Demand (Acc/Dis)" icon={<ShieldCheck className="w-4 h-4" />}>
-          <div className="flex gap-4 mb-3">
-            <div className="text-center flex-1 bg-slate-50 rounded-xl py-2">
-              <div className="text-[10px] font-bold text-slate-400 uppercase">SMR Grade</div>
-              <div className={`text-2xl font-black ${gradeColor(ev.smr.grade)}`}>{ev.smr.grade}</div>
-            </div>
-            <div className="text-center flex-1 bg-slate-50 rounded-xl py-2">
-              <div className="text-[10px] font-bold text-slate-400 uppercase">Acc/Dis Grade</div>
-              <div className={`text-2xl font-black ${gradeColor(ev.accDis.grade)}`}>{ev.accDis.grade}</div>
+        <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+          <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100">
+            <div>
+              <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wide">Quality &amp; demand</p>
+              <h3 className="text-base font-black text-slate-800">SMR &amp; accumulation</h3>
             </div>
           </div>
-          <Stat label="Sales Growth" value={ev.smr.metrics.salesGrowth} />
-          <Stat label="Operating Margin" value={ev.smr.metrics.operatingMargin} />
-          <Stat label="Net Margin" value={ev.smr.metrics.netMargin} />
-          <Stat label="ROE" value={ev.smr.metrics.roe} />
-          <Stat label="Demand Rating" value={ev.accDis.rating} />
-          <p className="mt-2 text-[10px] text-slate-400 italic">{ev.smr.detail}</p>
-        </Card>
-
-        {/* Alpha / Beta */}
-        <Card title="Alpha / Beta" icon={<Activity className="w-4 h-4" />} badge={ev.alphaBeta.indexName}>
-          <Stat label="Beta (sensitivity)" value={ev.alphaBeta.beta} />
-          <Stat label="Alpha (annualized excess)" value={ev.alphaBeta.alpha} />
-          <p className="mt-2 text-[11px] text-slate-500 leading-relaxed">{ev.alphaBeta.detail}</p>
-        </Card>
+          <div className="p-5">
+            <div className="grid grid-cols-2 gap-3 mb-3">
+              <div className="rounded-xl bg-slate-50 border border-slate-100 py-2.5 text-center">
+                <div className="text-[10px] font-bold text-slate-400 uppercase">SMR grade</div>
+                <div className={`text-2xl font-black ${gradeColor(ev.smr.grade)}`}>{ev.smr.grade}</div>
+              </div>
+              <div className="rounded-xl bg-slate-50 border border-slate-100 py-2.5 text-center">
+                <div className="text-[10px] font-bold text-slate-400 uppercase">Acc/Dis grade</div>
+                <div className={`text-2xl font-black ${gradeColor(ev.accDis.grade)}`}>{ev.accDis.grade}</div>
+              </div>
+            </div>
+            <Stat label="Sales Growth" value={ev.smr.metrics.salesGrowth} />
+            <Stat label="Operating Margin" value={ev.smr.metrics.operatingMargin} />
+            <Stat label="Net Margin" value={ev.smr.metrics.netMargin} />
+            <Stat label="ROE" value={ev.smr.metrics.roe} />
+            <Stat label="Demand Rating" value={ev.accDis.rating} />
+            <p className="mt-2 text-[10px] text-slate-400 italic">{ev.smr.detail}</p>
+          </div>
+        </div>
 
         {/* Multi-year fundamentals */}
-        <Card title="Multi-Year Fundamentals" icon={<BarChart3 className="w-4 h-4" />} badge={ev.multiYear.available ? `Rev CAGR ${ev.multiYear.revCagr3y != null ? ev.multiYear.revCagr3y.toFixed(1) + "%" : "n/a"}` : undefined}>
-          {ev.multiYear.available && yearData.length > 0 ? (
-            <>
-              <div className="h-40">
-                <ResponsiveContainer width="100%" height="100%">
-                  <ComposedChart data={yearData} margin={{ top: 5, right: 5, left: -10, bottom: 0 }}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
-                    <XAxis dataKey="name" tick={{ fontSize: 9, fill: "#94a3b8" }} />
-                    <YAxis tick={{ fontSize: 9, fill: "#94a3b8" }} />
-                    <RechartsTooltip contentStyle={{ fontSize: 11, borderRadius: 8 }} formatter={(v: any) => Number(v).toLocaleString()} />
-                    <Bar dataKey="revenue" name="Revenue" fill="#c7d2fe" radius={[3, 3, 0, 0]} />
-                    <Line dataKey="earnings" name="Earnings" stroke="#6366f1" strokeWidth={2} dot />
-                  </ComposedChart>
-                </ResponsiveContainer>
-              </div>
-              <div className="mt-2 overflow-x-auto">
-                <table className="w-full text-[11px]">
-                  <thead><tr className="text-slate-400 text-left"><th className="py-1 font-bold">Year</th><th className="py-1 font-bold text-right">Revenue</th><th className="py-1 font-bold text-right">Earnings</th></tr></thead>
-                  <tbody>
-                    {ev.multiYear.years.map((y: any, i: number) => (
-                      <tr key={i} className="border-t border-slate-50">
-                        <td className="py-1 font-medium text-slate-600">{y.year}</td>
-                        <td className="py-1 text-right font-bold text-slate-800">{y.revenueDisplay}</td>
-                        <td className="py-1 text-right font-bold text-slate-800">{y.earningsDisplay}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-              {ev.multiYear.note && <div className="mt-2 text-[10px] text-slate-400 italic">{ev.multiYear.note}</div>}
-            </>
-          ) : (
-            <div className="flex items-start gap-2 text-xs text-slate-500 bg-slate-50 rounded-xl p-3 border border-slate-100">
-              <AlertTriangle className="w-4 h-4 text-amber-500 shrink-0 mt-0.5" />
-              {ev.multiYear.note}
+        <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+          <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100">
+            <div>
+              <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wide">Fundamentals</p>
+              <h3 className="text-base font-black text-slate-800">Revenue &amp; earnings trend</h3>
             </div>
-          )}
-        </Card>
+            {ev.multiYear.available && <span className="text-[11px] font-bold text-slate-500 bg-slate-100 rounded-lg px-2 py-1">Rev CAGR {ev.multiYear.revCagr3y != null ? ev.multiYear.revCagr3y.toFixed(1) + "%" : "n/a"}</span>}
+          </div>
+          <div className="p-5">
+            {ev.multiYear.available && yearData.length > 0 ? (
+              <>
+                <div className="h-40">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <ComposedChart data={yearData} margin={{ top: 5, right: 5, left: -10, bottom: 0 }}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
+                      <XAxis dataKey="name" tick={{ fontSize: 9, fill: "#94a3b8" }} />
+                      <YAxis tick={{ fontSize: 9, fill: "#94a3b8" }} />
+                      <RechartsTooltip contentStyle={{ fontSize: 11, borderRadius: 8 }} formatter={(v: any) => Number(v).toLocaleString()} />
+                      <Bar dataKey="revenue" name="Revenue" fill="#c7d2fe" radius={[3, 3, 0, 0]} />
+                      <Line dataKey="earnings" name="Earnings" stroke="#6366f1" strokeWidth={2} dot />
+                    </ComposedChart>
+                  </ResponsiveContainer>
+                </div>
+                <div className="mt-2 overflow-x-auto">
+                  <table className="w-full text-[11px]">
+                    <thead><tr className="text-slate-400 text-left"><th className="py-1 font-bold">Year</th><th className="py-1 font-bold text-right">Revenue</th><th className="py-1 font-bold text-right">Earnings</th></tr></thead>
+                    <tbody>
+                      {ev.multiYear.years.map((y: any, i: number) => (
+                        <tr key={i} className="border-t border-slate-50">
+                          <td className="py-1 font-medium text-slate-600">{y.year}</td>
+                          <td className="py-1 text-right font-bold text-slate-800">{y.revenueDisplay}</td>
+                          <td className="py-1 text-right font-bold text-slate-800">{y.earningsDisplay}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+                {ev.multiYear.note && <div className="mt-2 text-[10px] text-slate-400 italic">{ev.multiYear.note}</div>}
+              </>
+            ) : (
+              <div className="flex items-start gap-2 text-xs text-slate-500 bg-slate-50 rounded-xl p-3 border border-slate-100">
+                <AlertTriangle className="w-4 h-4 text-amber-500 shrink-0 mt-0.5" />
+                {ev.multiYear.note}
+              </div>
+            )}
+          </div>
+        </div>
       </div>
+
+      {/* Advanced — Alpha / Beta (collapsible) */}
+      <details className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden group">
+        <summary className="flex items-center justify-between px-5 py-4 cursor-pointer list-none">
+          <div>
+            <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wide">Advanced</p>
+            <h3 className="text-base font-black text-slate-800">Alpha &amp; beta details</h3>
+          </div>
+          <span className="text-[11px] font-bold text-slate-500 bg-slate-100 rounded-lg px-2 py-1">{ev.alphaBeta.indexName}</span>
+        </summary>
+        <div className="px-5 pb-5 pt-1 border-t border-slate-100">
+          <div className="grid grid-cols-2 gap-3 mb-2">
+            <div className="rounded-xl bg-slate-50 border border-slate-100 p-3"><div className="text-[10px] font-bold text-slate-400 uppercase">Beta</div><div className="text-lg font-black text-slate-800">{ev.alphaBeta.beta}</div></div>
+            <div className="rounded-xl bg-slate-50 border border-slate-100 p-3"><div className="text-[10px] font-bold text-slate-400 uppercase">Alpha</div><div className="text-lg font-black text-slate-800">{ev.alphaBeta.alpha}</div></div>
+          </div>
+          <p className="text-[11px] text-slate-500 leading-relaxed">{ev.alphaBeta.detail}</p>
+        </div>
+      </details>
     </div>
   );
 }
