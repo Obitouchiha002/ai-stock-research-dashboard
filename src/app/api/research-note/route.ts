@@ -250,37 +250,40 @@ export async function POST(req: NextRequest) {
       news,
     };
 
-    // ---- Web-grounded deep research (best-effort) ----
+    // The web-grounded research + the reasoning AI narrative are the SLOW part
+    // (two chained LLM calls). Only run them when the client asks (skipAi=false),
+    // so the tab loads the computed sections instantly and the narrative is
+    // generated on demand via a button.
     const businessSummary = (summary as any)?.summaryProfile?.longBusinessSummary || "";
     let webResearch = "";
-    try {
-      webResearch = await generateGrounded(buildResearchQuery(name, symbol, sector));
-    } catch {
-      webResearch = "";
-    }
-
-    // ---- AI narrative (structured, Gemini+Groq) ----
     let ai: any = null;
-    try {
-      ai = await generateJson(buildPrompt(reportData, webResearch, businessSummary, (news as any).articles || []), { tier: "reasoning" });
-    } catch (e) {
-      ai = { error: e instanceof AiDisabledError ? "AI disabled (configure GEMINI_API_KEY/GROQ_API_KEY)." : "AI narrative busy; computed sections below are still accurate." };
-    }
-    if (ai && typeof ai === "object") {
-      ai.webResearchUsed = !!webResearch;
-      // Hard guardrail: never let a raw Buy/Sell recommendation slip through.
-      if (ai.bottomLine?.action && /\b(buy|sell)\b/i.test(ai.bottomLine.action)) {
-        ai.bottomLine.action = "Add to Watchlist / Study Further (research only)";
+    if (!body.skipAi) {
+      try {
+        webResearch = await generateGrounded(buildResearchQuery(name, symbol, sector));
+      } catch {
+        webResearch = "";
       }
-      const scrub = (v: any) =>
-        typeof v === "string"
-          ? v.replace(/\b(buy now|sell now|strong buy|strong sell|must buy|should buy)\b/gi, "watch closely")
-          : v;
-      if (ai.bottomLine) {
-        ai.bottomLine.investabilityView = scrub(ai.bottomLine.investabilityView);
-        ai.bottomLine.mainReason = scrub(ai.bottomLine.mainReason);
+      try {
+        ai = await generateJson(buildPrompt(reportData, webResearch, businessSummary, (news as any).articles || []), { tier: "reasoning" });
+      } catch (e) {
+        ai = { error: e instanceof AiDisabledError ? "AI disabled (configure GEMINI_API_KEY/GROQ_API_KEY)." : "AI narrative busy; computed sections below are still accurate." };
       }
-      ai.finalView = scrub(ai.finalView);
+      if (ai && typeof ai === "object") {
+        ai.webResearchUsed = !!webResearch;
+        // Hard guardrail: never let a raw Buy/Sell recommendation slip through.
+        if (ai.bottomLine?.action && /\b(buy|sell)\b/i.test(ai.bottomLine.action)) {
+          ai.bottomLine.action = "Add to Watchlist / Study Further (research only)";
+        }
+        const scrub = (v: any) =>
+          typeof v === "string"
+            ? v.replace(/\b(buy now|sell now|strong buy|strong sell|must buy|should buy)\b/gi, "watch closely")
+            : v;
+        if (ai.bottomLine) {
+          ai.bottomLine.investabilityView = scrub(ai.bottomLine.investabilityView);
+          ai.bottomLine.mainReason = scrub(ai.bottomLine.mainReason);
+        }
+        ai.finalView = scrub(ai.finalView);
+      }
     }
 
     return NextResponse.json({

@@ -51,19 +51,21 @@ function List({ items, tone = "slate" }: { items?: string[]; tone?: string }) {
 
 export default function ResearchNoteTab({ symbol, market }: { symbol: string; market: string }) {
   const [loading, setLoading] = useState(false);
+  const [aiLoading, setAiLoading] = useState(false);
   const [error, setError] = useState("");
   const [note, setNote] = useState<any | null>(null);
   const [imported, setImported] = useState<any | null>(null);
   React.useEffect(() => { setImported(getImportedReport(symbol)); }, [symbol]);
 
-  const load = async () => {
-    setLoading(true);
+  // withAi=false → fast computed note (no slow LLM calls); true → add the AI narrative.
+  const load = async (withAi = false) => {
+    if (withAi) setAiLoading(true); else setLoading(true);
     setError("");
     try {
       const res = await fetch("/api/research-note", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ symbol, market }),
+        body: JSON.stringify({ symbol, market, skipAi: !withAi }),
       });
       const json = await res.json();
       if (!res.ok) throw new Error(json.error || "Research note failed");
@@ -72,10 +74,11 @@ export default function ResearchNoteTab({ symbol, market }: { symbol: string; ma
       setError(e.message || "Research note failed.");
     } finally {
       setLoading(false);
+      setAiLoading(false);
     }
   };
   React.useEffect(() => {
-    if (symbol) load();
+    if (symbol) load(false); // instant computed load; AI is on-demand
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [symbol]);
 
@@ -98,8 +101,8 @@ export default function ResearchNoteTab({ symbol, market }: { symbol: string; ma
     return (
       <div className="flex flex-col items-center justify-center py-20 text-slate-500">
         <Loader2 className="w-8 h-8 animate-spin text-indigo-500 mb-3" />
-        <p className="font-medium text-sm">Compiling full research note…</p>
-        <p className="text-xs text-slate-400 mt-1">momentum · evaluation · analytics · AI</p>
+        <p className="font-medium text-sm">Loading research…</p>
+        <p className="text-xs text-slate-400 mt-1">momentum · evaluation · analytics</p>
       </div>
     );
   if (error)
@@ -108,7 +111,7 @@ export default function ResearchNoteTab({ symbol, market }: { symbol: string; ma
         <div className="flex items-start gap-2 text-xs text-slate-500 bg-slate-50 rounded-xl p-3 border border-slate-100">
           <AlertTriangle className="w-4 h-4 text-amber-500 shrink-0 mt-0.5" /> {error}
         </div>
-        <button onClick={load} className="mt-3 px-4 py-2 bg-indigo-600 text-white rounded-lg text-xs font-bold">Retry</button>
+        <button onClick={() => load(false)} className="mt-3 px-4 py-2 bg-indigo-600 text-white rounded-lg text-xs font-bold">Retry</button>
       </div>
     );
   if (!note) return null;
@@ -129,9 +132,16 @@ export default function ResearchNoteTab({ symbol, market }: { symbol: string; ma
             CANSLIM Research Note · {note.sector} · {new Date(note.generatedAt).toLocaleDateString()}
           </p>
         </div>
-        <button onClick={exportExcel} className="px-3 py-1.5 bg-white border border-slate-200 text-slate-600 rounded-lg text-xs font-bold flex items-center gap-1.5 hover:bg-slate-50">
-          <Download className="w-3.5 h-3.5" /> Export Excel
-        </button>
+        <div className="flex items-center gap-2">
+          <button onClick={() => load(true)} disabled={aiLoading} className="px-3 py-1.5 bg-indigo-600 text-white rounded-lg text-xs font-bold flex items-center gap-1.5 hover:bg-indigo-700 disabled:opacity-50">
+            {aiLoading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <FileText className="w-3.5 h-3.5" />}
+            {note.ai ? "Refresh AI note" : "Generate AI note"}
+            <span className="text-[9px] font-black text-amber-200 bg-amber-500/30 px-1.5 py-0.5 rounded">PAID</span>
+          </button>
+          <button onClick={exportExcel} className="px-3 py-1.5 bg-white border border-slate-200 text-slate-600 rounded-lg text-xs font-bold flex items-center gap-1.5 hover:bg-slate-50">
+            <Download className="w-3.5 h-3.5" /> Excel
+          </button>
+        </div>
       </div>
 
       <div className="flex items-start gap-2 text-[11px] text-amber-800 bg-amber-50 border border-amber-200 rounded-xl px-3 py-2 font-medium">
