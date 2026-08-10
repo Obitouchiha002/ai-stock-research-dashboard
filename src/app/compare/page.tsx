@@ -222,17 +222,18 @@ export default function ComparePage() {
   const baseLeg = legs.find((l) => l.kind === "stock");
   const baseReturn = baseLeg?.changePct ?? 0;
 
-  // Colour every line by PERFORMANCE rank so the chart reads at a glance: the
-  // top performer is green, the worst is red, the rest a calm spectrum between.
+  // Green = up / winning, red = down / losing. Every line that ended positive is
+  // a shade of green (best = darkest), every negative one a shade of red (worst =
+  // darkest) — so the top line is green with a green value, a losing line is red.
   // The line, its legend dot and its return value all share this colour.
   const legColor = useMemo(() => {
-    const ranked = [...legs].sort((a, b) => b.changePct - a.changePct);
-    const n = ranked.length;
-    const MID = ["#2563eb", "#d97706", "#7c3aed", "#0891b2"];
+    const greens = ["#047857", "#059669", "#10b981", "#34d399", "#6ee7b7"]; // dark → light
+    const reds = ["#be123c", "#e11d48", "#f43f5e", "#fb7185", "#fda4af"];
+    const pos = legs.filter((l) => l.changePct >= 0).sort((a, b) => b.changePct - a.changePct);
+    const neg = legs.filter((l) => l.changePct < 0).sort((a, b) => a.changePct - b.changePct); // worst first
     const map: Record<string, string> = {};
-    ranked.forEach((l, i) => {
-      map[l.symbol] = i === 0 ? "#059669" : i === n - 1 && n > 1 ? "#e11d48" : MID[(i - 1) % MID.length];
-    });
+    pos.forEach((l, i) => { map[l.symbol] = greens[Math.min(i, greens.length - 1)]; });
+    neg.forEach((l, i) => { map[l.symbol] = reds[Math.min(i, reds.length - 1)]; });
     return map;
   }, [legs]);
   const chartData = useMemo(() => {
