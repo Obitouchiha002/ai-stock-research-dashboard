@@ -3384,11 +3384,11 @@ function AnalyzeContent() {
                         { id: "candle", title: "Candle Read", desc: "Today's candle & classical chart patterns", icon: CandlestickChart, tint: "bg-violet-50 text-violet-600" },
                       ] as const).map((c) => {
                         const Icon = c.icon;
-                        const active = techView === c.id;
+                        const active = false;
                         return (
                           <button
                             key={c.id}
-                            onClick={() => setTechView(c.id)}
+                            onClick={() => document.getElementById(`tech-${c.id}`)?.scrollIntoView({ behavior: "smooth", block: "start" })}
                             className={`group text-left rounded-2xl border p-4 transition-all ${
                               active
                                 ? "border-indigo-300 bg-indigo-50/50 ring-1 ring-indigo-200 shadow-sm"
@@ -3408,8 +3408,8 @@ function AnalyzeContent() {
                       })}
                     </div>
 
-                    {techView === "indicators" && (
-                    <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-4 sm:p-5">
+                    {(
+                    <div id="tech-indicators" className="bg-white rounded-2xl border border-slate-200 shadow-sm p-4 sm:p-5">
                       <h3 className="text-[12px] font-black uppercase tracking-wider text-slate-400 mb-3">Key indicators</h3>
                       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2.5">
                       {([
@@ -3445,8 +3445,8 @@ function AnalyzeContent() {
                     </div>
                     )}
 
-                    {techView === "levels" && (
-                    <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+                    {(
+                    <div id="tech-levels" className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
                       <div className="px-5 py-4 border-b border-slate-100">
                         <h3 className="text-base font-black text-slate-800 flex items-center gap-2">
                           <BarChart2 className="w-4 h-4 text-indigo-600" /> Support &amp; Resistance
@@ -3526,8 +3526,8 @@ function AnalyzeContent() {
 
                     )}
 
-                    {techView === "strength" && (
-                    <div>
+                    {(
+                    <div id="tech-strength">
 
                       {/* Price Strength — stock vs benchmark and vs any peers */}
                       <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
@@ -3872,8 +3872,8 @@ function AnalyzeContent() {
                     )}
 
                     {/* ---- CANDLE READ: today, recent window, historical base rates ---- */}
-                    {techView === "candle" && (
-                    <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+                    {(
+                    <div id="tech-candle" className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
                       <div className="flex flex-wrap items-center justify-between gap-3 px-5 py-4 border-b border-slate-100">
                         <div>
                           <h3 className="text-lg font-black text-slate-800 flex items-center gap-2">
