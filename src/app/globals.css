@@ -376,6 +376,22 @@ button:active, a[role="button"]:active { transform: translateY(0.5px); }
 /* 8. Slightly warmer page background — pure grey can feel clinical. */
 :root:not(.dark) body { background-color: #f7f8fa; }
 
+/* 8b. App-wide readability & contrast.
+   (a) Nudge the very small hardcoded text up a step so nothing is uncomfortably
+       tiny — text only, so spacing/layout doesn't shift.
+   (b) Raise contrast on washed-out muted text INSIDE the content area (<main>)
+       only, so the dark sidebar keeps its intentionally-light labels. This helps
+       everyone, including low-vision / colour-vision users. */
+.text-\[10px\]   { font-size: 11.5px !important; }
+.text-\[10\.5px\]{ font-size: 12px !important; }
+.text-\[11px\]   { font-size: 12.5px !important; }
+.text-\[11\.5px\]{ font-size: 12.5px !important; }
+.text-\[12px\]   { font-size: 13px !important; }
+.text-\[12\.5px\]{ font-size: 13px !important; }
+.text-\[13px\]   { font-size: 13.5px !important; }
+main :is(.text-slate-400) { color: #64748b !important; } /* 400 → 500: clearer muted */
+main :is(.text-slate-300) { color: #94a3b8 !important; } /* 300 → 400: readable placeholders */
+
 /* 9. Shared "base" data-table look, modelled on the Watchlist table the user
    likes: one clean text size, uppercase muted headers, calm row borders and a
    soft hover. Add `sa-table` to any <table> to inherit it. Header COLOUR uses a
