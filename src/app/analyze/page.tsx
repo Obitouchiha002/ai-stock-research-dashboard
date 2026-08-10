@@ -352,6 +352,8 @@ function AnalyzeContent() {
   const [patView, setPatView] = useState<"today" | "window" | "chart" | "history">("today");
   // Technical tab is huge — show one section at a time as a card, no long scroll.
   const [techView, setTechView] = useState<"indicators" | "levels" | "strength" | "candle">("indicators");
+  // Each Technical section is an accordion the user can open/close (all open by default).
+  const [techOpen, setTechOpen] = useState<Record<string, boolean>>({ indicators: true, levels: true, strength: true, candle: true });
   const [patLoading, setPatLoading] = useState(false);
   // Pivot-based support & resistance levels
   const [lvlData, setLvlData] = useState<any | null>(null);
@@ -3384,11 +3386,11 @@ function AnalyzeContent() {
                         { id: "candle", title: "Candle Read", desc: "Today's candle & classical chart patterns", icon: CandlestickChart, tint: "bg-violet-50 text-violet-600" },
                       ] as const).map((c) => {
                         const Icon = c.icon;
-                        const active = false;
+                        const active = techOpen[c.id];
                         return (
                           <button
                             key={c.id}
-                            onClick={() => document.getElementById(`tech-${c.id}`)?.scrollIntoView({ behavior: "smooth", block: "start" })}
+                            onClick={() => setTechOpen((o) => ({ ...o, [c.id]: !o[c.id] }))}
                             className={`group text-left rounded-2xl border p-4 transition-all ${
                               active
                                 ? "border-indigo-300 bg-indigo-50/50 ring-1 ring-indigo-200 shadow-sm"
@@ -3399,7 +3401,7 @@ function AnalyzeContent() {
                               <span className={`w-10 h-10 rounded-xl grid place-items-center ${c.tint}`}>
                                 <Icon className="w-5 h-5" strokeWidth={2.4} />
                               </span>
-                              <ChevronRight className={`w-4 h-4 transition-colors ${active ? "text-indigo-500" : "text-slate-300 group-hover:text-indigo-400"}`} />
+                              <ChevronRight className={`w-4 h-4 transition-all ${active ? "rotate-90 text-indigo-500" : "text-slate-300 group-hover:text-indigo-400"}`} />
                             </div>
                             <div className="mt-3 text-[15px] font-black text-slate-900 leading-tight">{c.title}</div>
                             <p className="text-[11.5px] text-slate-500 mt-1 leading-snug">{c.desc}</p>
@@ -3408,7 +3410,7 @@ function AnalyzeContent() {
                       })}
                     </div>
 
-                    {(
+                    {techOpen.indicators && (
                     <div id="tech-indicators" className="bg-white rounded-2xl border border-slate-200 shadow-sm p-4 sm:p-5">
                       <h3 className="text-[12px] font-black uppercase tracking-wider text-slate-400 mb-3">Key indicators</h3>
                       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2.5">
@@ -3445,7 +3447,7 @@ function AnalyzeContent() {
                     </div>
                     )}
 
-                    {(
+                    {techOpen.levels && (
                     <div id="tech-levels" className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
                       <div className="px-5 py-4 border-b border-slate-100">
                         <h3 className="text-base font-black text-slate-800 flex items-center gap-2">
@@ -3526,7 +3528,7 @@ function AnalyzeContent() {
 
                     )}
 
-                    {(
+                    {techOpen.strength && (
                     <div id="tech-strength">
 
                       {/* Price Strength — stock vs benchmark and vs any peers */}
@@ -3872,7 +3874,7 @@ function AnalyzeContent() {
                     )}
 
                     {/* ---- CANDLE READ: today, recent window, historical base rates ---- */}
-                    {(
+                    {techOpen.candle && (
                     <div id="tech-candle" className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
                       <div className="flex flex-wrap items-center justify-between gap-3 px-5 py-4 border-b border-slate-100">
                         <div>
