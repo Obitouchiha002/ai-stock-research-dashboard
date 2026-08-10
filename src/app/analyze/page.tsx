@@ -1924,6 +1924,13 @@ function AnalyzeContent() {
                 )}
               </div>
               <div className="hidden sm:flex gap-2 print:hidden">
+                <a
+                  href={`/compare?symbol=${encodeURIComponent(data.stock.ticker)}`}
+                  title="Compare & Relative Strength"
+                  className="px-3 py-1.5 bg-violet-600 text-white rounded-lg text-xs font-bold hover:bg-violet-700 shadow-sm flex items-center gap-1.5 transition-colors"
+                >
+                  ⚖ Compare
+                </a>
                 <button
                   onClick={handleToggleWatchlist}
                   className="px-3 py-1.5 bg-white border border-slate-200 text-slate-600 rounded-lg text-xs font-semibold hover:bg-slate-50 shadow-sm flex items-center gap-1.5 transition-colors"
@@ -3197,10 +3204,14 @@ function AnalyzeContent() {
                       })}
                     </div>
 
-                    {techOpen.indicators && (
+                    {(
                     <div id="tech-indicators" className="bg-white rounded-2xl border border-slate-200 shadow-sm p-4 sm:p-5">
-                      <h3 className="text-[12px] font-black uppercase tracking-wider text-slate-400 mb-3">Key indicators</h3>
-                      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2.5">
+                      <button onClick={() => setTechOpen((o) => ({ ...o, indicators: !o.indicators }))} className="w-full flex items-center justify-between">
+                        <h3 className="text-[12px] font-black uppercase tracking-wider text-slate-400">Key indicators</h3>
+                        <ChevronDown className={`w-4 h-4 text-slate-400 transition-transform ${techOpen.indicators ? "" : "-rotate-90"}`} />
+                      </button>
+                      {techOpen.indicators && (
+                      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2.5 mt-3">
                       {([
                         { icon: Activity, tint: "bg-indigo-50 text-indigo-600", label: "RSI (14)", value: data.technical.rsi, data: { title: "RSI (14)", value: data.technical.rsi, meaning: "Relative Strength Index measures momentum.", interpretation: "Above 70 is overbought, below 30 is oversold.", whyMatters: "Helps identify potential reversal points." } },
                         { icon: LineChart, tint: "bg-violet-50 text-violet-600", label: "MACD", value: data.technical.macd, data: { title: "MACD", value: data.technical.macd, meaning: "Moving Average Convergence Divergence." } },
@@ -3231,19 +3242,24 @@ function AnalyzeContent() {
                         );
                       })}
                     </div>
+                      )}
                     </div>
                     )}
 
-                    {techOpen.levels && (
+                    {(
                     <div id="tech-levels" className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
-                      <div className="px-5 py-4 border-b border-slate-100">
+                      <button onClick={() => setTechOpen((o) => ({ ...o, levels: !o.levels }))} className="w-full text-left px-5 py-4 border-b border-slate-100 flex items-start justify-between gap-2 hover:bg-slate-50">
+                        <div>
                         <h3 className="text-base font-black text-slate-800 flex items-center gap-2">
                           <BarChart2 className="w-4 h-4 text-indigo-600" /> Support &amp; Resistance
                         </h3>
                         <p className="text-xs text-slate-500 mt-0.5">
                           Swing-pivot levels the price has actually turned at (last ~1 year).
                         </p>
-                      </div>
+                        </div>
+                        <ChevronDown className={`w-4 h-4 text-slate-400 shrink-0 mt-1 transition-transform ${techOpen.levels ? "" : "-rotate-90"}`} />
+                      </button>
+                      {techOpen.levels && (<>
                       {lvlLoading ? (
                         <div className="px-5 py-8 text-center text-sm text-slate-400 font-medium">Finding levels…</div>
                       ) : !lvlData?.ok ? (
@@ -3311,6 +3327,7 @@ function AnalyzeContent() {
                           </p>
                         </>
                       )}
+                      </>)}
                     </div>
 
                     )}
