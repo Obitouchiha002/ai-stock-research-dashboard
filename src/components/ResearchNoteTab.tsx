@@ -125,8 +125,8 @@ export default function ResearchNoteTab({ symbol, market }: { symbol: string; ma
     const t = v == null ? "" : String(v).trim();
     return t === "" || ["—", "-", "N/A", "n/a", "na", "NaN", "null", "undefined", "Data not available", "Data Unavailable", "Data insufficient"].includes(t);
   };
-  const groups: { title: string; rows: [string, any][] }[] = [
-    { title: "Snapshot", rows: (note.snapshot || []).map((r: any) => [r[0], r[1]] as [string, any]) },
+  const groups: { title: string; rows: [string, any, string?][] }[] = [
+    { title: "Snapshot", rows: (note.snapshot || []).map((r: any) => [r[0], r[1], r[2]] as [string, any, string?]) },
     { title: "Scorecard", rows: [
       ["Composite Rating", s.composite?.rating != null ? `${s.composite.rating} / 100` : null],
       ["Composite View", s.composite?.label],
@@ -157,7 +157,7 @@ export default function ResearchNoteTab({ symbol, market }: { symbol: string; ma
       ["Institutions %", s.ownership?.institutionsPercent], ["Insiders %", s.ownership?.insidersPercent],
       ["Institutions Count", s.ownership?.institutionsCount], ["Trend", s.ownership?.label],
     ] },
-  ].map((g) => ({ ...g, rows: g.rows.filter((r: [string, any]) => !isBlank(r[1])) })).filter((g) => g.rows.length > 0);
+  ].map((g) => ({ ...g, rows: g.rows.filter((r: [string, any, string?]) => !isBlank(r[1])) })).filter((g) => g.rows.length > 0);
 
   return (
     <div className="space-y-5">
@@ -216,17 +216,26 @@ export default function ResearchNoteTab({ symbol, market }: { symbol: string; ma
       <div className="grid md:grid-cols-2 gap-4">
         {groups.map((g) => (
           <div key={g.title} className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
-            <div className="px-4 py-2.5 bg-slate-50 border-b border-slate-200">
-              <h3 className="text-[12px] font-black uppercase tracking-wide text-slate-500">{g.title}</h3>
+            <div className="px-4 py-2.5 bg-gradient-to-r from-indigo-50 to-slate-50 border-b border-slate-200 flex items-center gap-2">
+              <span className="w-1.5 h-4 rounded-full bg-indigo-500" />
+              <h3 className="text-[12px] font-black uppercase tracking-wide text-slate-600">{g.title}</h3>
             </div>
             <table className="w-full text-sm">
               <tbody>
-                {g.rows.map(([label, value], i) => (
-                  <tr key={i} className="border-b border-slate-100 last:border-0 hover:bg-slate-50/60">
-                    <td className="px-4 py-2 text-slate-500 font-medium">{label}</td>
-                    <td className="px-4 py-2 text-right font-bold text-slate-800 tabular-nums">{String(value)}</td>
-                  </tr>
-                ))}
+                {g.rows.map(([label, value, status], i) => {
+                  const dot = status === "g" ? "bg-emerald-500" : status === "a" ? "bg-amber-500" : status === "r" ? "bg-rose-500" : null;
+                  return (
+                    <tr key={i} className="border-b border-slate-100 last:border-0 hover:bg-slate-50/60">
+                      <td className="px-4 py-2 text-slate-500 font-medium">{label}</td>
+                      <td className="px-4 py-2 text-right font-bold text-slate-800 tabular-nums">
+                        <span className="inline-flex items-center gap-2 justify-end">
+                          {String(value)}
+                          {dot && <span className={`w-2 h-2 rounded-full shrink-0 ${dot}`} />}
+                        </span>
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>
@@ -268,10 +277,13 @@ export default function ResearchNoteTab({ symbol, market }: { symbol: string; ma
 
       {/* Quarterly + multi-year financials */}
       <div className="grid md:grid-cols-2 gap-4">
-        {(s.quarterlyEps?.quarters?.length || s.quarterlySales?.quarters?.length) ? (
-          <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-4">
-            <h3 className="text-[12px] font-black uppercase tracking-wide text-slate-500 mb-3">Quarterly growth</h3>
-            <div className="grid grid-cols-2 gap-4">
+        {(s.quarterlyEps?.available || s.quarterlySales?.available) ? (
+          <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+            <div className="px-4 py-2.5 bg-gradient-to-r from-indigo-50 to-slate-50 border-b border-slate-200 flex items-center gap-2">
+              <span className="w-1.5 h-4 rounded-full bg-indigo-500" />
+              <h3 className="text-[12px] font-black uppercase tracking-wide text-slate-600">Quarterly growth</h3>
+            </div>
+            <div className="flex flex-wrap gap-4 p-4">
               <QTable title="EPS" section={s.quarterlyEps} vkey="epsDisplay" />
               <QTable title="Sales" section={s.quarterlySales} vkey="revenueDisplay" />
             </div>
@@ -279,7 +291,7 @@ export default function ResearchNoteTab({ symbol, market }: { symbol: string; ma
         ) : null}
         {s.multiYear?.available && (s.multiYear.years || []).length > 0 && (
           <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
-            <div className="px-4 py-2.5 bg-slate-50 border-b border-slate-200"><h3 className="text-[12px] font-black uppercase tracking-wide text-slate-500">Multi-year financials</h3></div>
+            <div className="px-4 py-2.5 bg-gradient-to-r from-indigo-50 to-slate-50 border-b border-slate-200 flex items-center gap-2"><span className="w-1.5 h-4 rounded-full bg-indigo-500" /><h3 className="text-[12px] font-black uppercase tracking-wide text-slate-600">Multi-year financials</h3></div>
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead><tr className="text-[11px] font-bold text-slate-400 uppercase bg-slate-50/60 border-b border-slate-100"><th className="text-left px-4 py-2">Year</th><th className="text-right px-3 py-2">Revenue</th><th className="text-right px-4 py-2">Earnings</th></tr></thead>
@@ -344,19 +356,19 @@ function ObjTable({ rows, cols }: { rows?: any[]; cols: [string, string][] }) {
 }
 
 function QTable({ title, section, vkey }: { title: string; section: any; vkey: string }) {
-  if (!section?.available) return <div><div className="text-[10px] font-black uppercase text-slate-400 mb-1">{title}</div><span className="text-xs text-slate-400 italic">{section?.note || "Unavailable"}</span></div>;
+  if (!section?.available || !(section.quarters?.length)) return null;
   return (
-    <div>
-      <div className="text-[10px] font-black uppercase text-slate-400 mb-1">{title}</div>
+    <div className="flex-1 min-w-[220px] rounded-xl border border-slate-100 overflow-hidden">
+      <div className="text-[11px] font-black uppercase tracking-wide text-slate-600 bg-slate-50 border-b border-slate-100 px-3 py-1.5">{title}</div>
       <table className="w-full text-[11px]">
-        <thead><tr className="text-slate-400 text-left"><th className="py-1">Qtr</th><th className="py-1 text-right">{title}</th><th className="py-1 text-right">QoQ</th><th className="py-1 text-right">YoY</th></tr></thead>
+        <thead><tr className="text-slate-400 text-left border-b border-slate-100"><th className="py-1.5 px-3">Qtr</th><th className="py-1.5 px-2 text-right">{title}</th><th className="py-1.5 px-2 text-right">QoQ</th><th className="py-1.5 px-3 text-right">YoY</th></tr></thead>
         <tbody>
           {section.quarters.map((q: any, i: number) => (
-            <tr key={i} className="border-t border-slate-50">
-              <td className="py-1 text-slate-600">{q.quarter}</td>
-              <td className="py-1 text-right font-bold">{q[vkey]}</td>
-              <td className={`py-1 text-right font-bold ${String(q.qoq).startsWith("-") ? "text-rose-600" : "text-emerald-600"}`}>{q.qoq}</td>
-              <td className={`py-1 text-right font-bold ${q.yoy === "Data Unavailable" ? "text-slate-400" : String(q.yoy).startsWith("-") ? "text-rose-600" : "text-emerald-600"}`}>{q.yoy}</td>
+            <tr key={i} className="border-t border-slate-50 hover:bg-slate-50/60">
+              <td className="py-1.5 px-3 text-slate-600">{q.quarter}</td>
+              <td className="py-1.5 px-2 text-right font-bold text-slate-800 tabular-nums">{q[vkey]}</td>
+              <td className={`py-1.5 px-2 text-right font-bold tabular-nums ${String(q.qoq).startsWith("-") ? "text-rose-600" : "text-emerald-600"}`}>{q.qoq}</td>
+              <td className={`py-1.5 px-3 text-right font-bold tabular-nums ${q.yoy === "Data Unavailable" ? "text-slate-400" : String(q.yoy).startsWith("-") ? "text-rose-600" : "text-emerald-600"}`}>{q.yoy}</td>
             </tr>
           ))}
         </tbody>
