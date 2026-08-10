@@ -198,6 +198,9 @@ const CustomCandlestick = (props: any) => {
   const bodyHeight = Math.abs(openRatio - closeRatio) * totalHeight || 1; // min 1px
 
   const midX = x + width / 2;
+  // Leave a small gap between candles (TradingView-style) instead of solid blocks.
+  const bodyWidth = Math.max(1, width * 0.68);
+  const bodyX = midX - bodyWidth / 2;
 
   return (
     <g>
@@ -212,9 +215,9 @@ const CustomCandlestick = (props: any) => {
       />
       {/* Body */}
       <rect
-        x={x}
+        x={bodyX}
         y={bodyTop}
-        width={width}
+        width={bodyWidth}
         height={bodyHeight}
         fill={color}
         stroke={color}
@@ -232,7 +235,7 @@ function AnalyzeContent() {
   const [query, setQuery] = useState(initialSymbol);
   // Market is shared with the global top-bar selector (US / NSE / BSE).
   const { market, setMarket } = useGlobal();
-  const [timeframe, setTimeframe] = useState("1Y");
+  const [timeframe, setTimeframe] = useState("6M");
   const [depth, setDepth] = useState("Standard");
   const [profile, setProfile] = useState("Short-term Investor");
   const [riskTolerance, setRiskTolerance] = useState("Moderate");
