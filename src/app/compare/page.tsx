@@ -221,6 +221,20 @@ export default function ComparePage() {
   }, [data, peers]);
   const baseLeg = legs.find((l) => l.kind === "stock");
   const baseReturn = baseLeg?.changePct ?? 0;
+
+  // Colour every line by PERFORMANCE rank so the chart reads at a glance: the
+  // top performer is green, the worst is red, the rest a calm spectrum between.
+  // The line, its legend dot and its return value all share this colour.
+  const legColor = useMemo(() => {
+    const ranked = [...legs].sort((a, b) => b.changePct - a.changePct);
+    const n = ranked.length;
+    const MID = ["#2563eb", "#d97706", "#7c3aed", "#0891b2"];
+    const map: Record<string, string> = {};
+    ranked.forEach((l, i) => {
+      map[l.symbol] = i === 0 ? "#059669" : i === n - 1 && n > 1 ? "#e11d48" : MID[(i - 1) % MID.length];
+    });
+    return map;
+  }, [legs]);
   const chartData = useMemo(() => {
     if (!data?.series) return [];
     return data.series.map((row: any) => {
@@ -411,19 +425,19 @@ export default function ComparePage() {
                   <YAxis tick={{ fontSize: 10, fill: "#94a3b8" }} tickFormatter={(v) => `${v > 0 ? "+" : ""}${v}%`} width={44} />
                   <ReferenceLine y={0} stroke="#cbd5e1" />
                   <Tooltip formatter={(v: any) => `${Number(v) >= 0 ? "+" : ""}${Number(v).toFixed(1)}%`} contentStyle={{ fontSize: 12, borderRadius: 10 }} />
-                  {legs.map((l, i) => (
-                    <Line key={l.symbol} type="monotone" dataKey={l.symbol} stroke={SERIES_COLORS[i % SERIES_COLORS.length]}
+                  {legs.map((l) => (
+                    <Line key={l.symbol} type="monotone" dataKey={l.symbol} stroke={legColor[l.symbol]}
                       strokeWidth={l.kind === "benchmark" ? 2 : 2.5} strokeDasharray={l.kind === "benchmark" ? "6 4" : undefined} dot={false} connectNulls />
                   ))}
                 </LineChart>
               </ResponsiveContainer>
             </div>
             <div className="flex flex-wrap gap-x-4 gap-y-1 mt-2">
-              {legs.map((l, i) => (
+              {legs.map((l) => (
                 <Link key={l.symbol} href={`/charts?symbol=${encodeURIComponent(l.symbol)}`} title="Open in Chart Analytics"
                   className="inline-flex items-center gap-1.5 text-[12px] font-bold hover:underline">
-                  <span className="w-3 h-3 rounded-full" style={{ background: SERIES_COLORS[i % SERIES_COLORS.length] }} />
-                  {l.label}{l.kind === "benchmark" ? " (benchmark)" : ""} <span className={l.changePct >= 0 ? "text-emerald-600" : "text-rose-600"}>{pp(l.changePct)}</span>
+                  <span className="w-3 h-3 rounded-full" style={{ background: legColor[l.symbol] }} />
+                  {l.label}{l.kind === "benchmark" ? " (benchmark)" : ""} <span style={{ color: legColor[l.symbol] }}>{pp(l.changePct)}</span>
                 </Link>
               ))}
             </div>
