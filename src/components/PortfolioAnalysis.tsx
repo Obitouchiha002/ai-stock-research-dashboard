@@ -285,9 +285,16 @@ export default function PortfolioAnalysis({ market }: { market: PortfolioMarket 
                             <span className={`inline-block text-[15px] font-black tabular-nums ${rsiHasBg ? "px-1.5 py-0.5 rounded-md" : ""} ${rsiBadge}`}>{t.rsi ?? "—"}</span>
                           </td>
                           <td className="px-2 py-2.5 text-center whitespace-nowrap">
-                            <span className={`inline-flex items-center gap-1 font-black tabular-nums text-[15px] ${t.diUp == null ? "text-slate-700" : t.diUp ? "text-emerald-600" : "text-rose-600"}`}>
-                              {t.diUp != null && <span className="text-[11px]">{t.diUp ? "▲" : "▼"}</span>}{t.adx ?? "—"}
-                            </span>
+                            <div className={`font-black tabular-nums text-[15px] leading-tight ${t.diUp == null ? "text-slate-800" : t.diUp ? "text-emerald-600" : "text-rose-600"}`}>
+                              {t.diUp != null && <span className="text-[10px] mr-0.5">{t.diUp ? "▲" : "▼"}</span>}{t.adx ?? "—"}
+                            </div>
+                            {(t.plusDI != null || t.minusDI != null) && (
+                              <div className="text-[10.5px] font-bold tabular-nums leading-tight mt-0.5">
+                                <span className="text-emerald-600">+DI {t.plusDI != null ? Math.round(t.plusDI) : "—"}</span>
+                                <span className="text-slate-300"> · </span>
+                                <span className="text-rose-600">−DI {t.minusDI != null ? Math.round(t.minusDI) : "—"}</span>
+                              </div>
+                            )}
                           </td>
                           <td className="px-2 py-2.5 text-center">
                             <span className={`inline-block px-2.5 py-0.5 rounded-full text-[12px] font-black border ${TREND_BADGE[t.trend] || TREND_BADGE["—"]}`}>{t.trend}</span>
