@@ -432,69 +432,86 @@ export default function PortfolioPage() {
     setRefreshing(false);
   };
 
-  // AI Portfolio Review — momentum per holding (current market only).
+  // AI Portfolio Review — full-portfolio P/L & concentration across EVERY
+  // holding (local, no API), with momentum sampled on the largest positions.
   const runReview = async () => {
     const current = getPortfolio().filter((h) => h.market === market);
     if (current.length === 0) return;
     setReviewLoading(true);
     setReview(null);
     try {
-      const subset = current.slice(0, 12);
-      const results = await Promise.all(
-        subset.map(async (h) => {
+      const cur = CUR[market];
+      // 1) Quantitative stats across every holding.
+      const priced = current.map((h) => {
+        const px = h.currentPrice || h.buyPrice;
+        const value = h.shares * px;
+        const cost = h.shares * h.buyPrice;
+        const pl = value - cost;
+        const plPct = cost > 0 ? (pl / cost) * 100 : 0;
+        return { symbol: h.symbol, value, cost, pl, plPct };
+      });
+      const totalVal = priced.reduce((s, r) => s + r.value, 0) || 1;
+      const totalCost = priced.reduce((s, r) => s + r.cost, 0) || 1;
+      const totalPl = totalVal - totalCost;
+      const inProfit = priced.filter((r) => r.pl > 0).length;
+      const inLoss = priced.filter((r) => r.pl < 0).length;
+      const byWeight = [...priced].sort((a, b) => b.value - a.value);
+      const topPositions = byWeight.slice(0, 6).map((r) => ({ symbol: r.symbol, pct: Math.round((r.value / totalVal) * 100), plPct: Math.round(r.plPct * 10) / 10 }));
+      const concentrationTop5 = Math.round((byWeight.slice(0, 5).reduce((s, r) => s + r.value, 0) / totalVal) * 100);
+      const byDollar = [...priced].sort((a, b) => b.pl - a.pl);
+      const topWinners = byDollar.slice(0, 3).map((r) => ({ symbol: r.symbol, pl: Math.round(r.pl), plPct: Math.round(r.plPct * 10) / 10 }));
+      const topLosers = byDollar.slice(-3).reverse().map((r) => ({ symbol: r.symbol, pl: Math.round(r.pl), plPct: Math.round(r.plPct * 10) / 10 }));
+
+      // 2) Momentum sampled on the largest positions (most impactful).
+      const sample = byWeight.slice(0, 20);
+      const momResults = await Promise.all(
+        sample.map(async (r) => {
           try {
             const res = await fetch("/api/momentum", {
               method: "POST",
               headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({
-                symbol: h.symbol,
-                market: market === "Indian Stocks" ? "IN" : "US",
-              }),
+              body: JSON.stringify({ symbol: r.symbol, market: market === "Indian Stocks" ? "IN" : "US" }),
             });
             const j = await res.json();
             const m = j.momentum;
-            const value = h.shares * (h.currentPrice || h.buyPrice);
-            return m
-              ? {
-                  symbol: h.symbol,
-                  value,
-                  pl: h.shares * ((h.currentPrice || h.buyPrice) - h.buyPrice),
-                  momentumScore: m.snapshot?.momentumScore,
-                  momentumView: m.snapshot?.finalMomentumView,
-                  sector: m.sectorRank?.sector,
-                }
-              : { symbol: h.symbol, value, pl: 0, momentumView: "Data unavailable" };
+            return { symbol: r.symbol, view: m?.snapshot?.finalMomentumView || "Data unavailable", score: m?.snapshot?.momentumScore ?? null };
           } catch {
-            return { symbol: h.symbol, value: 0, pl: 0, momentumView: "Data unavailable" };
+            return { symbol: r.symbol, view: "Data unavailable", score: null };
           }
         }),
       );
-
-      const totalVal = results.reduce((s, r) => s + (r.value || 0), 0) || 1;
-      const sectorExposure: Record<string, number> = {};
       const momentumBuckets: Record<string, number> = {};
-      results.forEach((r) => {
-        const sec = r.sector || "Unknown";
-        sectorExposure[sec] = (sectorExposure[sec] || 0) + (r.value || 0);
-        const v = r.momentumView || "Unknown";
-        momentumBuckets[v] = (momentumBuckets[v] || 0) + 1;
-      });
-      const sectorPct = Object.entries(sectorExposure)
-        .map(([k, v]) => ({ sector: k, pct: Math.round((v / totalVal) * 100) }))
-        .sort((a, b) => b.pct - a.pct);
-      const sorted = [...results].sort((a, b) => (b.pl || 0) - (a.pl || 0));
+      momResults.forEach((r) => { momentumBuckets[r.view] = (momentumBuckets[r.view] || 0) + 1; });
+      const scored = momResults.filter((r) => r.score != null).sort((a, b) => (b.score || 0) - (a.score || 0));
+
       const stats = {
         market,
-        holdings: results,
-        sectorPct,
+        currency: cur,
+        totalHoldings: current.length,
+        momentumSampled: sample.length,
+        value: Math.round(totalVal),
+        invested: Math.round(totalCost),
+        pl: Math.round(totalPl),
+        plPct: Math.round((totalPl / totalCost) * 1000) / 10,
+        inProfit,
+        inLoss,
+        concentrationTop5,
+        topPositions,
+        topWinners,
+        topLosers,
+        strongestMomentum: scored.slice(0, 3).map((r) => ({ symbol: r.symbol, score: r.score })),
+        weakestMomentum: scored.slice(-3).reverse().map((r) => ({ symbol: r.symbol, score: r.score })),
         momentumBuckets,
-        topGainer: sorted[0],
-        topLoser: sorted[sorted.length - 1],
       };
 
-      const prompt = `You are a portfolio research analyst. Review this ${market} portfolio using ONLY the data below.
-RULES: Research support only. NO buy/sell advice. NO predictions. Research language only. Be concise (5-7 sentences). Cover: overall momentum health, concentration/diversification risk, strongest vs weakest holdings by momentum, and what to monitor next.
-PORTFOLIO DATA: ${JSON.stringify(stats)}`;
+      const prompt = `You are a seasoned equity portfolio analyst writing a concise briefing on a client's ${market} portfolio. Use ONLY the data below.
+STRICT RULES: Research and risk-education ONLY. NEVER give buy/sell/hold advice, price targets, or predictions. Use measured analyst language. Reference SPECIFIC numbers and tickers from the data in every point — never speak in vague generalities. Do NOT mention sectors (sector data is not provided). Currency symbol is "${cur}".
+Write EXACTLY these four labelled sections, each 1-2 tight sentences, no preamble or headings beyond the label:
+Health: overall P/L using the actual ${stats.plPct}% / ${cur}${stats.pl} figure and how many of ${stats.totalHoldings} holdings are in profit vs loss.
+Concentration: comment on the largest positions and that the top 5 make up ${concentrationTop5}% of value — flag concentration risk if that is high.
+Winners & laggards: name the standout gainers and the biggest drawdowns by ticker and %.
+Watch next: 2-3 specific, concrete things to monitor.
+DATA: ${JSON.stringify(stats)}`;
       let aiText = "";
       try {
         const res = await fetch("/api/gemini/generate", {
@@ -732,6 +749,16 @@ PORTFOLIO DATA: ${JSON.stringify(stats)}`;
           <h3 className="text-sm font-black text-indigo-700 flex items-center gap-2 mb-4">
             <Sparkles className="w-4 h-4" /> AI Review — {review.market}
           </h3>
+          {/* P/L snapshot strip — across ALL holdings */}
+          <div className="flex flex-wrap gap-2 mb-4">
+            <span className={`px-2.5 py-1 rounded-lg text-xs font-black border ${review.pl >= 0 ? "text-emerald-700 bg-emerald-50 border-emerald-200" : "text-rose-700 bg-rose-50 border-rose-200"}`}>
+              {review.plPct >= 0 ? "+" : ""}{review.plPct}% · {review.currency}{Math.abs(review.pl).toLocaleString()}
+            </span>
+            <span className="px-2.5 py-1 rounded-lg text-xs font-bold border text-emerald-700 bg-emerald-50 border-emerald-200">{review.inProfit} in profit</span>
+            <span className="px-2.5 py-1 rounded-lg text-xs font-bold border text-rose-700 bg-rose-50 border-rose-200">{review.inLoss} in loss</span>
+            <span className="px-2.5 py-1 rounded-lg text-xs font-bold border text-slate-600 bg-slate-50 border-slate-200">Top 5 = {review.concentrationTop5}% of value</span>
+            <span className="px-2.5 py-1 rounded-lg text-xs font-bold border text-slate-500 bg-white border-slate-200">{review.totalHoldings} holdings</span>
+          </div>
           {review.aiText ? (
             <p className="text-sm text-slate-700 leading-relaxed mb-5 whitespace-pre-wrap">{review.aiText}</p>
           ) : (
@@ -742,7 +769,7 @@ PORTFOLIO DATA: ${JSON.stringify(stats)}`;
           )}
           <div className="grid sm:grid-cols-3 gap-4">
             <div>
-              <div className="text-[10px] font-black uppercase tracking-wide text-slate-400 mb-2">Momentum Mix</div>
+              <div className="text-[10px] font-black uppercase tracking-wide text-slate-400 mb-2">Momentum Mix <span className="text-slate-300 normal-case">· {review.momentumSampled} largest</span></div>
               {Object.entries(review.momentumBuckets).map(([k, v]: any) => (
                 <div key={k} className="flex justify-between text-xs py-0.5">
                   <span className="text-slate-600">{k}</span>
@@ -751,31 +778,34 @@ PORTFOLIO DATA: ${JSON.stringify(stats)}`;
               ))}
             </div>
             <div>
-              <div className="text-[10px] font-black uppercase tracking-wide text-slate-400 mb-2">Sector Exposure</div>
-              {review.sectorPct.slice(0, 5).map((s: any) => (
-                <div key={s.sector} className="flex justify-between text-xs py-0.5">
-                  <span className="text-slate-600 truncate pr-2">{s.sector}</span>
-                  <span className="font-bold text-slate-800">{s.pct}%</span>
+              <div className="text-[10px] font-black uppercase tracking-wide text-slate-400 mb-2">Top Positions by Weight</div>
+              {review.topPositions.map((p: any) => (
+                <div key={p.symbol} className="flex justify-between items-center text-xs py-0.5">
+                  <span className="text-slate-700 font-bold truncate pr-2">{p.symbol}</span>
+                  <span className="flex items-center gap-2">
+                    <span className="font-bold text-slate-800 tabular-nums">{p.pct}%</span>
+                    <span className={`tabular-nums font-semibold ${p.plPct >= 0 ? "text-emerald-600" : "text-rose-600"}`}>{p.plPct >= 0 ? "+" : ""}{p.plPct}%</span>
+                  </span>
                 </div>
               ))}
             </div>
             <div>
-              <div className="text-[10px] font-black uppercase tracking-wide text-slate-400 mb-2">Strongest / Weakest (P/L)</div>
-              {review.topGainer && (
-                <div className="flex items-center gap-1.5 text-xs py-0.5 text-emerald-600 font-bold">
-                  <TrendingUp className="w-3.5 h-3.5" /> {review.topGainer.symbol}
-                  <span className="text-slate-400 font-medium">{review.topGainer.momentumView}</span>
+              <div className="text-[10px] font-black uppercase tracking-wide text-slate-400 mb-2">Winners / Laggards</div>
+              {review.topWinners.map((w: any) => (
+                <div key={w.symbol} className="flex items-center justify-between gap-1.5 text-xs py-0.5">
+                  <span className="flex items-center gap-1 text-emerald-600 font-bold"><TrendingUp className="w-3.5 h-3.5" />{w.symbol}</span>
+                  <span className="tabular-nums text-emerald-600 font-semibold">+{w.plPct}% · {review.currency}{Math.abs(w.pl).toLocaleString()}</span>
                 </div>
-              )}
-              {review.topLoser && (
-                <div className="flex items-center gap-1.5 text-xs py-0.5 text-rose-600 font-bold">
-                  <TrendingDown className="w-3.5 h-3.5" /> {review.topLoser.symbol}
-                  <span className="text-slate-400 font-medium">{review.topLoser.momentumView}</span>
+              ))}
+              {review.topLosers.map((l: any) => (
+                <div key={l.symbol} className="flex items-center justify-between gap-1.5 text-xs py-0.5">
+                  <span className="flex items-center gap-1 text-rose-600 font-bold"><TrendingDown className="w-3.5 h-3.5" />{l.symbol}</span>
+                  <span className="tabular-nums text-rose-600 font-semibold">{l.plPct}% · -{review.currency}{Math.abs(l.pl).toLocaleString()}</span>
                 </div>
-              )}
+              ))}
             </div>
           </div>
-          <p className="mt-4 text-[10px] text-slate-400 italic">Research support only. Not buy/sell advice. Momentum computed live per holding.</p>
+          <p className="mt-4 text-[10px] text-slate-400 italic">Research support only. Not buy/sell advice. P/L across all {review.totalHoldings} holdings; momentum sampled on the {review.momentumSampled} largest.</p>
         </div>
       )}
 
