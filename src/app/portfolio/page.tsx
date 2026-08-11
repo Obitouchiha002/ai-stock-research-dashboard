@@ -502,20 +502,23 @@ export default function PortfolioPage() {
         lossDragPctOfValue: lossDrag,
       };
 
+      const positions = priced.map((r) => ({ symbol: r.symbol, value: Math.round(r.value), weight: r.value / totalVal, plPct: Math.round(r.plPct * 10) / 10 }));
+
       let ai: any = null;
+      let computed: any = null;
       try {
         const res = await fetch("/api/portfolio-review", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ market, currency: cur, stats }),
+          body: JSON.stringify({ market, currency: cur, stats, positions }),
         });
         const j = await res.json();
-        if (!j.error) { ai = j; logAiUsageDetailed("Portfolio Review", { tokens: j.aiTokens }); }
-        else ai = { error: j.error };
+        if (j.error && !j.computed) { ai = { error: j.error }; }
+        else { ai = j.ai; computed = j.computed; if (j.ai && !j.ai.error) logAiUsageDetailed("Portfolio Review", { tokens: j.ai.aiTokens }); }
       } catch {
         ai = { error: "AI is busy right now. Please try again in a few seconds." };
       }
-      setReview({ ...stats, ai });
+      setReview({ ...stats, ai, computed });
     } finally {
       setReviewLoading(false);
     }
@@ -761,6 +764,49 @@ export default function PortfolioPage() {
                   {review.ai.summary && <p className="text-[13px] text-slate-600 font-medium leading-relaxed mt-0.5">{review.ai.summary}</p>}
                 </div>
               </div>
+
+              {/* Key portfolio metrics — live fundamentals */}
+              {review.computed && (
+                <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2.5 mb-4">
+                  <Metric label="Portfolio Beta" value={review.computed.beta ?? "—"} sub={review.ai.reads?.beta} />
+                  <Metric label="Trailing PE" value={review.computed.trailingPE ?? "—"} sub={review.ai.reads?.valuation} />
+                  <Metric label="Forward PE" value={review.computed.forwardPE ?? "—"} />
+                  <Metric label="Rel. Strength 1Y" value={review.computed.relStrength == null ? "—" : `${review.computed.relStrength > 0 ? "+" : ""}${review.computed.relStrength}%`} sub={review.computed.benchRelStrength == null ? "" : `Benchmark ${review.computed.benchRelStrength > 0 ? "+" : ""}${review.computed.benchRelStrength}%`} tone={review.computed.relStrength != null && review.computed.benchRelStrength != null ? (review.computed.relStrength >= review.computed.benchRelStrength ? "bull" : "bear") : ""} />
+                  <Metric label="Holdings" value={String(review.computed.numHoldings)} sub={`${review.computed.unprofitable} unprofitable`} tone={review.computed.unprofitable > review.computed.profitable ? "bear" : ""} />
+                </div>
+              )}
+
+              {/* Sector & market-cap allocation */}
+              {review.computed && (
+                <div className="grid sm:grid-cols-2 gap-4 mb-4">
+                  <div className="rounded-xl border border-slate-200 p-3.5">
+                    <div className="text-[11px] font-black uppercase tracking-wide text-slate-500 mb-2">Sector allocation</div>
+                    {(review.computed.sectorAlloc || []).slice(0, 6).map((s: any) => (
+                      <AllocBar key={s.sector} label={s.sector} pct={s.pct} color="bg-indigo-500" />
+                    ))}
+                    {(review.computed.sectorAlloc || []).length === 0 && <div className="text-[12px] text-slate-400">Sector data unavailable</div>}
+                  </div>
+                  <div className="rounded-xl border border-slate-200 p-3.5">
+                    <div className="text-[11px] font-black uppercase tracking-wide text-slate-500 mb-2">Market-cap allocation</div>
+                    <AllocBar label="Large cap" pct={review.computed.capAlloc.large} color="bg-emerald-500" />
+                    <AllocBar label="Mid cap" pct={review.computed.capAlloc.mid} color="bg-sky-500" />
+                    <AllocBar label="Small cap" pct={review.computed.capAlloc.small} color="bg-amber-500" />
+                    <AllocBar label="Micro cap" pct={review.computed.capAlloc.micro} color="bg-rose-500" />
+                    {review.computed.capAlloc.unknown > 0 && <AllocBar label="Unknown" pct={review.computed.capAlloc.unknown} color="bg-slate-300" />}
+                  </div>
+                </div>
+              )}
+
+              {/* Remaining metric reads */}
+              {review.ai.reads && (
+                <div className="grid sm:grid-cols-2 gap-x-4 gap-y-1 mb-4 text-[12px] text-slate-600">
+                  {review.ai.reads.capMix && <div><span className="font-bold text-slate-700">Cap mix:</span> {review.ai.reads.capMix}</div>}
+                  {review.ai.reads.relStrength && <div><span className="font-bold text-slate-700">Rel. strength:</span> {review.ai.reads.relStrength}</div>}
+                  {review.ai.reads.holdingsCount && <div><span className="font-bold text-slate-700">Holdings:</span> {review.ai.reads.holdingsCount}</div>}
+                  {review.ai.reads.earnings && <div><span className="font-bold text-slate-700">Earnings:</span> {review.ai.reads.earnings}</div>}
+                </div>
+              )}
+
               {/* Issues spotted */}
               {Array.isArray(review.ai.issues) && review.ai.issues.length > 0 && (
                 <div className="mb-4">
@@ -782,6 +828,62 @@ export default function PortfolioPage() {
                   </div>
                 </div>
               )}
+              {/* Leading vs lagging areas */}
+              {(Array.isArray(review.ai.leadingSectors) && review.ai.leadingSectors.length > 0) || (Array.isArray(review.ai.laggingSectors) && review.ai.laggingSectors.length > 0) ? (
+                <div className="grid sm:grid-cols-2 gap-3 mb-4">
+                  {Array.isArray(review.ai.leadingSectors) && review.ai.leadingSectors.length > 0 && (
+                    <div className="rounded-xl border border-emerald-200 bg-emerald-50/40 p-3">
+                      <div className="text-[11px] font-black uppercase tracking-wide text-emerald-700 mb-1.5">Leading / doing well</div>
+                      <div className="flex flex-wrap gap-1.5">{review.ai.leadingSectors.map((s: string, i: number) => <span key={i} className="px-2 py-0.5 rounded-full text-[11px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-300">{s}</span>)}</div>
+                    </div>
+                  )}
+                  {Array.isArray(review.ai.laggingSectors) && review.ai.laggingSectors.length > 0 && (
+                    <div className="rounded-xl border border-rose-200 bg-rose-50/40 p-3">
+                      <div className="text-[11px] font-black uppercase tracking-wide text-rose-700 mb-1.5">Lagging / dragging</div>
+                      <div className="flex flex-wrap gap-1.5">{review.ai.laggingSectors.map((s: string, i: number) => <span key={i} className="px-2 py-0.5 rounded-full text-[11px] font-bold bg-rose-100 text-rose-800 border border-rose-300">{s}</span>)}</div>
+                    </div>
+                  )}
+                </div>
+              ) : null}
+
+              {/* Research candidates — add / trim (research-framed, not advice) */}
+              {(Array.isArray(review.ai.researchToAdd) && review.ai.researchToAdd.length > 0) || (Array.isArray(review.ai.researchToTrim) && review.ai.researchToTrim.length > 0) ? (
+                <div className="grid sm:grid-cols-2 gap-3 mb-4">
+                  {Array.isArray(review.ai.researchToAdd) && review.ai.researchToAdd.length > 0 && (
+                    <div className="rounded-xl border border-slate-200 p-3.5">
+                      <div className="text-[11px] font-black uppercase tracking-wide text-emerald-700 flex items-center gap-1.5 mb-2"><TrendingUp className="w-3.5 h-3.5" /> Worth researching to add</div>
+                      <div className="space-y-1.5">
+                        {review.ai.researchToAdd.map((r: any, i: number) => (
+                          <div key={i} className="text-[12.5px]"><span className="font-black text-slate-800">{r.symbol}</span> <span className="text-slate-600">— {r.why}</span></div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                  {Array.isArray(review.ai.researchToTrim) && review.ai.researchToTrim.length > 0 && (
+                    <div className="rounded-xl border border-slate-200 p-3.5">
+                      <div className="text-[11px] font-black uppercase tracking-wide text-amber-700 flex items-center gap-1.5 mb-2"><TrendingDown className="w-3.5 h-3.5" /> Worth reviewing to trim / book</div>
+                      <div className="space-y-1.5">
+                        {review.ai.researchToTrim.map((r: any, i: number) => (
+                          <div key={i} className="text-[12.5px]"><span className="font-black text-slate-800">{r.symbol}</span> <span className="text-slate-600">— {r.why}</span></div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              ) : null}
+
+              {/* Macro headwinds */}
+              {Array.isArray(review.ai.macroHeadwinds) && review.ai.macroHeadwinds.length > 0 && (
+                <div className="mb-4 rounded-xl border border-slate-200 bg-slate-50/60 p-3.5">
+                  <div className="text-[11px] font-black uppercase tracking-wide text-slate-500 flex items-center gap-1.5 mb-1.5"><AlertTriangle className="w-3.5 h-3.5 text-amber-500" /> Macro headwinds to keep in mind</div>
+                  <ul className="space-y-1">
+                    {review.ai.macroHeadwinds.map((m: string, i: number) => (
+                      <li key={i} className="text-[12.5px] text-slate-600 flex items-start gap-2"><span className="text-slate-400 mt-0.5">•</span> {m}</li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+
               {/* What you can do */}
               {Array.isArray(review.ai.actions) && review.ai.actions.length > 0 && (
                 <div className="mb-1">
@@ -1346,6 +1448,30 @@ export default function PortfolioPage() {
         onSave={(t) => remarksEdit?.onSave(t)}
         onClose={() => setRemarksEdit(null)}
       />
+    </div>
+  );
+}
+
+function Metric({ label, value, sub, tone }: { label: string; value: string | number; sub?: string; tone?: string }) {
+  const vc = tone === "bull" ? "text-emerald-600" : tone === "bear" ? "text-rose-600" : "text-slate-900";
+  return (
+    <div className="rounded-xl border border-slate-200 bg-white p-2.5">
+      <div className="text-[10px] font-black uppercase tracking-wide text-slate-400">{label}</div>
+      <div className={`text-lg font-black tabular-nums leading-tight mt-0.5 ${vc}`}>{value}</div>
+      {sub && <div className="text-[10.5px] text-slate-400 font-medium leading-snug mt-0.5 line-clamp-2">{sub}</div>}
+    </div>
+  );
+}
+
+function AllocBar({ label, pct, color }: { label: string; pct: number; color: string }) {
+  const w = Math.max(0, Math.min(100, pct));
+  return (
+    <div className="flex items-center gap-2 py-0.5">
+      <span className="text-[11.5px] text-slate-600 font-medium w-24 shrink-0 truncate">{label}</span>
+      <div className="flex-1 h-2.5 bg-slate-100 rounded-full overflow-hidden">
+        <div className={`h-full rounded-full ${color}`} style={{ width: `${w}%` }} />
+      </div>
+      <span className="text-[11.5px] font-black text-slate-700 tabular-nums w-10 text-right">{pct}%</span>
     </div>
   );
 }
