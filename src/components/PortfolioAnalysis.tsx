@@ -17,21 +17,21 @@ const RISK_OPTS = ["Conservative", "Balanced", "Aggressive"];
 const HORIZON_OPTS = ["Short (weeks)", "Medium (months)", "Long (years)"];
 
 const TONE: Record<string, string> = {
-  bull: "text-emerald-700 bg-emerald-50 border-emerald-200",
-  bear: "text-rose-700 bg-rose-50 border-rose-200",
-  warn: "text-amber-700 bg-amber-50 border-amber-200",
-  info: "text-slate-600 bg-slate-50 border-slate-200",
+  bull: "text-emerald-800 bg-emerald-100 border-emerald-300",
+  bear: "text-rose-800 bg-rose-100 border-rose-300",
+  warn: "text-amber-800 bg-amber-100 border-amber-300",
+  info: "text-slate-700 bg-slate-100 border-slate-300",
 };
 const TREND_BADGE: Record<string, string> = {
-  Uptrend: "text-emerald-700 bg-emerald-50 border-emerald-200",
-  Downtrend: "text-rose-700 bg-rose-50 border-rose-200",
-  Sideways: "text-amber-700 bg-amber-50 border-amber-200",
-  "—": "text-slate-400 bg-slate-50 border-slate-200",
+  Uptrend: "text-white bg-emerald-600 border-emerald-600",
+  Downtrend: "text-white bg-rose-600 border-rose-600",
+  Sideways: "text-amber-900 bg-amber-200 border-amber-400",
+  "—": "text-slate-500 bg-slate-100 border-slate-300",
 };
 const HEALTH: Record<string, string> = {
-  Healthy: "text-emerald-700 bg-emerald-50 border-emerald-200",
-  Watch: "text-amber-700 bg-amber-50 border-amber-200",
-  Weak: "text-rose-700 bg-rose-50 border-rose-200",
+  Healthy: "text-white bg-emerald-600 border-emerald-600",
+  Watch: "text-amber-900 bg-amber-200 border-amber-400",
+  Weak: "text-white bg-rose-600 border-rose-600",
 };
 const RISK_LEVEL: Record<string, string> = {
   Low: "text-emerald-700 bg-emerald-50 border-emerald-300",
@@ -39,14 +39,6 @@ const RISK_LEVEL: Record<string, string> = {
   Elevated: "text-amber-700 bg-amber-50 border-amber-300",
   High: "text-rose-700 bg-rose-50 border-rose-300",
 };
-
-function rsiColor(v: number | null) {
-  if (v == null) return "text-slate-400";
-  if (v >= 70) return "text-rose-600";
-  if (v <= 30) return "text-amber-600";
-  if (v >= 50) return "text-emerald-600";
-  return "text-slate-600";
-}
 
 export default function PortfolioAnalysis({ market }: { market: PortfolioMarket }) {
   const [loading, setLoading] = useState(false);
@@ -216,7 +208,7 @@ export default function PortfolioAnalysis({ market }: { market: PortfolioMarket 
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
           <Stat label="Holdings" value={String(totals.holdingsCount)} sub={totals.topPosition ? `Top ${totals.topPosition.symbol} · ${totals.topPosition.pct}%` : ""} />
           <Stat label="Trend mix" value={`${totals.trendCounts.Uptrend}↑ ${totals.trendCounts.Downtrend}↓`} sub={`${totals.trendCounts.Sideways} sideways`} tone={totals.trendCounts.Downtrend > totals.trendCounts.Uptrend ? "bear" : "bull"} />
-          <Stat label="Overbought / Oversold" value={`${totals.overbought} / ${totals.oversold}`} sub="RSI ≥70 / ≤30" tone={totals.overbought > 0 ? "warn" : "info"} />
+          <Stat label="Overbought / Oversold" value={`${totals.overbought} / ${totals.oversold}`} sub={`RSI ≥${settings.rsiOverbought} / ≤${settings.rsiOversold}`} tone={totals.overbought > 0 ? "warn" : "info"} />
           <Stat label="Below 200-DMA" value={String(totals.belowSma200)} sub={`${totals.weakTrend} weak trend`} tone={totals.belowSma200 > 0 ? "bear" : "bull"} />
         </div>
       )}
@@ -232,34 +224,42 @@ export default function PortfolioAnalysis({ market }: { market: PortfolioMarket 
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
-                <tr className="text-[11px] font-bold text-slate-400 uppercase bg-slate-50/60 border-b border-slate-100">
-                  <th className="text-left px-4 py-2">Stock</th>
-                  <th className="text-right px-2 py-2">RSI</th>
-                  <th className="text-right px-2 py-2">ADX</th>
-                  <th className="text-center px-2 py-2">Trend</th>
-                  <th className="text-right px-2 py-2">vs 50-DMA</th>
-                  <th className="text-right px-2 py-2">vs 200-DMA</th>
-                  <th className="text-left px-3 py-2">Signals</th>
+                <tr className="text-[11px] font-black text-slate-500 uppercase bg-slate-100 border-b border-slate-200">
+                  <th className="text-left px-4 py-2.5">Stock</th>
+                  <th className="text-right px-2 py-2.5">RSI</th>
+                  <th className="text-right px-2 py-2.5">ADX</th>
+                  <th className="text-center px-2 py-2.5">Trend</th>
+                  <th className="text-right px-2 py-2.5">vs 50-DMA</th>
+                  <th className="text-right px-2 py-2.5">vs 200-DMA</th>
+                  <th className="text-left px-3 py-2.5">Signals</th>
                 </tr>
               </thead>
               <tbody>
                 {rows.map((r) => {
                   const t = r.tech;
                   const fresh = newBySymbol[r.symbol] || [];
+                  const ob = settings.rsiOverbought, os = settings.rsiOversold;
+                  const rsiBadge = t?.rsi == null ? "text-slate-400"
+                    : t.rsi >= ob ? "bg-rose-100 text-rose-800"
+                    : t.rsi <= os ? "bg-amber-100 text-amber-800"
+                    : t.rsi >= 50 ? "text-emerald-700" : "text-slate-600";
+                  const rsiHasBg = t?.rsi != null && (t.rsi >= ob || t.rsi <= os);
                   return (
-                    <tr key={r.symbol} className="border-b border-slate-100 last:border-0 hover:bg-slate-50/60 align-top">
+                    <tr key={r.symbol} className="border-b border-slate-100 last:border-0 even:bg-slate-50/50 hover:bg-indigo-50/40 align-top">
                       <td className="px-4 py-2.5">
-                        <Link href={`/charts?symbol=${encodeURIComponent(r.symbol)}`} className="font-black text-slate-800 hover:text-indigo-600">{r.symbol}</Link>
-                        <div className="text-[11px] text-slate-400 font-medium truncate max-w-[160px]">{r.name}</div>
+                        <Link href={`/charts?symbol=${encodeURIComponent(r.symbol)}`} className="font-black text-slate-900 hover:text-indigo-600">{r.symbol}</Link>
+                        <div className="text-[11px] text-slate-500 font-medium truncate max-w-[160px]">{r.name}</div>
                       </td>
                       {!t?.ok ? (
-                        <td colSpan={6} className="px-3 py-2.5 text-[12px] text-slate-400 italic">Technical data unavailable</td>
+                        <td colSpan={6} className="px-3 py-2.5"><span className="text-[11px] font-bold text-slate-500 bg-slate-100 border border-slate-200 rounded-full px-2.5 py-0.5">Technical data unavailable</span></td>
                       ) : (
                         <>
-                          <td className={`px-2 py-2.5 text-right font-black tabular-nums ${rsiColor(t.rsi)}`}>{t.rsi ?? "—"}</td>
+                          <td className="px-2 py-2.5 text-right">
+                            <span className={`inline-block font-black tabular-nums ${rsiHasBg ? "px-1.5 py-0.5 rounded-md" : ""} ${rsiBadge}`}>{t.rsi ?? "—"}</span>
+                          </td>
                           <td className="px-2 py-2.5 text-right font-bold text-slate-700 tabular-nums">{t.adx ?? "—"}</td>
                           <td className="px-2 py-2.5 text-center">
-                            <span className={`inline-block px-2 py-0.5 rounded-full text-[11px] font-black border ${TREND_BADGE[t.trend] || TREND_BADGE["—"]}`}>{t.trend}</span>
+                            <span className={`inline-block px-2.5 py-0.5 rounded-full text-[11px] font-black border ${TREND_BADGE[t.trend] || TREND_BADGE["—"]}`}>{t.trend}</span>
                           </td>
                           <td className={`px-2 py-2.5 text-right font-bold tabular-nums ${pctColor(t.vsSma50Pct)}`}>{fmtPct(t.vsSma50Pct)}</td>
                           <td className={`px-2 py-2.5 text-right font-bold tabular-nums ${pctColor(t.vsSma200Pct)}`}>{fmtPct(t.vsSma200Pct)}</td>
@@ -282,7 +282,7 @@ export default function PortfolioAnalysis({ market }: { market: PortfolioMarket 
               </tbody>
             </table>
           </div>
-          <div className="px-4 py-2 text-[11px] text-slate-400 border-t border-slate-100">
+          <div className="px-4 py-2 text-[11px] text-slate-500 border-t border-slate-100 bg-slate-50/60">
             Research support only — not buy/sell advice. Signals describe the current chart condition.
           </div>
         </div>
@@ -294,29 +294,37 @@ export default function PortfolioAnalysis({ market }: { market: PortfolioMarket 
           <div className="px-4 py-2.5 bg-gradient-to-r from-indigo-50 to-slate-50 border-b border-slate-200 flex items-center gap-2">
             <span className="w-1.5 h-4 rounded-full bg-indigo-500" />
             <h3 className="text-[12px] font-black uppercase tracking-wide text-slate-600">Candlestick patterns</h3>
-            <span className="text-[11px] text-slate-400 font-semibold ml-auto">what the recent candles show &amp; what to watch</span>
+            <span className="text-[11px] text-slate-400 font-semibold ml-auto hidden sm:block">what the recent candles show &amp; what to watch</span>
           </div>
-          <div className="divide-y divide-slate-100">
-            {rows.filter((r) => (r.tech?.patterns || []).length > 0).map((r) => (
-              <div key={r.symbol} className="px-4 py-3">
-                <div className="flex items-center gap-2 mb-1.5">
-                  <Link href={`/charts?symbol=${encodeURIComponent(r.symbol)}`} className="font-black text-slate-800 hover:text-indigo-600">{r.symbol}</Link>
-                  {(r.tech.patterns || []).map((p: any) => (
-                    <span key={p.key} className={`px-2 py-0.5 rounded-full text-[11px] font-black border ${TONE[p.tone] || TONE.info}`}>
-                      {p.tone === "bull" ? "▲" : p.tone === "bear" ? "▼" : "◆"} {p.name}
-                    </span>
-                  ))}
-                </div>
-                {(r.tech.patterns || []).map((p: any) => (
-                  <div key={p.key} className="text-[13px] text-slate-600 mb-1 last:mb-0">
-                    <span className="text-slate-700">{p.meaning}</span>{" "}
-                    <span className="text-indigo-700 font-semibold">Watch: {p.watch}</span>
-                  </div>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="text-[11px] font-black text-slate-500 uppercase bg-slate-100 border-b border-slate-200">
+                  <th className="text-left px-4 py-2.5">Stock</th>
+                  <th className="text-left px-3 py-2.5">Pattern</th>
+                  <th className="text-left px-3 py-2.5">What it means</th>
+                  <th className="text-left px-4 py-2.5">What to watch</th>
+                </tr>
+              </thead>
+              <tbody>
+                {rows.flatMap((r) => (r.tech?.patterns || []).map((p: any) => ({ sym: r.symbol, p }))).map(({ sym, p }, i) => (
+                  <tr key={sym + p.key + i} className="border-b border-slate-100 last:border-0 even:bg-slate-50/50 align-top">
+                    <td className="px-4 py-3">
+                      <Link href={`/charts?symbol=${encodeURIComponent(sym)}`} className="font-black text-slate-900 hover:text-indigo-600">{sym}</Link>
+                    </td>
+                    <td className="px-3 py-3 whitespace-nowrap">
+                      <span className={`inline-block px-2.5 py-0.5 rounded-full text-[11px] font-black border ${TONE[p.tone] || TONE.info}`}>
+                        {p.tone === "bull" ? "▲" : p.tone === "bear" ? "▼" : "◆"} {p.name}
+                      </span>
+                    </td>
+                    <td className="px-3 py-3 text-[13px] text-slate-700 min-w-[220px]">{p.meaning}</td>
+                    <td className="px-4 py-3 text-[13px] text-indigo-800 font-medium min-w-[240px]">{p.watch}</td>
+                  </tr>
                 ))}
-              </div>
-            ))}
+              </tbody>
+            </table>
           </div>
-          <div className="px-4 py-2 text-[11px] text-slate-400 border-t border-slate-100">
+          <div className="px-4 py-2 text-[11px] text-slate-500 border-t border-slate-100 bg-slate-50/60">
             Patterns are hints, not signals to act on — always wait for confirmation. Research only, not buy/sell advice.
           </div>
         </div>
