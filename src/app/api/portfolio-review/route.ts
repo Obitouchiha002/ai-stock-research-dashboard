@@ -149,8 +149,10 @@ export async function POST(req: NextRequest) {
     const prompt = `You are a seasoned, institutional-grade portfolio analyst doing a broad, detailed review of a client's ${market} portfolio. Use ONLY the data below (it is real, computed live).
 Cover the major portfolio-analysis dimensions like a professional: overall beta (risk vs market), valuation (weighted trailing & forward PE), sector concentration, market-cap allocation (large/mid/small/micro), number of holdings (too many / too few / right), relative strength vs the benchmark, earnings health (how many holdings are unprofitable), which components are dragging vs leading, concentration & P/L health, and any relevant macro headwinds.
 
-STRICT RULES: Research and risk-education ONLY. NEVER give buy/sell/hold advice, price targets, or predictions. For positioning, frame everything as RESEARCH candidates and reviews — e.g. "worth researching for a potential add given strong relative strength and reasonable valuation", "consider reviewing whether to trim, as it is X% weight and down Y%", "you could research profit-booking discipline on winners up Z%". Never say "buy"/"sell"/"exit". Be specific: cite the real numbers and tickers. Currency is "${cur}".
+STRICT RULES: Research and risk-education ONLY. NEVER give buy/sell/hold advice, price targets, or predictions. For positioning, frame everything as RESEARCH candidates and reviews — e.g. "worth researching adding to, given strong relative strength and reasonable valuation", "consider reviewing whether to trim, as it is X% weight and down Y%", "you could research profit-booking discipline on winners up Z%". Never say "buy"/"sell"/"exit". Be specific: cite the real numbers and tickers. Currency is "${cur}".
+CRITICAL — TICKER RULE: This is a ${market} portfolio. Use ONLY the exact tickers that appear in the data below (the LARGEST POSITIONS list and diagnostics). NEVER invent, suggest, or name any stock that is not already in this portfolio, and never name stocks from a different market/country. researchToAdd and researchToTrim MUST reference only tickers already held here.
 
+TICKERS HELD IN THIS PORTFOLIO (the ONLY tickers you may name): ${JSON.stringify(symbols)}
 COMPUTED PORTFOLIO METRICS: ${JSON.stringify(computed)}
 P/L & CONCENTRATION DIAGNOSTICS: ${JSON.stringify(stats)}
 LARGEST POSITIONS (fundamentals): ${JSON.stringify(topFund)}
@@ -185,6 +187,13 @@ Return STRICT JSON with this exact shape:
         const u = currentUsage();
         return { data: d, aiTokens: u?.tokens ?? 0 };
       });
+      // Defensive: only keep positioning candidates that are actually held here.
+      const held = new Set(symbols.map((s) => String(s).toUpperCase()));
+      const keepHeld = (arr: any) => Array.isArray(arr) ? arr.filter((r) => r?.symbol && held.has(String(r.symbol).toUpperCase())) : arr;
+      if (data) {
+        data.researchToAdd = keepHeld(data.researchToAdd);
+        data.researchToTrim = keepHeld(data.researchToTrim);
+      }
       return NextResponse.json({ computed, ai: { ...data, aiTokens } });
     } catch {
       return NextResponse.json({ computed, ai: { error: "AI is busy right now. Please try again in a few seconds." } });
