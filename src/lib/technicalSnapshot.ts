@@ -87,6 +87,26 @@ export function adx(highs: number[], lows: number[], closes: number[], period = 
 
 export type Signal = { key: string; label: string; tone: "bull" | "bear" | "warn" | "info" };
 
+// Moving-average stack read — where price sits relative to the 10/20/50/200
+// SMAs. Research language only (no buy/sell).
+export type MaStack = { label: string; tone: "bull" | "bear" | "warn" | "info" } | null;
+function maStackRead(price: number | null, s10: number | null, s20: number | null, s50: number | null, s200: number | null): MaStack {
+  if (price == null || s10 == null || s20 == null || s50 == null || s200 == null) return null;
+  // Perfect bullish / bearish alignment.
+  if (price > s10 && s10 > s20 && s20 > s50 && s50 > s200) return { label: "Perfect uptrend", tone: "bull" };
+  if (price < s10 && s10 < s20 && s20 < s50 && s50 < s200) return { label: "Perfect downtrend", tone: "bear" };
+  // Above the long-term averages but short-term slipping.
+  if (price > s50 && price > s200) {
+    if (price < s10 && price < s20) return { label: "Uptrend · below 20-DMA", tone: "warn" };
+    return { label: "Uptrend intact", tone: "bull" };
+  }
+  // Below the long-term averages.
+  if (price < s50 && price < s200) return { label: "Downtrend", tone: "bear" };
+  // Crossing the 50-DMA either way.
+  if (price < s50) return { label: "Below 50-DMA", tone: "warn" };
+  return { label: "Mixed / choppy", tone: "info" };
+}
+
 // A candlestick pattern on the most recent bars, with a plain-language read and
 // a research-framed "what to watch" (NOT buy/sell advice).
 export type CandlePattern = {
@@ -167,12 +187,15 @@ export type TechSnapshot = {
   adx: number | null;
   plusDI: number | null;
   minusDI: number | null;
+  sma10: number | null;
   sma20: number | null;
   sma50: number | null;
   sma200: number | null;
   trend: "Uptrend" | "Downtrend" | "Sideways" | "—";
   vsSma50Pct: number | null;
   vsSma200Pct: number | null;
+  maStack: MaStack;
+  diUp: boolean | null; // +DI > -DI (trend leaning up)
   signals: Signal[];
   patterns: CandlePattern[];
 };
@@ -194,7 +217,8 @@ export function buildSnapshot(candles: { open?: number; high: number; low: numbe
   const ADX_TREND = opts.adxTrend ?? 25;
   const empty: TechSnapshot = {
     ok: false, price: null, rsi: null, rsiPrev: null, adx: null, plusDI: null, minusDI: null,
-    sma20: null, sma50: null, sma200: null, trend: "—", vsSma50Pct: null, vsSma200Pct: null, signals: [], patterns: [],
+    sma10: null, sma20: null, sma50: null, sma200: null, trend: "—", vsSma50Pct: null, vsSma200Pct: null,
+    maStack: null, diUp: null, signals: [], patterns: [],
   };
   if (!candles || candles.length < 30) return empty;
   const highs = candles.map((c) => c.high);
@@ -203,6 +227,7 @@ export function buildSnapshot(candles: { open?: number; high: number; low: numbe
 
   const rsiArr = rsi(closes, 14);
   const adxRes = adx(highs, lows, closes, 14);
+  const sma10Arr = sma(closes, 10);
   const sma20Arr = sma(closes, 20);
   const sma50Arr = sma(closes, 50);
   const sma200Arr = sma(closes, 200);
@@ -215,9 +240,12 @@ export function buildSnapshot(candles: { open?: number; high: number; low: numbe
   const adxNow = last(adxRes.adx);
   const pdi = last(adxRes.plusDI);
   const mdi = last(adxRes.minusDI);
+  const s10 = last(sma10Arr);
   const s20 = last(sma20Arr);
   const s50 = last(sma50Arr);
   const s200 = last(sma200Arr);
+  const maStack = maStackRead(price, s10, s20, s50, s200);
+  const diUp = pdi != null && mdi != null ? pdi > mdi : null;
 
   const vs50 = price != null && s50 ? ((price - s50) / s50) * 100 : null;
   const vs200 = price != null && s200 ? ((price - s200) / s200) * 100 : null;
@@ -270,7 +298,7 @@ export function buildSnapshot(candles: { open?: number; high: number; low: numbe
   return {
     ok: true,
     price: r2(price), rsi: r2(rsiNow), rsiPrev: r2(rsiPrev), adx: r2(adxNow), plusDI: r2(pdi), minusDI: r2(mdi),
-    sma20: r2(s20), sma50: r2(s50), sma200: r2(s200), trend,
-    vsSma50Pct: r2(vs50), vsSma200Pct: r2(vs200), signals, patterns,
+    sma10: r2(s10), sma20: r2(s20), sma50: r2(s50), sma200: r2(s200), trend,
+    vsSma50Pct: r2(vs50), vsSma200Pct: r2(vs200), maStack, diUp, signals, patterns,
   };
 }

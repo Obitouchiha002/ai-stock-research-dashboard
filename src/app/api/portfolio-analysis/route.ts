@@ -16,10 +16,28 @@ type InHolding = { symbol: string; name?: string; shares?: number; buyPrice?: nu
 type Settings = { rsiOverbought: number; rsiOversold: number; adxTrend: number; style: string; risk: string; horizon: string; focus: string };
 const DEFAULTS: Settings = { rsiOverbought: 70, rsiOversold: 30, adxTrend: 25, style: "Long-term investor", risk: "Balanced", horizon: "Long (years)", focus: "" };
 
-async function techFor(symbol: string, s: Settings): Promise<TechSnapshot | null> {
+// Run an async mapper with limited concurrency (keeps Yahoo happy on ~74 symbols).
+async function mapLimit<T, R>(items: T[], limit: number, fn: (t: T, i: number) => Promise<R>): Promise<R[]> {
+  const out: R[] = new Array(items.length);
+  let idx = 0;
+  await Promise.all(
+    Array.from({ length: Math.min(limit, items.length) }, async () => {
+      while (idx < items.length) {
+        const cur = idx++;
+        out[cur] = await fn(items[cur], cur);
+      }
+    }),
+  );
+  return out;
+}
+
+async function techFor(symbol: string, s: Settings, timeframe: "1d" | "1h"): Promise<TechSnapshot | null> {
   try {
-    const period1 = subDays(new Date(), 400).toISOString().split("T")[0];
-    const chartRes = await yahooFinance.chart(symbol, { period1, interval: "1d" }).catch(() => null);
+    // Hourly needs a shorter window with enough bars to warm up SMA200.
+    const days = timeframe === "1h" ? 90 : 400;
+    const interval = timeframe === "1h" ? "1h" : "1d";
+    const period1 = subDays(new Date(), days).toISOString().split("T")[0];
+    const chartRes = await yahooFinance.chart(symbol, { period1, interval: interval as any }).catch(() => null);
     const quotes = (chartRes as any)?.quotes || [];
     const rows = quotes.filter((q: any) => q && q.close != null && q.high != null && q.low != null);
     if (rows.length < 30) return null;
@@ -35,16 +53,16 @@ async function techFor(symbol: string, s: Settings): Promise<TechSnapshot | null
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json().catch(() => ({}));
-    const holdings: InHolding[] = Array.isArray(body.holdings) ? body.holdings.slice(0, 20) : [];
+    const holdings: InHolding[] = Array.isArray(body.holdings) ? body.holdings.slice(0, 120) : [];
     const market: string = body.market || "";
     const withAi: boolean = !!body.withAi;
+    const timeframe: "1d" | "1h" = body.timeframe === "1h" ? "1h" : "1d";
     const settings: Settings = { ...DEFAULTS, ...(body.settings || {}) };
     if (holdings.length === 0) return NextResponse.json({ error: "no holdings" }, { status: 400 });
 
-    // 1) Technical snapshot per holding (parallel), using the user's thresholds.
-    const enriched = await Promise.all(
-      holdings.map(async (h) => {
-        const tech = await techFor(h.symbol, settings);
+    // 1) Technical snapshot per holding (concurrency-limited), user's thresholds + timeframe.
+    const enriched = await mapLimit(holdings, 10, async (h) => {
+        const tech = await techFor(h.symbol, settings, timeframe);
         const price = h.currentPrice || tech?.price || h.buyPrice || 0;
         const shares = h.shares || 0;
         const value = shares * price;
@@ -59,14 +77,13 @@ export async function POST(req: NextRequest) {
           plPct: Math.round(plPct * 10) / 10,
           tech: tech || null,
         };
-      }),
-    );
+      });
 
     // 2) Portfolio-level roll-up.
     const totalVal = enriched.reduce((s, r) => s + (r.value || 0), 0) || 1;
     const withTech = enriched.filter((r) => r.tech?.ok);
     const trendCounts = { Uptrend: 0, Downtrend: 0, Sideways: 0 } as Record<string, number>;
-    let overbought = 0, oversold = 0, belowSma200 = 0, weakTrend = 0;
+    let overbought = 0, oversold = 0, belowSma200 = 0, weakTrend = 0, perfectUp = 0, perfectDown = 0;
     withTech.forEach((r) => {
       const t = r.tech!;
       if (t.trend in trendCounts) trendCounts[t.trend]++;
@@ -74,6 +91,8 @@ export async function POST(req: NextRequest) {
       if (t.rsi != null && t.rsi <= settings.rsiOversold) oversold++;
       if (t.vsSma200Pct != null && t.vsSma200Pct < 0) belowSma200++;
       if (t.adx != null && t.adx < 20) weakTrend++;
+      if (t.maStack?.label === "Perfect uptrend") perfectUp++;
+      if (t.maStack?.label === "Perfect downtrend") perfectDown++;
     });
     const topConc = [...enriched].sort((a, b) => b.value - a.value)[0];
     const concentrationPct = topConc ? Math.round((topConc.value / totalVal) * 100) : 0;
@@ -86,6 +105,9 @@ export async function POST(req: NextRequest) {
       oversold,
       belowSma200,
       weakTrend,
+      perfectUp,
+      perfectDown,
+      timeframe,
       topPosition: topConc ? { symbol: topConc.symbol, pct: concentrationPct } : null,
     };
 
@@ -98,12 +120,13 @@ export async function POST(req: NextRequest) {
         rsi: r.tech?.rsi ?? null,
         adx: r.tech?.adx ?? null,
         trend: r.tech?.trend ?? "—",
-        vsSma50Pct: r.tech?.vsSma50Pct ?? null,
-        vsSma200Pct: r.tech?.vsSma200Pct ?? null,
+        maStack: r.tech?.maStack?.label ?? null,
+        diUp: r.tech?.diUp ?? null,
         signals: (r.tech?.signals || []).map((s) => s.label),
         candlePatterns: (r.tech?.patterns || []).map((p) => p.name),
       }));
-      const prompt = `You are a highly experienced, professional equity research analyst reviewing a client's ${market || ""} stock portfolio. You have deep experience reading technical conditions and market context.
+      const tfLabel = timeframe === "1h" ? "HOURLY (intraday)" : "DAILY";
+      const prompt = `You are a highly experienced, professional equity research analyst reviewing a client's ${market || ""} stock portfolio on the ${tfLabel} timeframe. You have deep experience reading technical conditions and market context. All the technical readings below are computed on the ${tfLabel} timeframe — frame your read accordingly (hourly = short-term/intraday swings; daily = the primary trend). Each holding also carries a "maStack" moving-average alignment read (Perfect uptrend / Perfect downtrend / etc.) and "diUp" (true if +DI>-DI). Use them.
 
 THIS CLIENT'S PROFILE — tailor EVERY point to it, do not give generic advice:
 - Investing style: ${settings.style}

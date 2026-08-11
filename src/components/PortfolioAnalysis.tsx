@@ -49,13 +49,15 @@ export default function PortfolioAnalysis({ market }: { market: PortfolioMarket 
   const [newBySymbol, setNewBySymbol] = useState<Record<string, string[]>>({});
   const [settings, setSettings] = useState<PfAnalysisSettings>(DEFAULT_PF_ANALYSIS_SETTINGS);
   const [showSettings, setShowSettings] = useState(false);
+  const [timeframe, setTimeframe] = useState<"1d" | "1h">("1d");
   useEffect(() => { setSettings(getPfAnalysisSettings()); }, []);
 
   const holdings = useMemo(() => getPortfolio().filter((h) => h.market === market), [market]);
 
-  const run = async (withAi: boolean, over?: PfAnalysisSettings) => {
+  const run = async (withAi: boolean, over?: PfAnalysisSettings, tfOver?: "1d" | "1h") => {
     if (holdings.length === 0) { setErr("No holdings in this market yet."); return; }
     const cfg = over || settings;
+    const tf = tfOver || timeframe;
     withAi ? setAiLoading(true) : setLoading(true);
     setErr("");
     try {
@@ -66,6 +68,7 @@ export default function PortfolioAnalysis({ market }: { market: PortfolioMarket 
           market,
           withAi,
           settings: cfg,
+          timeframe: tf,
           holdings: holdings.map((h) => ({
             symbol: h.symbol, name: h.name, shares: h.shares,
             buyPrice: h.buyPrice, currentPrice: h.currentPrice, market: h.market,
@@ -83,14 +86,15 @@ export default function PortfolioAnalysis({ market }: { market: PortfolioMarket 
       const fresh: Record<string, string[]> = {};
       const now = Date.now();
       (j.holdings || []).forEach((r: any) => {
+        const sk = `${tf}:${r.symbol}`; // namespace by timeframe
         const keys: string[] = (r.tech?.signals || []).map((s: any) => s.key);
-        const prev = seen[r.symbol]?.signals || [];
+        const prev = seen[sk]?.signals || [];
         const added = keys.filter((k) => !prev.includes(k));
-        if (added.length && seen[r.symbol]) fresh[r.symbol] = added; // only if we had a prior baseline
-        nextSeen[r.symbol] = { signals: keys, ts: now };
+        if (added.length && seen[sk]) fresh[r.symbol] = added; // only if we had a prior baseline
+        nextSeen[sk] = { signals: keys, ts: now };
       });
       setNewBySymbol(fresh);
-      setPfTechSeen(nextSeen);
+      setPfTechSeen({ ...seen, ...nextSeen }); // keep the other timeframe's baseline
     } catch {
       setErr("Could not load analysis. Please try again.");
     } finally {
@@ -101,6 +105,7 @@ export default function PortfolioAnalysis({ market }: { market: PortfolioMarket 
   // Auto-load the fast technical watch on open (no AI call).
   useEffect(() => { setData(null); setNewBySymbol({}); if (holdings.length) run(false); /* eslint-disable-next-line */ }, [market]);
 
+  const switchTf = (tf: "1d" | "1h") => { if (tf === timeframe) return; setTimeframe(tf); setNewBySymbol({}); run(false, undefined, tf); };
   const setF = (k: keyof PfAnalysisSettings, v: any) => setSettings((s) => ({ ...s, [k]: v }));
   const applySettings = () => { setPfAnalysisSettings(settings); setShowSettings(false); run(false, settings); };
   const resetSettings = () => { setSettings(DEFAULT_PF_ANALYSIS_SETTINGS); setPfAnalysisSettings(DEFAULT_PF_ANALYSIS_SETTINGS); run(false, DEFAULT_PF_ANALYSIS_SETTINGS); };
@@ -127,7 +132,16 @@ export default function PortfolioAnalysis({ market }: { market: PortfolioMarket 
             <span className="px-2 py-0.5 rounded-full text-[10.5px] font-bold border border-slate-200 bg-slate-50 text-slate-600 tabular-nums">RSI {settings.rsiOverbought}/{settings.rsiOversold} · ADX {settings.adxTrend}</span>
           </div>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
+          {/* Timeframe toggle — Daily vs Hourly */}
+          <div className="inline-flex rounded-xl border border-slate-200 bg-slate-100 p-0.5">
+            {(["1d", "1h"] as const).map((tf) => (
+              <button key={tf} onClick={() => switchTf(tf)} disabled={loading}
+                className={`px-3 py-1.5 rounded-lg text-xs font-black transition disabled:opacity-50 ${timeframe === tf ? "bg-white text-indigo-700 shadow-sm" : "text-slate-500 hover:text-slate-700"}`}>
+                {tf === "1d" ? "Daily" : "Hourly"}
+              </button>
+            ))}
+          </div>
           <button onClick={() => setShowSettings((v) => !v)}
             className={`inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-black border transition ${showSettings ? "border-indigo-300 bg-indigo-50 text-indigo-700" : "border-slate-200 bg-white text-slate-700 hover:bg-slate-50"}`}>
             <SlidersHorizontal className="w-3.5 h-3.5" /> Customize
@@ -203,11 +217,25 @@ export default function PortfolioAnalysis({ market }: { market: PortfolioMarket 
         </div>
       )}
 
+      {/* Timeframe overview banner */}
+      {totals && (
+        <div className={`rounded-2xl border p-4 ${timeframe === "1h" ? "border-violet-200 bg-violet-50/50" : "border-sky-200 bg-sky-50/50"}`}>
+          <div className="flex items-center gap-2 mb-1">
+            <span className={`px-2.5 py-0.5 rounded-full text-[12px] font-black ${timeframe === "1h" ? "bg-violet-600 text-white" : "bg-sky-600 text-white"}`}>{timeframe === "1h" ? "⏱ HOURLY" : "📊 DAILY"}</span>
+            <span className="text-[13px] font-bold text-slate-700">{timeframe === "1h" ? "Short-term / intraday swings" : "The primary trend"}</span>
+          </div>
+          <p className="text-[13px] text-slate-600 font-medium">
+            Across {totals.holdingsCount} holdings: <b className="text-emerald-700">{totals.trendCounts.Uptrend} uptrend</b> · <b className="text-rose-700">{totals.trendCounts.Downtrend} downtrend</b> · {totals.trendCounts.Sideways} sideways. <b className="text-emerald-700">{totals.perfectUp}</b> in a perfect up-stack, <b className="text-rose-700">{totals.perfectDown}</b> in a perfect down-stack. {totals.overbought} overbought, {totals.oversold} oversold. Toggle Daily/Hourly above to compare.
+          </p>
+        </div>
+      )}
+
       {/* Summary strip */}
       {totals && (
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+        <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
           <Stat label="Holdings" value={String(totals.holdingsCount)} sub={totals.topPosition ? `Top ${totals.topPosition.symbol} · ${totals.topPosition.pct}%` : ""} />
           <Stat label="Trend mix" value={`${totals.trendCounts.Uptrend}↑ ${totals.trendCounts.Downtrend}↓`} sub={`${totals.trendCounts.Sideways} sideways`} tone={totals.trendCounts.Downtrend > totals.trendCounts.Uptrend ? "bear" : "bull"} />
+          <Stat label="MA alignment" value={`${totals.perfectUp}↑ ${totals.perfectDown}↓`} sub="perfect stack" tone={totals.perfectDown > totals.perfectUp ? "bear" : "bull"} />
           <Stat label="Overbought / Oversold" value={`${totals.overbought} / ${totals.oversold}`} sub={`RSI ≥${settings.rsiOverbought} / ≤${settings.rsiOversold}`} tone={totals.overbought > 0 ? "warn" : "info"} />
           <Stat label="Below 200-DMA" value={String(totals.belowSma200)} sub={`${totals.weakTrend} weak trend`} tone={totals.belowSma200 > 0 ? "bear" : "bull"} />
         </div>
@@ -218,8 +246,8 @@ export default function PortfolioAnalysis({ market }: { market: PortfolioMarket 
         <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
           <div className="px-4 py-2.5 bg-gradient-to-r from-indigo-50 to-slate-50 border-b border-slate-200 flex items-center gap-2">
             <span className="w-1.5 h-4 rounded-full bg-indigo-500" />
-            <h3 className="text-[12px] font-black uppercase tracking-wide text-slate-600">Technical Watch</h3>
-            <span className="text-[11px] text-slate-400 font-semibold ml-auto">RSI · ADX · trend · vs moving averages</span>
+            <h3 className="text-[12px] font-black uppercase tracking-wide text-slate-600">Technical Watch · {timeframe === "1h" ? "Hourly" : "Daily"}</h3>
+            <span className="text-[11px] text-slate-400 font-semibold ml-auto hidden sm:block">RSI · ADX(±DI) · trend · moving-average stack</span>
           </div>
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
@@ -227,10 +255,9 @@ export default function PortfolioAnalysis({ market }: { market: PortfolioMarket 
                 <tr className="text-[11px] font-black text-slate-500 uppercase bg-slate-100 border-b border-slate-200">
                   <th className="text-left px-4 py-2.5">Stock</th>
                   <th className="text-right px-2 py-2.5">RSI</th>
-                  <th className="text-right px-2 py-2.5">ADX</th>
+                  <th className="text-center px-2 py-2.5">ADX (±DI)</th>
                   <th className="text-center px-2 py-2.5">Trend</th>
-                  <th className="text-right px-2 py-2.5">vs 50-DMA</th>
-                  <th className="text-right px-2 py-2.5">vs 200-DMA</th>
+                  <th className="text-left px-3 py-2.5">Moving average</th>
                   <th className="text-left px-3 py-2.5">Signals</th>
                 </tr>
               </thead>
@@ -251,23 +278,30 @@ export default function PortfolioAnalysis({ market }: { market: PortfolioMarket 
                         <div className="text-[11px] text-slate-500 font-medium truncate max-w-[160px]">{r.name}</div>
                       </td>
                       {!t?.ok ? (
-                        <td colSpan={6} className="px-3 py-2.5"><span className="text-[11px] font-bold text-slate-500 bg-slate-100 border border-slate-200 rounded-full px-2.5 py-0.5">Technical data unavailable</span></td>
+                        <td colSpan={5} className="px-3 py-2.5"><span className="text-[11px] font-bold text-slate-500 bg-slate-100 border border-slate-200 rounded-full px-2.5 py-0.5">Technical data unavailable</span></td>
                       ) : (
                         <>
                           <td className="px-2 py-2.5 text-right">
-                            <span className={`inline-block font-black tabular-nums ${rsiHasBg ? "px-1.5 py-0.5 rounded-md" : ""} ${rsiBadge}`}>{t.rsi ?? "—"}</span>
+                            <span className={`inline-block text-[15px] font-black tabular-nums ${rsiHasBg ? "px-1.5 py-0.5 rounded-md" : ""} ${rsiBadge}`}>{t.rsi ?? "—"}</span>
                           </td>
-                          <td className="px-2 py-2.5 text-right font-bold text-slate-700 tabular-nums">{t.adx ?? "—"}</td>
+                          <td className="px-2 py-2.5 text-center whitespace-nowrap">
+                            <span className={`inline-flex items-center gap-1 font-black tabular-nums text-[15px] ${t.diUp == null ? "text-slate-700" : t.diUp ? "text-emerald-600" : "text-rose-600"}`}>
+                              {t.diUp != null && <span className="text-[11px]">{t.diUp ? "▲" : "▼"}</span>}{t.adx ?? "—"}
+                            </span>
+                          </td>
                           <td className="px-2 py-2.5 text-center">
-                            <span className={`inline-block px-2.5 py-0.5 rounded-full text-[11px] font-black border ${TREND_BADGE[t.trend] || TREND_BADGE["—"]}`}>{t.trend}</span>
+                            <span className={`inline-block px-2.5 py-0.5 rounded-full text-[12px] font-black border ${TREND_BADGE[t.trend] || TREND_BADGE["—"]}`}>{t.trend}</span>
                           </td>
-                          <td className={`px-2 py-2.5 text-right font-bold tabular-nums ${pctColor(t.vsSma50Pct)}`}>{fmtPct(t.vsSma50Pct)}</td>
-                          <td className={`px-2 py-2.5 text-right font-bold tabular-nums ${pctColor(t.vsSma200Pct)}`}>{fmtPct(t.vsSma200Pct)}</td>
+                          <td className="px-3 py-2.5">
+                            {t.maStack ? (
+                              <span className={`inline-block px-2.5 py-0.5 rounded-full text-[12px] font-bold border ${TONE[t.maStack.tone] || TONE.info}`}>{t.maStack.label}</span>
+                            ) : <span className="text-[12px] text-slate-400">—</span>}
+                          </td>
                           <td className="px-3 py-2.5">
                             <div className="flex flex-wrap gap-1">
-                              {(t.signals || []).length === 0 && <span className="text-[11px] text-slate-400">—</span>}
+                              {(t.signals || []).length === 0 && <span className="text-[12px] text-slate-400">—</span>}
                               {(t.signals || []).map((s: any) => (
-                                <span key={s.key} className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10.5px] font-bold border ${TONE[s.tone] || TONE.info} ${fresh.includes(s.key) ? "ring-2 ring-amber-400" : ""}`}>
+                                <span key={s.key} className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11.5px] font-bold border ${TONE[s.tone] || TONE.info} ${fresh.includes(s.key) ? "ring-2 ring-amber-400" : ""}`}>
                                   {fresh.includes(s.key) && <span className="text-[8px] font-black text-amber-600">NEW</span>}
                                   {s.label}
                                 </span>
@@ -451,14 +485,6 @@ function Stat({ label, value, sub, tone }: { label: string; value: string; sub?:
   );
 }
 
-function fmtPct(v: number | null) {
-  if (v == null) return "—";
-  return `${v > 0 ? "+" : ""}${v.toFixed(1)}%`;
-}
-function pctColor(v: number | null) {
-  if (v == null) return "text-slate-400";
-  return v >= 0 ? "text-emerald-600" : "text-rose-600";
-}
 function labelFor(rows: any[], sym: string, key: string) {
   const r = rows.find((x) => x.symbol === sym);
   const s = (r?.tech?.signals || []).find((x: any) => x.key === key);
