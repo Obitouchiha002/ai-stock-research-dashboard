@@ -24,7 +24,7 @@ async function techFor(symbol: string, s: Settings): Promise<TechSnapshot | null
     const rows = quotes.filter((q: any) => q && q.close != null && q.high != null && q.low != null);
     if (rows.length < 30) return null;
     return buildSnapshot(
-      rows.map((r: any) => ({ high: r.high, low: r.low, close: r.close })),
+      rows.map((r: any) => ({ open: r.open, high: r.high, low: r.low, close: r.close })),
       { rsiOverbought: s.rsiOverbought, rsiOversold: s.rsiOversold, adxTrend: s.adxTrend },
     );
   } catch {
@@ -101,6 +101,7 @@ export async function POST(req: NextRequest) {
         vsSma50Pct: r.tech?.vsSma50Pct ?? null,
         vsSma200Pct: r.tech?.vsSma200Pct ?? null,
         signals: (r.tech?.signals || []).map((s) => s.label),
+        candlePatterns: (r.tech?.patterns || []).map((p) => p.name),
       }));
       const prompt = `You are a highly experienced, professional equity research analyst reviewing a client's ${market || ""} stock portfolio. You have deep experience reading technical conditions and market context.
 
@@ -121,12 +122,14 @@ STRICT RULES:
 PORTFOLIO SUMMARY: total holdings ${totals.holdingsCount}, largest position ${totals.topPosition?.symbol || "-"} at ${concentrationPct}% weight, uptrend ${trendCounts.Uptrend} / downtrend ${trendCounts.Downtrend} / sideways ${trendCounts.Sideways}, ${overbought} overbought (≥${settings.rsiOverbought}), ${oversold} oversold (≤${settings.rsiOversold}), ${belowSma200} below 200-DMA.
 HOLDINGS (technical): ${JSON.stringify(compact)}
 
+Some holdings include "candlePatterns" (recent candlestick formations like Bullish Engulfing, Shooting Star, Hammer, Doji, Morning/Evening Star). When present, factor them in: say what the pattern typically indicates and, in the "action" field, give a research-framed next step to consider (e.g. "watch for a confirming higher close before reading a reversal", "monitor whether follow-through appears"). NEVER phrase the action as buy/sell/hold — always as what to watch or research.
+
 Return STRICT JSON with this shape:
 {
   "overview": "2-3 sentence professional read of the whole portfolio's technical health",
   "marketContext": "2-3 sentences on the current broad market backdrop relevant to these holdings (rates, sentiment, sector rotation) at a general level",
   "portfolioRisk": { "level": "Low|Moderate|Elevated|High", "concentration": "one line on concentration/diversification risk", "summary": "one line overall risk read" },
-  "holdings": [ { "symbol": "TICKER", "health": "Healthy|Watch|Weak", "note": "one specific sentence on this stock's technical condition", "risk": "the main risk to monitor for this stock" } ],
+  "holdings": [ { "symbol": "TICKER", "health": "Healthy|Watch|Weak", "note": "one specific sentence on this stock's technical condition, mentioning any candlestick pattern present", "risk": "the main risk to monitor for this stock", "action": "a research-framed next step to consider (what to watch/confirm) — NEVER buy/sell/hold" } ],
   "alerts": [ { "symbol": "TICKER", "urgency": "High|Medium", "message": "what changed / needs attention now, in research language" } ],
   "whatToMonitor": ["3-5 concrete things to watch next"]
 }

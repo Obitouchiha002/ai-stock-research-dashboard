@@ -87,6 +87,78 @@ export function adx(highs: number[], lows: number[], closes: number[], period = 
 
 export type Signal = { key: string; label: string; tone: "bull" | "bear" | "warn" | "info" };
 
+// A candlestick pattern on the most recent bars, with a plain-language read and
+// a research-framed "what to watch" (NOT buy/sell advice).
+export type CandlePattern = {
+  key: string;
+  name: string;
+  tone: "bull" | "bear" | "info";
+  meaning: string; // what the pattern typically indicates
+  watch: string;   // what to watch / research next (research language)
+};
+
+type OHLC = { open?: number; high: number; low: number; close: number };
+
+// Detect notable candlestick patterns on the latest bars. Context (trend) is
+// used so e.g. a hammer only counts as a reversal hint after weakness.
+export function detectCandles(candles: OHLC[], trend: TechSnapshot["trend"]): CandlePattern[] {
+  const n = candles.length;
+  if (n < 3 || candles[n - 1].open == null) return [];
+  const c0 = candles[n - 1], c1 = candles[n - 2], c2 = candles[n - 3];
+  const o0 = c0.open as number, o1 = c1.open as number, o2 = c2.open as number;
+  const body = (o: number, c: number) => Math.abs(c - o);
+  const range = (h: number, l: number) => Math.max(h - l, 1e-9);
+  const b0 = body(o0, c0.close), b1 = body(o1, c1.close), b2 = body(o2, c2.close);
+  const r0 = range(c0.high, c0.low);
+  const upper0 = c0.high - Math.max(o0, c0.close);
+  const lower0 = Math.min(o0, c0.close) - c0.low;
+  const bull0 = c0.close > o0, bull1 = c1.close > o1, bull2 = c2.close > o2;
+  const out: CandlePattern[] = [];
+
+  // Bullish / bearish engulfing (2-bar reversal).
+  if (!bull1 && bull0 && c0.close >= o1 && o0 <= c1.close && b0 > b1) {
+    out.push({ key: "bull-engulf", name: "Bullish Engulfing", tone: "bull",
+      meaning: "A strong up-candle fully covers the prior down-candle — buyers took control.",
+      watch: "Watch for a higher close on the next bar to confirm; a drop back below the pattern low would negate it." });
+  }
+  if (bull1 && !bull0 && o0 >= c1.close && c0.close <= o1 && b0 > b1) {
+    out.push({ key: "bear-engulf", name: "Bearish Engulfing", tone: "bear",
+      meaning: "A strong down-candle fully covers the prior up-candle — sellers took control.",
+      watch: "Watch whether the next bar confirms weakness; holding above the pattern high would ease the signal." });
+  }
+  // Morning / evening star (3-bar reversal).
+  const mid2 = (o2 + c2.close) / 2;
+  if (!bull2 && b2 > r0 * 0.4 && b1 < b2 * 0.5 && bull0 && c0.close > mid2) {
+    out.push({ key: "morning-star", name: "Morning Star", tone: "bull",
+      meaning: "A down day, a small indecision candle, then a strong up day — a classic bottoming sequence.",
+      watch: "Often marks a potential trough; watch for continued higher closes to confirm the turn." });
+  }
+  if (bull2 && b2 > r0 * 0.4 && b1 < b2 * 0.5 && !bull0 && c0.close < mid2) {
+    out.push({ key: "evening-star", name: "Evening Star", tone: "bear",
+      meaning: "An up day, a small indecision candle, then a strong down day — a classic topping sequence.",
+      watch: "Often marks a potential peak; watch for continued lower closes to confirm the turn." });
+  }
+  // Hammer (bullish only after weakness).
+  if (lower0 >= b0 * 2 && upper0 <= b0 * 0.6 && b0 > 0 && (trend === "Downtrend" || trend === "Sideways")) {
+    out.push({ key: "hammer", name: "Hammer", tone: "bull",
+      meaning: "Price sold off hard then closed near the high — a long lower wick shows buyers stepped in.",
+      watch: "A reversal hint after weakness; watch for an up-close next bar before reading too much into it." });
+  }
+  // Shooting star (bearish only after strength).
+  if (upper0 >= b0 * 2 && lower0 <= b0 * 0.6 && b0 > 0 && (trend === "Uptrend" || trend === "Sideways")) {
+    out.push({ key: "shooting-star", name: "Shooting Star", tone: "bear",
+      meaning: "Price ran up then closed near the low — a long upper wick shows sellers rejected the highs.",
+      watch: "A possible exhaustion sign after a run-up; watch whether the next bar confirms the stall." });
+  }
+  // Doji (indecision) — only if nothing stronger fired.
+  if (out.length === 0 && b0 <= r0 * 0.1) {
+    out.push({ key: "doji", name: "Doji", tone: "info",
+      meaning: "Open and close are nearly equal — the session ended in a tug-of-war with no clear winner.",
+      watch: "Indecision after a move can precede a turn; watch the direction of the next candle for a cue." });
+  }
+  return out.slice(0, 2);
+}
+
 export type TechSnapshot = {
   ok: boolean;
   price: number | null;
@@ -102,6 +174,7 @@ export type TechSnapshot = {
   vsSma50Pct: number | null;
   vsSma200Pct: number | null;
   signals: Signal[];
+  patterns: CandlePattern[];
 };
 
 const last = (a: (number | null)[]): number | null => {
@@ -115,13 +188,13 @@ export type SnapshotOpts = { rsiOverbought?: number; rsiOversold?: number; adxTr
 // Build the latest-bar technical snapshot + human-readable signals from OHLC.
 // Thresholds default to the classic 70 / 30 / 25 but the caller can override
 // them so signals follow the user's own settings.
-export function buildSnapshot(candles: { high: number; low: number; close: number }[], opts: SnapshotOpts = {}): TechSnapshot {
+export function buildSnapshot(candles: { open?: number; high: number; low: number; close: number }[], opts: SnapshotOpts = {}): TechSnapshot {
   const OB = opts.rsiOverbought ?? 70;
   const OS = opts.rsiOversold ?? 30;
   const ADX_TREND = opts.adxTrend ?? 25;
   const empty: TechSnapshot = {
     ok: false, price: null, rsi: null, rsiPrev: null, adx: null, plusDI: null, minusDI: null,
-    sma20: null, sma50: null, sma200: null, trend: "—", vsSma50Pct: null, vsSma200Pct: null, signals: [],
+    sma20: null, sma50: null, sma200: null, trend: "—", vsSma50Pct: null, vsSma200Pct: null, signals: [], patterns: [],
   };
   if (!candles || candles.length < 30) return empty;
   const highs = candles.map((c) => c.high);
@@ -192,10 +265,12 @@ export function buildSnapshot(candles: { high: number; low: number; close: numbe
     }
   }
 
+  const patterns = detectCandles(candles, trend);
+
   return {
     ok: true,
     price: r2(price), rsi: r2(rsiNow), rsiPrev: r2(rsiPrev), adx: r2(adxNow), plusDI: r2(pdi), minusDI: r2(mdi),
     sma20: r2(s20), sma50: r2(s50), sma200: r2(s200), trend,
-    vsSma50Pct: r2(vs50), vsSma200Pct: r2(vs200), signals,
+    vsSma50Pct: r2(vs50), vsSma200Pct: r2(vs200), signals, patterns,
   };
 }

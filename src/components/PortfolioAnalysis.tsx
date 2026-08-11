@@ -288,6 +288,40 @@ export default function PortfolioAnalysis({ market }: { market: PortfolioMarket 
         </div>
       )}
 
+      {/* Candlestick patterns — instant, from the chart (no AI needed) */}
+      {rows.some((r) => (r.tech?.patterns || []).length > 0) && (
+        <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+          <div className="px-4 py-2.5 bg-gradient-to-r from-indigo-50 to-slate-50 border-b border-slate-200 flex items-center gap-2">
+            <span className="w-1.5 h-4 rounded-full bg-indigo-500" />
+            <h3 className="text-[12px] font-black uppercase tracking-wide text-slate-600">Candlestick patterns</h3>
+            <span className="text-[11px] text-slate-400 font-semibold ml-auto">what the recent candles show &amp; what to watch</span>
+          </div>
+          <div className="divide-y divide-slate-100">
+            {rows.filter((r) => (r.tech?.patterns || []).length > 0).map((r) => (
+              <div key={r.symbol} className="px-4 py-3">
+                <div className="flex items-center gap-2 mb-1.5">
+                  <Link href={`/charts?symbol=${encodeURIComponent(r.symbol)}`} className="font-black text-slate-800 hover:text-indigo-600">{r.symbol}</Link>
+                  {(r.tech.patterns || []).map((p: any) => (
+                    <span key={p.key} className={`px-2 py-0.5 rounded-full text-[11px] font-black border ${TONE[p.tone] || TONE.info}`}>
+                      {p.tone === "bull" ? "▲" : p.tone === "bear" ? "▼" : "◆"} {p.name}
+                    </span>
+                  ))}
+                </div>
+                {(r.tech.patterns || []).map((p: any) => (
+                  <div key={p.key} className="text-[13px] text-slate-600 mb-1 last:mb-0">
+                    <span className="text-slate-700">{p.meaning}</span>{" "}
+                    <span className="text-indigo-700 font-semibold">Watch: {p.watch}</span>
+                  </div>
+                ))}
+              </div>
+            ))}
+          </div>
+          <div className="px-4 py-2 text-[11px] text-slate-400 border-t border-slate-100">
+            Patterns are hints, not signals to act on — always wait for confirmation. Research only, not buy/sell advice.
+          </div>
+        </div>
+      )}
+
       {/* AI Analyst Report */}
       {aiLoading && (
         <div className="flex items-center gap-2 text-sm text-indigo-600 px-1 py-3"><Loader2 className="w-4 h-4 animate-spin" /> Your AI analyst is reviewing the portfolio…</div>
@@ -350,6 +384,7 @@ export default function PortfolioAnalysis({ market }: { market: PortfolioMarket 
                   </div>
                   {h.note && <p className="text-[13px] text-slate-700 font-medium mb-1.5">{h.note}</p>}
                   {h.risk && <p className="text-[12px] text-slate-500"><span className="font-bold text-slate-600">Risk:</span> {h.risk}</p>}
+                  {h.action && <p className="text-[12px] text-indigo-700 mt-1"><span className="font-bold">Watch:</span> {h.action}</p>}
                 </div>
               ))}
             </div>
