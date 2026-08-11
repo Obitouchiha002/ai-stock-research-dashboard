@@ -812,6 +812,13 @@ export const addEarnSector = (s: string) => {
 export const getPortfolioOrder = (): string[] => getParsedContext<string[]>("sa_portfolio_order", []);
 export const setPortfolioOrder = (ids: string[]) => setContext("sa_portfolio_order", ids);
 
+// Last-seen technical signal keys per symbol, so the Portfolio Technical Watch
+// can flag signals that are NEW since the user last ran the analysis
+// ("turant bata chale" — tell me the moment something changed).
+export type PfTechSeen = Record<string, { signals: string[]; ts: number }>;
+export const getPfTechSeen = (): PfTechSeen => getParsedContext<PfTechSeen>("sa_pf_tech_seen", {});
+export const setPfTechSeen = (map: PfTechSeen) => setContext("sa_pf_tech_seen", map);
+
 // Symbols the user chose to hide from a Markets tab (incl. built-in indices).
 export const getMarketHidden = (): Record<string, string[]> =>
   getParsedContext<Record<string, string[]>>("sa_market_hidden", {});
