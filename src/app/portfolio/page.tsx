@@ -64,6 +64,13 @@ const PF_TREND_ROW: Record<string, string> = {
   down: "bg-rose-200",
   side: "bg-amber-200",
 };
+// Portfolio health-check letter grade → badge colour.
+const GRADE_CLS: Record<string, string> = {
+  A: "text-emerald-700 bg-emerald-50 border-emerald-400",
+  B: "text-sky-700 bg-sky-50 border-sky-400",
+  C: "text-amber-700 bg-amber-50 border-amber-400",
+  D: "text-rose-700 bg-rose-50 border-rose-400",
+};
 // What the user plans to do with the position.
 const PF_STANCE = [
   { v: "", label: "— action", cls: "text-slate-400 border-slate-200 bg-white" },
@@ -432,8 +439,9 @@ export default function PortfolioPage() {
     setRefreshing(false);
   };
 
-  // AI Portfolio Review — full-portfolio P/L & concentration across EVERY
-  // holding (local, no API), with momentum sampled on the largest positions.
+  // AI Portfolio Review — a candid HEALTH CHECK across EVERY holding (all local,
+  // no per-stock API, so it's instant and covers the whole portfolio). Surfaces
+  // concrete mistakes/weaknesses + research-framed actions (no buy/sell advice).
   const runReview = async () => {
     const current = getPortfolio().filter((h) => h.market === market);
     if (current.length === 0) return;
@@ -441,7 +449,6 @@ export default function PortfolioPage() {
     setReview(null);
     try {
       const cur = CUR[market];
-      // 1) Quantitative stats across every holding.
       const priced = current.map((h) => {
         const px = h.currentPrice || h.buyPrice;
         const value = h.shares * px;
@@ -453,79 +460,62 @@ export default function PortfolioPage() {
       const totalVal = priced.reduce((s, r) => s + r.value, 0) || 1;
       const totalCost = priced.reduce((s, r) => s + r.cost, 0) || 1;
       const totalPl = totalVal - totalCost;
-      const inProfit = priced.filter((r) => r.pl > 0).length;
-      const inLoss = priced.filter((r) => r.pl < 0).length;
+      const winners = priced.filter((r) => r.pl > 0);
+      const losers = priced.filter((r) => r.pl < 0);
       const byWeight = [...priced].sort((a, b) => b.value - a.value);
       const topPositions = byWeight.slice(0, 6).map((r) => ({ symbol: r.symbol, pct: Math.round((r.value / totalVal) * 100), plPct: Math.round(r.plPct * 10) / 10 }));
+      const top1 = byWeight[0] ? { symbol: byWeight[0].symbol, pct: Math.round((byWeight[0].value / totalVal) * 100) } : null;
       const concentrationTop5 = Math.round((byWeight.slice(0, 5).reduce((s, r) => s + r.value, 0) / totalVal) * 100);
       const byDollar = [...priced].sort((a, b) => b.pl - a.pl);
       const topWinners = byDollar.slice(0, 3).map((r) => ({ symbol: r.symbol, pl: Math.round(r.pl), plPct: Math.round(r.plPct * 10) / 10 }));
       const topLosers = byDollar.slice(-3).reverse().map((r) => ({ symbol: r.symbol, pl: Math.round(r.pl), plPct: Math.round(r.plPct * 10) / 10 }));
-
-      // 2) Momentum sampled on the largest positions (most impactful).
-      const sample = byWeight.slice(0, 20);
-      const momResults = await Promise.all(
-        sample.map(async (r) => {
-          try {
-            const res = await fetch("/api/momentum", {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ symbol: r.symbol, market: market === "Indian Stocks" ? "IN" : "US" }),
-            });
-            const j = await res.json();
-            const m = j.momentum;
-            return { symbol: r.symbol, view: m?.snapshot?.finalMomentumView || "Data unavailable", score: m?.snapshot?.momentumScore ?? null };
-          } catch {
-            return { symbol: r.symbol, view: "Data unavailable", score: null };
-          }
-        }),
-      );
-      const momentumBuckets: Record<string, number> = {};
-      momResults.forEach((r) => { momentumBuckets[r.view] = (momentumBuckets[r.view] || 0) + 1; });
-      const scored = momResults.filter((r) => r.score != null).sort((a, b) => (b.score || 0) - (a.score || 0));
+      // Mistake-detection metrics.
+      const avgWinPct = winners.length ? Math.round((winners.reduce((s, r) => s + r.plPct, 0) / winners.length) * 10) / 10 : 0;
+      const avgLossPct = losers.length ? Math.round((losers.reduce((s, r) => s + r.plPct, 0) / losers.length) * 10) / 10 : 0;
+      // Large positions (≥5% weight) sitting on a deep loss (≤ -15%).
+      const bigLosers = byWeight.filter((r) => r.value / totalVal >= 0.05 && r.plPct <= -15)
+        .map((r) => ({ symbol: r.symbol, pct: Math.round((r.value / totalVal) * 100), plPct: Math.round(r.plPct * 10) / 10 }));
+      const deepDrawdowns = [...priced].sort((a, b) => a.plPct - b.plPct).slice(0, 3).map((r) => ({ symbol: r.symbol, plPct: Math.round(r.plPct * 10) / 10 }));
+      const dustCount = priced.filter((r) => r.value / totalVal < 0.005).length; // <0.5% weight = fragments
+      const lossDrag = Math.round((Math.abs(losers.reduce((s, r) => s + r.pl, 0)) / totalVal) * 1000) / 10;
 
       const stats = {
         market,
         currency: cur,
         totalHoldings: current.length,
-        momentumSampled: sample.length,
         value: Math.round(totalVal),
         invested: Math.round(totalCost),
         pl: Math.round(totalPl),
         plPct: Math.round((totalPl / totalCost) * 1000) / 10,
-        inProfit,
-        inLoss,
+        inProfit: winners.length,
+        inLoss: losers.length,
+        top1,
         concentrationTop5,
         topPositions,
         topWinners,
         topLosers,
-        strongestMomentum: scored.slice(0, 3).map((r) => ({ symbol: r.symbol, score: r.score })),
-        weakestMomentum: scored.slice(-3).reverse().map((r) => ({ symbol: r.symbol, score: r.score })),
-        momentumBuckets,
+        avgWinPct,
+        avgLossPct,
+        bigLosersLargeAndDown: bigLosers,
+        deepDrawdowns,
+        dustPositions: dustCount,
+        lossDragPctOfValue: lossDrag,
       };
 
-      const prompt = `You are a seasoned equity portfolio analyst writing a concise briefing on a client's ${market} portfolio. Use ONLY the data below.
-STRICT RULES: Research and risk-education ONLY. NEVER give buy/sell/hold advice, price targets, or predictions. Use measured analyst language. Reference SPECIFIC numbers and tickers from the data in every point — never speak in vague generalities. Do NOT mention sectors (sector data is not provided). Currency symbol is "${cur}".
-Write EXACTLY these four labelled sections, each 1-2 tight sentences, no preamble or headings beyond the label:
-Health: overall P/L using the actual ${stats.plPct}% / ${cur}${stats.pl} figure and how many of ${stats.totalHoldings} holdings are in profit vs loss.
-Concentration: comment on the largest positions and that the top 5 make up ${concentrationTop5}% of value — flag concentration risk if that is high.
-Winners & laggards: name the standout gainers and the biggest drawdowns by ticker and %.
-Watch next: 2-3 specific, concrete things to monitor.
-DATA: ${JSON.stringify(stats)}`;
-      let aiText = "";
+      let ai: any = null;
       try {
-        const res = await fetch("/api/gemini/generate", {
+        const res = await fetch("/api/portfolio-review", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ prompt }),
+          body: JSON.stringify({ market, currency: cur, stats }),
         });
         const j = await res.json();
-        aiText = j.text || j.error || "";
-        logAiUsageDetailed("Portfolio Review", j.usage ?? { tokens: j.aiTokens });
+        if (!j.error) { ai = j; logAiUsageDetailed("Portfolio Review", { tokens: j.aiTokens }); }
+        else ai = { error: j.error };
       } catch {
-        aiText = "";
+        ai = { error: "AI is busy right now. Please try again in a few seconds." };
       }
-      setReview({ ...stats, aiText });
+      setReview({ ...stats, ai });
     } finally {
       setReviewLoading(false);
     }
@@ -759,24 +749,69 @@ DATA: ${JSON.stringify(stats)}`;
             <span className="px-2.5 py-1 rounded-lg text-xs font-bold border text-slate-600 bg-slate-50 border-slate-200">Top 5 = {review.concentrationTop5}% of value</span>
             <span className="px-2.5 py-1 rounded-lg text-xs font-bold border text-slate-500 bg-white border-slate-200">{review.totalHoldings} holdings</span>
           </div>
-          {review.aiText ? (
-            <p className="text-sm text-slate-700 leading-relaxed mb-5 whitespace-pre-wrap">{review.aiText}</p>
+          {review.ai && !review.ai.error ? (
+            <div className="mb-5">
+              {/* Grade + verdict + summary */}
+              <div className="flex items-start gap-3 mb-4">
+                {review.ai.grade && (
+                  <div className={`shrink-0 w-12 h-12 rounded-xl flex items-center justify-center text-2xl font-black border-2 ${GRADE_CLS[review.ai.grade] || GRADE_CLS.C}`}>{review.ai.grade}</div>
+                )}
+                <div>
+                  {review.ai.gradeLabel && <div className="text-sm font-black text-slate-900">{review.ai.gradeLabel}</div>}
+                  {review.ai.summary && <p className="text-[13px] text-slate-600 font-medium leading-relaxed mt-0.5">{review.ai.summary}</p>}
+                </div>
+              </div>
+              {/* Issues spotted */}
+              {Array.isArray(review.ai.issues) && review.ai.issues.length > 0 && (
+                <div className="mb-4">
+                  <div className="text-[11px] font-black uppercase tracking-wide text-rose-600 flex items-center gap-1.5 mb-2"><AlertTriangle className="w-3.5 h-3.5" /> Issues spotted</div>
+                  <div className="space-y-2">
+                    {review.ai.issues.map((it: any, i: number) => {
+                      const sev = it.severity === "high" ? "border-rose-300 bg-rose-50" : it.severity === "medium" ? "border-amber-300 bg-amber-50" : "border-slate-200 bg-slate-50";
+                      const dot = it.severity === "high" ? "bg-rose-500" : it.severity === "medium" ? "bg-amber-500" : "bg-slate-400";
+                      return (
+                        <div key={i} className={`rounded-xl border px-3.5 py-2.5 ${sev}`}>
+                          <div className="flex items-center gap-2">
+                            <span className={`w-2 h-2 rounded-full shrink-0 ${dot}`} />
+                            <span className="font-black text-slate-800 text-[13px]">{it.title}</span>
+                          </div>
+                          {it.detail && <p className="text-[13px] text-slate-600 mt-1 pl-4">{it.detail}</p>}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+              {/* What you can do */}
+              {Array.isArray(review.ai.actions) && review.ai.actions.length > 0 && (
+                <div className="mb-1">
+                  <div className="text-[11px] font-black uppercase tracking-wide text-indigo-600 flex items-center gap-1.5 mb-2"><Sparkles className="w-3.5 h-3.5" /> What you can do</div>
+                  <div className="space-y-1.5">
+                    {review.ai.actions.map((a: any, i: number) => (
+                      <div key={i} className="flex items-start gap-2 text-[13px]">
+                        <Check className="w-3.5 h-3.5 text-indigo-500 mt-0.5 shrink-0" />
+                        <span><span className="font-bold text-slate-800">{a.title}:</span> <span className="text-slate-600">{a.detail}</span></span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+              {/* Strengths */}
+              {Array.isArray(review.ai.strengths) && review.ai.strengths.length > 0 && (
+                <div className="flex flex-wrap gap-1.5 mt-3">
+                  {review.ai.strengths.map((s: string, i: number) => (
+                    <span key={i} className="px-2.5 py-1 rounded-full text-[11px] font-bold border border-emerald-300 bg-emerald-50 text-emerald-800">✓ {s}</span>
+                  ))}
+                </div>
+              )}
+            </div>
           ) : (
             <div className="flex items-start gap-2 text-xs text-slate-500 bg-slate-50 rounded-xl p-3 border border-slate-100 mb-5">
               <AlertTriangle className="w-4 h-4 text-amber-500 shrink-0 mt-0.5" />
-              AI summary is busy right now — the computed stats below are still accurate.
+              {review.ai?.error || "AI summary is busy right now"} — the computed stats below are still accurate.
             </div>
           )}
-          <div className="grid sm:grid-cols-3 gap-4">
-            <div>
-              <div className="text-[10px] font-black uppercase tracking-wide text-slate-400 mb-2">Momentum Mix <span className="text-slate-300 normal-case">· {review.momentumSampled} largest</span></div>
-              {Object.entries(review.momentumBuckets).map(([k, v]: any) => (
-                <div key={k} className="flex justify-between text-xs py-0.5">
-                  <span className="text-slate-600">{k}</span>
-                  <span className="font-bold text-slate-800">{v}</span>
-                </div>
-              ))}
-            </div>
+          <div className="grid sm:grid-cols-2 gap-4">
             <div>
               <div className="text-[10px] font-black uppercase tracking-wide text-slate-400 mb-2">Top Positions by Weight</div>
               {review.topPositions.map((p: any) => (
@@ -805,7 +840,7 @@ DATA: ${JSON.stringify(stats)}`;
               ))}
             </div>
           </div>
-          <p className="mt-4 text-[10px] text-slate-400 italic">Research support only. Not buy/sell advice. P/L across all {review.totalHoldings} holdings; momentum sampled on the {review.momentumSampled} largest.</p>
+          <p className="mt-4 text-[10px] text-slate-400 italic">Research &amp; risk-education only. Not buy/sell advice. Computed across all {review.totalHoldings} holdings.</p>
         </div>
       )}
 
