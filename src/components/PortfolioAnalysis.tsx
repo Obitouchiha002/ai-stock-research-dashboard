@@ -4,9 +4,17 @@ import React, { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import {
   Activity, Sparkles, RefreshCw, AlertTriangle, Bell, ShieldAlert,
-  TrendingUp, TrendingDown, ArrowRight, Eye, Loader2,
+  TrendingUp, TrendingDown, ArrowRight, Eye, Loader2, SlidersHorizontal, RotateCcw,
 } from "lucide-react";
-import { getPortfolio, getPfTechSeen, setPfTechSeen, logAiUsageDetailed, type PortfolioMarket } from "@/lib/storage";
+import {
+  getPortfolio, getPfTechSeen, setPfTechSeen, logAiUsageDetailed,
+  getPfAnalysisSettings, setPfAnalysisSettings, DEFAULT_PF_ANALYSIS_SETTINGS,
+  type PortfolioMarket, type PfAnalysisSettings,
+} from "@/lib/storage";
+
+const STYLE_OPTS = ["Long-term investor", "Position trader", "Swing trader", "Day trader"];
+const RISK_OPTS = ["Conservative", "Balanced", "Aggressive"];
+const HORIZON_OPTS = ["Short (weeks)", "Medium (months)", "Long (years)"];
 
 const TONE: Record<string, string> = {
   bull: "text-emerald-700 bg-emerald-50 border-emerald-200",
@@ -47,11 +55,15 @@ export default function PortfolioAnalysis({ market }: { market: PortfolioMarket 
   const [err, setErr] = useState("");
   // symbol -> list of signal keys that are NEW since the last time analysis ran.
   const [newBySymbol, setNewBySymbol] = useState<Record<string, string[]>>({});
+  const [settings, setSettings] = useState<PfAnalysisSettings>(DEFAULT_PF_ANALYSIS_SETTINGS);
+  const [showSettings, setShowSettings] = useState(false);
+  useEffect(() => { setSettings(getPfAnalysisSettings()); }, []);
 
   const holdings = useMemo(() => getPortfolio().filter((h) => h.market === market), [market]);
 
-  const run = async (withAi: boolean) => {
+  const run = async (withAi: boolean, over?: PfAnalysisSettings) => {
     if (holdings.length === 0) { setErr("No holdings in this market yet."); return; }
+    const cfg = over || settings;
     withAi ? setAiLoading(true) : setLoading(true);
     setErr("");
     try {
@@ -61,6 +73,7 @@ export default function PortfolioAnalysis({ market }: { market: PortfolioMarket 
         body: JSON.stringify({
           market,
           withAi,
+          settings: cfg,
           holdings: holdings.map((h) => ({
             symbol: h.symbol, name: h.name, shares: h.shares,
             buyPrice: h.buyPrice, currentPrice: h.currentPrice, market: h.market,
@@ -96,6 +109,10 @@ export default function PortfolioAnalysis({ market }: { market: PortfolioMarket 
   // Auto-load the fast technical watch on open (no AI call).
   useEffect(() => { setData(null); setNewBySymbol({}); if (holdings.length) run(false); /* eslint-disable-next-line */ }, [market]);
 
+  const setF = (k: keyof PfAnalysisSettings, v: any) => setSettings((s) => ({ ...s, [k]: v }));
+  const applySettings = () => { setPfAnalysisSettings(settings); setShowSettings(false); run(false, settings); };
+  const resetSettings = () => { setSettings(DEFAULT_PF_ANALYSIS_SETTINGS); setPfAnalysisSettings(DEFAULT_PF_ANALYSIS_SETTINGS); run(false, DEFAULT_PF_ANALYSIS_SETTINGS); };
+
   const totals = data?.totals;
   const rows = (data?.holdings || []) as any[];
   const ai = data?.ai;
@@ -112,8 +129,17 @@ export default function PortfolioAnalysis({ market }: { market: PortfolioMarket 
           <p className="text-[13px] text-slate-500 font-medium mt-0.5">
             Technical health of every holding + a professional AI analyst read — {market}
           </p>
+          <div className="flex flex-wrap gap-1.5 mt-2">
+            <span className="px-2 py-0.5 rounded-full text-[10.5px] font-bold border border-indigo-200 bg-indigo-50 text-indigo-700">{settings.style}</span>
+            <span className="px-2 py-0.5 rounded-full text-[10.5px] font-bold border border-slate-200 bg-slate-50 text-slate-600">{settings.risk} · {settings.horizon}</span>
+            <span className="px-2 py-0.5 rounded-full text-[10.5px] font-bold border border-slate-200 bg-slate-50 text-slate-600 tabular-nums">RSI {settings.rsiOverbought}/{settings.rsiOversold} · ADX {settings.adxTrend}</span>
+          </div>
         </div>
         <div className="flex items-center gap-2">
+          <button onClick={() => setShowSettings((v) => !v)}
+            className={`inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-black border transition ${showSettings ? "border-indigo-300 bg-indigo-50 text-indigo-700" : "border-slate-200 bg-white text-slate-700 hover:bg-slate-50"}`}>
+            <SlidersHorizontal className="w-3.5 h-3.5" /> Customize
+          </button>
           <button onClick={() => run(false)} disabled={loading}
             className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-black border border-slate-200 bg-white text-slate-700 hover:bg-slate-50 disabled:opacity-50">
             <RefreshCw className={`w-3.5 h-3.5 ${loading ? "animate-spin" : ""}`} /> Refresh
@@ -125,6 +151,42 @@ export default function PortfolioAnalysis({ market }: { market: PortfolioMarket 
           </button>
         </div>
       </div>
+
+      {/* Customize panel — your thresholds & profile drive the signals + AI report */}
+      {showSettings && (
+        <div className="bg-white rounded-2xl border border-indigo-200 shadow-sm p-5">
+          <div className="flex items-center gap-2 mb-3">
+            <SlidersHorizontal className="w-4 h-4 text-indigo-600" />
+            <h3 className="text-sm font-black text-slate-800">Customize the analysis</h3>
+            <span className="text-[11px] text-slate-400 font-medium">Signals &amp; the AI report follow these — not generic defaults.</span>
+          </div>
+          <div className="grid sm:grid-cols-3 gap-3 mb-4">
+            <NumField label="RSI overbought ≥" value={settings.rsiOverbought} min={50} max={95} onChange={(v) => setF("rsiOverbought", v)} />
+            <NumField label="RSI oversold ≤" value={settings.rsiOversold} min={5} max={50} onChange={(v) => setF("rsiOversold", v)} />
+            <NumField label="Trend when ADX ≥" value={settings.adxTrend} min={10} max={50} onChange={(v) => setF("adxTrend", v)} />
+            <SelField label="Investing style" value={settings.style} opts={STYLE_OPTS} onChange={(v) => setF("style", v)} />
+            <SelField label="Risk tolerance" value={settings.risk} opts={RISK_OPTS} onChange={(v) => setF("risk", v)} />
+            <SelField label="Time horizon" value={settings.horizon} opts={HORIZON_OPTS} onChange={(v) => setF("horizon", v)} />
+          </div>
+          <div className="mb-4">
+            <label className="block text-[11px] font-black uppercase tracking-wide text-slate-400 mb-1">Focus (optional) — what should the analyst pay attention to?</label>
+            <input value={settings.focus} onChange={(e) => setF("focus", e.target.value)}
+              placeholder="e.g. flag anything losing momentum, watch my tech concentration, dividend safety…"
+              className="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg text-sm font-medium focus:ring-2 focus:ring-indigo-200 outline-none" />
+          </div>
+          <div className="flex items-center gap-2">
+            <button onClick={applySettings} disabled={loading}
+              className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-black bg-indigo-600 text-white hover:bg-indigo-700 disabled:opacity-50">
+              {loading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Sparkles className="w-3.5 h-3.5" />} Apply &amp; refresh
+            </button>
+            <button onClick={resetSettings}
+              className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-black border border-slate-200 bg-white text-slate-600 hover:bg-slate-50">
+              <RotateCcw className="w-3.5 h-3.5" /> Reset to defaults
+            </button>
+            <span className="text-[11px] text-slate-400 ml-1">Regenerate the AI report after applying to see it re-tailored.</span>
+          </div>
+        </div>
+      )}
 
       {err && <div className="text-[13px] text-rose-700 bg-rose-50 border border-rose-200 rounded-xl px-4 py-2.5">{err}</div>}
 
@@ -308,6 +370,29 @@ export default function PortfolioAnalysis({ market }: { market: PortfolioMarket 
         </div>
       )}
       {ai?.error && <div className="text-[13px] text-slate-500 bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5">{ai.error}</div>}
+    </div>
+  );
+}
+
+function NumField({ label, value, min, max, onChange }: { label: string; value: number; min: number; max: number; onChange: (v: number) => void }) {
+  return (
+    <div>
+      <label className="block text-[11px] font-black uppercase tracking-wide text-slate-400 mb-1">{label}</label>
+      <input type="number" min={min} max={max} value={value}
+        onChange={(e) => { const n = Number(e.target.value); if (!Number.isNaN(n)) onChange(Math.max(min, Math.min(max, n))); }}
+        className="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg text-sm font-bold tabular-nums focus:ring-2 focus:ring-indigo-200 outline-none" />
+    </div>
+  );
+}
+
+function SelField({ label, value, opts, onChange }: { label: string; value: string; opts: string[]; onChange: (v: string) => void }) {
+  return (
+    <div>
+      <label className="block text-[11px] font-black uppercase tracking-wide text-slate-400 mb-1">{label}</label>
+      <select value={value} onChange={(e) => onChange(e.target.value)}
+        className="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg text-sm font-bold focus:ring-2 focus:ring-indigo-200 outline-none">
+        {opts.map((o) => <option key={o} value={o}>{o}</option>)}
+      </select>
     </div>
   );
 }

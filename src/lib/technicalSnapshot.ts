@@ -110,8 +110,15 @@ const last = (a: (number | null)[]): number | null => {
 };
 const r2 = (v: number | null) => (v == null ? null : Math.round(v * 100) / 100);
 
+export type SnapshotOpts = { rsiOverbought?: number; rsiOversold?: number; adxTrend?: number };
+
 // Build the latest-bar technical snapshot + human-readable signals from OHLC.
-export function buildSnapshot(candles: { high: number; low: number; close: number }[]): TechSnapshot {
+// Thresholds default to the classic 70 / 30 / 25 but the caller can override
+// them so signals follow the user's own settings.
+export function buildSnapshot(candles: { high: number; low: number; close: number }[], opts: SnapshotOpts = {}): TechSnapshot {
+  const OB = opts.rsiOverbought ?? 70;
+  const OS = opts.rsiOversold ?? 30;
+  const ADX_TREND = opts.adxTrend ?? 25;
   const empty: TechSnapshot = {
     ok: false, price: null, rsi: null, rsiPrev: null, adx: null, plusDI: null, minusDI: null,
     sma20: null, sma50: null, sma200: null, trend: "—", vsSma50Pct: null, vsSma200Pct: null, signals: [],
@@ -152,8 +159,8 @@ export function buildSnapshot(candles: { high: number; low: number; close: numbe
 
   const signals: Signal[] = [];
   if (rsiNow != null) {
-    if (rsiNow >= 70) signals.push({ key: "rsi-ob", label: `RSI ${Math.round(rsiNow)} · overbought`, tone: "warn" });
-    else if (rsiNow <= 30) signals.push({ key: "rsi-os", label: `RSI ${Math.round(rsiNow)} · oversold`, tone: "warn" });
+    if (rsiNow >= OB) signals.push({ key: "rsi-ob", label: `RSI ${Math.round(rsiNow)} · overbought`, tone: "warn" });
+    else if (rsiNow <= OS) signals.push({ key: "rsi-os", label: `RSI ${Math.round(rsiNow)} · oversold`, tone: "warn" });
     // Fresh cross of the 50 mid-line = momentum shift.
     if (rsiPrev != null) {
       if (rsiPrev < 50 && rsiNow >= 50) signals.push({ key: "rsi-up50", label: "RSI crossed above 50", tone: "bull" });
@@ -161,7 +168,7 @@ export function buildSnapshot(candles: { high: number; low: number; close: numbe
     }
   }
   if (adxNow != null) {
-    if (adxNow >= 25 && pdi != null && mdi != null) {
+    if (adxNow >= ADX_TREND && pdi != null && mdi != null) {
       if (pdi > mdi) signals.push({ key: "adx-bull", label: `Strong uptrend (ADX ${Math.round(adxNow)})`, tone: "bull" });
       else signals.push({ key: "adx-bear", label: `Strong downtrend (ADX ${Math.round(adxNow)})`, tone: "bear" });
     } else if (adxNow < 20) {

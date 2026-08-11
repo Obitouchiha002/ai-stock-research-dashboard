@@ -13,14 +13,20 @@ export const maxDuration = 60;
 
 type InHolding = { symbol: string; name?: string; shares?: number; buyPrice?: number; currentPrice?: number; market?: string };
 
-async function techFor(symbol: string): Promise<TechSnapshot | null> {
+type Settings = { rsiOverbought: number; rsiOversold: number; adxTrend: number; style: string; risk: string; horizon: string; focus: string };
+const DEFAULTS: Settings = { rsiOverbought: 70, rsiOversold: 30, adxTrend: 25, style: "Long-term investor", risk: "Balanced", horizon: "Long (years)", focus: "" };
+
+async function techFor(symbol: string, s: Settings): Promise<TechSnapshot | null> {
   try {
     const period1 = subDays(new Date(), 400).toISOString().split("T")[0];
     const chartRes = await yahooFinance.chart(symbol, { period1, interval: "1d" }).catch(() => null);
     const quotes = (chartRes as any)?.quotes || [];
     const rows = quotes.filter((q: any) => q && q.close != null && q.high != null && q.low != null);
     if (rows.length < 30) return null;
-    return buildSnapshot(rows.map((r: any) => ({ high: r.high, low: r.low, close: r.close })));
+    return buildSnapshot(
+      rows.map((r: any) => ({ high: r.high, low: r.low, close: r.close })),
+      { rsiOverbought: s.rsiOverbought, rsiOversold: s.rsiOversold, adxTrend: s.adxTrend },
+    );
   } catch {
     return null;
   }
@@ -32,12 +38,13 @@ export async function POST(req: NextRequest) {
     const holdings: InHolding[] = Array.isArray(body.holdings) ? body.holdings.slice(0, 20) : [];
     const market: string = body.market || "";
     const withAi: boolean = !!body.withAi;
+    const settings: Settings = { ...DEFAULTS, ...(body.settings || {}) };
     if (holdings.length === 0) return NextResponse.json({ error: "no holdings" }, { status: 400 });
 
-    // 1) Technical snapshot per holding (parallel).
+    // 1) Technical snapshot per holding (parallel), using the user's thresholds.
     const enriched = await Promise.all(
       holdings.map(async (h) => {
-        const tech = await techFor(h.symbol);
+        const tech = await techFor(h.symbol, settings);
         const price = h.currentPrice || tech?.price || h.buyPrice || 0;
         const shares = h.shares || 0;
         const value = shares * price;
@@ -63,8 +70,8 @@ export async function POST(req: NextRequest) {
     withTech.forEach((r) => {
       const t = r.tech!;
       if (t.trend in trendCounts) trendCounts[t.trend]++;
-      if (t.rsi != null && t.rsi >= 70) overbought++;
-      if (t.rsi != null && t.rsi <= 30) oversold++;
+      if (t.rsi != null && t.rsi >= settings.rsiOverbought) overbought++;
+      if (t.rsi != null && t.rsi <= settings.rsiOversold) oversold++;
       if (t.vsSma200Pct != null && t.vsSma200Pct < 0) belowSma200++;
       if (t.adx != null && t.adx < 20) weakTrend++;
     });
@@ -97,13 +104,21 @@ export async function POST(req: NextRequest) {
       }));
       const prompt = `You are a highly experienced, professional equity research analyst reviewing a client's ${market || ""} stock portfolio. You have deep experience reading technical conditions and market context.
 
+THIS CLIENT'S PROFILE — tailor EVERY point to it, do not give generic advice:
+- Investing style: ${settings.style}
+- Risk tolerance: ${settings.risk}
+- Time horizon: ${settings.horizon}
+- Their custom RSI thresholds: overbought ≥ ${settings.rsiOverbought}, oversold ≤ ${settings.rsiOversold}; trend confirmed when ADX ≥ ${settings.adxTrend}. Interpret every RSI/ADX value against THESE thresholds, not the textbook 70/30/25.
+${settings.focus ? `- What they specifically want you to focus on: "${settings.focus}" — address this directly.` : ""}
+Frame health, risk and what-to-monitor through the lens of a ${settings.risk.toLowerCase()} ${settings.style.toLowerCase()} with a ${settings.horizon.toLowerCase()} horizon. For example, a long-term investor cares less about a single overbought reading than a swing trader would.
+
 STRICT RULES:
 - Research and risk-education support ONLY. NEVER give buy/sell/hold recommendations, price targets, or predictions.
 - Use measured research language ("appears extended", "trend has weakened", "worth monitoring") — never directive language ("you should sell/buy").
 - Base every statement ONLY on the technical data provided plus general, well-known market context. Do not invent numbers.
-- Be specific and useful, like a seasoned analyst briefing a client.
+- Be specific and useful, like a seasoned analyst briefing THIS client.
 
-PORTFOLIO SUMMARY: total holdings ${totals.holdingsCount}, largest position ${totals.topPosition?.symbol || "-"} at ${concentrationPct}% weight, uptrend ${trendCounts.Uptrend} / downtrend ${trendCounts.Downtrend} / sideways ${trendCounts.Sideways}, ${overbought} overbought, ${oversold} oversold, ${belowSma200} below 200-DMA.
+PORTFOLIO SUMMARY: total holdings ${totals.holdingsCount}, largest position ${totals.topPosition?.symbol || "-"} at ${concentrationPct}% weight, uptrend ${trendCounts.Uptrend} / downtrend ${trendCounts.Downtrend} / sideways ${trendCounts.Sideways}, ${overbought} overbought (≥${settings.rsiOverbought}), ${oversold} oversold (≤${settings.rsiOversold}), ${belowSma200} below 200-DMA.
 HOLDINGS (technical): ${JSON.stringify(compact)}
 
 Return STRICT JSON with this shape:

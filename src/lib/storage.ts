@@ -819,6 +819,27 @@ export type PfTechSeen = Record<string, { signals: string[]; ts: number }>;
 export const getPfTechSeen = (): PfTechSeen => getParsedContext<PfTechSeen>("sa_pf_tech_seen", {});
 export const setPfTechSeen = (map: PfTechSeen) => setContext("sa_pf_tech_seen", map);
 
+// User-tunable settings for Portfolio → AI Analysis, so the technical signals
+// and the AI report follow the user's own thresholds / style — not generic ones.
+export type PfAnalysisSettings = {
+  rsiOverbought: number; // default 70
+  rsiOversold: number;   // default 30
+  adxTrend: number;      // default 25 — ADX above this = trending
+  style: string;         // e.g. Long-term investor / Swing trader / Position trader
+  risk: string;          // Conservative / Balanced / Aggressive
+  horizon: string;       // Short / Medium / Long
+  focus: string;         // free-text: what the analyst should pay attention to
+};
+export const DEFAULT_PF_ANALYSIS_SETTINGS: PfAnalysisSettings = {
+  rsiOverbought: 70, rsiOversold: 30, adxTrend: 25,
+  style: "Long-term investor", risk: "Balanced", horizon: "Long (years)", focus: "",
+};
+export const getPfAnalysisSettings = (): PfAnalysisSettings => ({
+  ...DEFAULT_PF_ANALYSIS_SETTINGS,
+  ...getParsedContext<Partial<PfAnalysisSettings>>("sa_pf_analysis_settings", {}),
+});
+export const setPfAnalysisSettings = (s: PfAnalysisSettings) => setContext("sa_pf_analysis_settings", s);
+
 // Symbols the user chose to hide from a Markets tab (incl. built-in indices).
 export const getMarketHidden = (): Record<string, string[]> =>
   getParsedContext<Record<string, string[]>>("sa_market_hidden", {});
