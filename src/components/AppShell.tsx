@@ -7,6 +7,7 @@ import VoiceTyping from "@/components/VoiceTyping";
 import PriceAlertMonitor from "@/components/PriceAlertMonitor";
 import SyncManager from "@/components/SyncManager";
 import ComboMonitor from "@/components/ComboMonitor";
+import PenKit from "@/components/PenKit";
 import { usePathname, useRouter } from "next/navigation";
 import {
   LayoutDashboard,
@@ -673,6 +674,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       <PriceAlertMonitor />
       <SyncManager />
       <ComboMonitor />
+      {/* Touch-only temporary marker pen (draw anywhere, erase, clear — not saved) */}
+      <PenKit />
     </div>
   );
 }
