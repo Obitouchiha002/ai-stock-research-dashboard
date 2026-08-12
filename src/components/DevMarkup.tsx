@@ -32,8 +32,6 @@ const SIZES = [2, 4, 8];
 const loadAll = (): Record<string, PageData> => { try { return JSON.parse(localStorage.getItem(STORE) || "{}"); } catch { return {}; } };
 const saveAll = (m: Record<string, PageData>) => { try { localStorage.setItem(STORE, JSON.stringify(m)); } catch { /* quota */ } };
 const mainEl = () => (typeof document !== "undefined" ? (document.querySelector("main") as HTMLElement | null) : null);
-// Padding offset of the scroll container so content coords line up with absolute children.
-const pad = (m: HTMLElement) => { const cs = getComputedStyle(m); return { l: parseFloat(cs.paddingLeft) || 0, t: parseFloat(cs.paddingTop) || 0 }; };
 
 export default function DevMarkup() {
   const pathname = usePathname() || "/";
@@ -90,15 +88,16 @@ export default function DevMarkup() {
     return () => { html.classList.remove("dev-markup-active"); document.removeEventListener("contextmenu", noCtx); document.removeEventListener("selectstart", noSel); document.removeEventListener("copy", noSel); document.removeEventListener("cut", noSel); };
   }, [dev]);
 
-  // Keep the canvas sized to the full scroll content (debounced).
+  // Resize the canvas only on real layout resize (not on every data update —
+  // that was the big lag source). The canvas is also re-sized on each pen-down.
   useEffect(() => {
     if (!dev || !host) return;
     let t: any;
-    const bump = () => { clearTimeout(t); t = setTimeout(() => setSizeTick((n) => n + 1), 150); };
+    const bump = () => { clearTimeout(t); t = setTimeout(() => setSizeTick((n) => n + 1), 200); };
     const ro = new ResizeObserver(bump); ro.observe(host);
-    const mo = new MutationObserver(bump); mo.observe(host, { childList: true, subtree: true });
+    window.addEventListener("resize", bump);
     setSizeTick((n) => n + 1);
-    return () => { clearTimeout(t); ro.disconnect(); mo.disconnect(); };
+    return () => { clearTimeout(t); ro.disconnect(); window.removeEventListener("resize", bump); };
   }, [dev, host]);
 
   const persist = useCallback((n: Note[], s: Stroke[]) => { const all = loadAll(); all[pathname] = { notes: n, strokes: s }; saveAll(all); }, [pathname]);
@@ -109,8 +108,9 @@ export default function DevMarkup() {
   const redo = () => { if (!future.current.length) return; past.current = [...past.current, strokesRef.current]; const nxt = future.current[0]; future.current = future.current.slice(1); commitStrokes(nxt); setHist((n) => n + 1); };
   const clearAll = () => { if (!confirm("Clear all marks & notes on this page?")) return; snapshot(); setNotes([]); commitStrokes([]); persist([], []); };
 
-  // Client point -> content coordinate (relative to main's padding box + scroll).
-  const toContent = (cx: number, cy: number): Pt => { const m = host || mainEl(); if (!m) return { x: cx, y: cy }; const r = m.getBoundingClientRect(); const p = pad(m); return { x: cx - r.left - p.l + m.scrollLeft, y: cy - r.top - p.t + m.scrollTop }; };
+  // Client point -> content coordinate. The canvas sits at main's padding-box
+  // origin (absolute 0,0), so no padding offset — this keeps the ink on the nib.
+  const toContent = (cx: number, cy: number): Pt => { const m = host || mainEl(); if (!m) return { x: cx, y: cy }; const r = m.getBoundingClientRect(); return { x: cx - r.left + m.scrollLeft, y: cy - r.top + m.scrollTop }; };
 
   // Draw all strokes (content coords == canvas pixels).
   const redraw = useCallback(() => {
@@ -140,19 +140,32 @@ export default function DevMarkup() {
   const isDrawTool = tool === "pen" || tool === "highlight" || tool === "line" || tool === "arrow" || tool === "rect";
   const eraseAt = (p: Pt) => { const th = 14 + size; const kept = strokesRef.current.filter((st) => !st.pts.some((q) => Math.hypot(q.x - p.x, q.y - p.y) < th) && !(st.kind === "rect" && p.x > Math.min(st.pts[0].x, st.pts[1].x) - th && p.x < Math.max(st.pts[0].x, st.pts[1].x) + th && p.y > Math.min(st.pts[0].y, st.pts[1].y) - th && p.y < Math.max(st.pts[0].y, st.pts[1].y) + th)); if (kept.length !== strokesRef.current.length) commitStrokes(kept); };
 
+  const coalesced = (e: React.PointerEvent): { x: number; y: number }[] => {
+    const evs = (e.nativeEvent as any).getCoalescedEvents?.() as PointerEvent[] | undefined;
+    const list = evs && evs.length ? evs : [e.nativeEvent as any];
+    return list.map((ev) => ({ x: ev.clientX, y: ev.clientY }));
+  };
   const canvasDown = (e: React.PointerEvent) => {
     if (tool === "eraser") { erasing.current = true; snapshot(); eraseAt(toContent(e.clientX, e.clientY)); return; }
     if (!isDrawTool) return; e.preventDefault();
+    redraw(); // ensure the canvas covers the current content before drawing
     const p = toContent(e.clientX, e.clientY);
-    cur.current = { kind: tool === "pen" ? "free" : (tool as Kind), color, size, pts: [p, p] };
-    redraw();
+    cur.current = { kind: tool === "pen" ? "free" : (tool as Kind), color, size, pts: [p] };
   };
   const canvasMove = (e: React.PointerEvent) => {
-    if (tool === "eraser") { if (erasing.current) eraseAt(toContent(e.clientX, e.clientY)); return; }
+    if (tool === "eraser") { if (erasing.current) coalesced(e).forEach((c) => eraseAt(toContent(c.x, c.y))); return; }
     if (!cur.current) return; e.preventDefault();
-    const p = toContent(e.clientX, e.clientY);
-    if (cur.current.kind === "free" || cur.current.kind === "highlight") cur.current.pts.push(p); else cur.current.pts = [cur.current.pts[0], p];
-    redraw();
+    const st = cur.current;
+    if (st.kind === "free") {
+      // Incremental draw — captures every coalesced Pencil sample, no full redraw.
+      const ctx = canvasRef.current?.getContext("2d");
+      if (ctx) { ctx.strokeStyle = st.color; ctx.lineWidth = st.size; ctx.lineCap = "round"; ctx.lineJoin = "round"; }
+      coalesced(e).forEach((c) => { const p = toContent(c.x, c.y); const last = st.pts[st.pts.length - 1]; st.pts.push(p); if (ctx && last) { ctx.beginPath(); ctx.moveTo(last.x, last.y); ctx.lineTo(p.x, p.y); ctx.stroke(); } });
+    } else {
+      const p = toContent(e.clientX, e.clientY);
+      if (st.kind === "highlight") st.pts.push(p); else st.pts = [st.pts[0], p];
+      redraw();
+    }
   };
   const canvasUp = () => { if (tool === "eraser") { erasing.current = false; return; } if (cur.current && cur.current.pts.length >= 2) { snapshot(); commitStrokes([...strokesRef.current, cur.current]); } cur.current = null; redraw(); };
 
