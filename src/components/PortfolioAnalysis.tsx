@@ -41,7 +41,8 @@ const RISK_LEVEL: Record<string, string> = {
   High: "text-rose-700 bg-rose-50 border-rose-300",
 };
 
-export default function PortfolioAnalysis({ market }: { market: PortfolioMarket }) {
+type Holdingish = { symbol: string; name?: string; shares?: number; buyPrice?: number; currentPrice?: number; market?: string };
+export default function PortfolioAnalysis({ market, holdingsOverride, hideFundamental, label }: { market: string; holdingsOverride?: Holdingish[]; hideFundamental?: boolean; label?: string }) {
   const [loading, setLoading] = useState(false);
   const [aiLoading, setAiLoading] = useState(false);
   const [data, setData] = useState<any | null>(null);
@@ -55,10 +56,11 @@ export default function PortfolioAnalysis({ market }: { market: PortfolioMarket 
   const [openRow, setOpenRow] = useState<string | null>(null);
   useEffect(() => { setSettings(getPfAnalysisSettings()); }, []);
 
-  const holdings = useMemo(() => getPortfolio().filter((h) => h.market === market), [market]);
+  const holdings = useMemo<Holdingish[]>(() => holdingsOverride ?? getPortfolio().filter((h) => h.market === market), [holdingsOverride, market]);
+  const sig = useMemo(() => holdings.map((h) => h.symbol).join(","), [holdings]);
 
   const run = async (withAi: boolean, over?: PfAnalysisSettings, tfOver?: "1d" | "1h") => {
-    if (holdings.length === 0) { setErr("No holdings in this market yet."); return; }
+    if (holdings.length === 0) { setErr(hideFundamental ? "No symbols to analyze." : "No holdings in this market yet."); return; }
     const cfg = over || settings;
     const tf = tfOver || timeframe;
     withAi ? setAiLoading(true) : setLoading(true);
@@ -105,8 +107,8 @@ export default function PortfolioAnalysis({ market }: { market: PortfolioMarket 
     }
   };
 
-  // Auto-load the fast technical watch on open (no AI call).
-  useEffect(() => { setData(null); setNewBySymbol({}); if (holdings.length) run(false); /* eslint-disable-next-line */ }, [market]);
+  // Auto-load the fast technical watch on open / when the symbol set changes.
+  useEffect(() => { setData(null); setNewBySymbol({}); if (holdings.length) run(false); /* eslint-disable-next-line */ }, [sig, market]);
 
   const switchTf = (tf: "1d" | "1h") => { if (tf === timeframe) return; setTimeframe(tf); setNewBySymbol({}); run(false, undefined, tf); };
   const setF = (k: keyof PfAnalysisSettings, v: any) => setSettings((s) => ({ ...s, [k]: v }));
@@ -121,27 +123,29 @@ export default function PortfolioAnalysis({ market }: { market: PortfolioMarket 
   return (
     <div className="space-y-5">
       {/* Technical / Fundamental sub-toggle */}
-      <div className="flex rounded-xl bg-slate-100 p-1 w-fit">
-        {(["technical", "fundamental"] as const).map((m) => (
-          <button key={m} onClick={() => setMode(m)}
-            className={`px-4 py-1.5 rounded-lg text-xs font-black transition ${mode === m ? "bg-white text-indigo-700 shadow-sm" : "text-slate-500 hover:text-slate-700"}`}>
-            {m === "technical" ? "📈 Technical" : "🏛 Fundamental"}
-          </button>
-        ))}
-      </div>
+      {!hideFundamental && (
+        <div className="flex rounded-xl bg-slate-100 p-1 w-fit">
+          {(["technical", "fundamental"] as const).map((m) => (
+            <button key={m} onClick={() => setMode(m)}
+              className={`px-4 py-1.5 rounded-lg text-xs font-black transition ${mode === m ? "bg-white text-indigo-700 shadow-sm" : "text-slate-500 hover:text-slate-700"}`}>
+              {m === "technical" ? "📈 Technical" : "🏛 Fundamental"}
+            </button>
+          ))}
+        </div>
+      )}
 
-      {mode === "fundamental" ? (
-        <PortfolioFundamentals market={market} />
+      {mode === "fundamental" && !hideFundamental ? (
+        <PortfolioFundamentals market={market as PortfolioMarket} />
       ) : (
       <>
       {/* Header */}
       <div className="flex flex-wrap items-center justify-between gap-3 bg-gradient-to-br from-indigo-50 to-white rounded-2xl border border-indigo-100 p-5">
         <div>
           <h2 className="text-xl font-black text-slate-900 flex items-center gap-2">
-            <Activity className="w-5 h-5 text-indigo-600" /> Advanced Portfolio Analysis
+            <Activity className="w-5 h-5 text-indigo-600" /> {label || "Advanced Portfolio Analysis"}
           </h2>
           <p className="text-[13px] text-slate-500 font-medium mt-0.5">
-            Technical health of every holding + a professional AI analyst read — {market}
+            Technical health of every {hideFundamental ? "symbol" : "holding"} + a professional AI analyst read — {market}
           </p>
           <div className="flex flex-wrap gap-1.5 mt-2">
             <span className="px-2 py-0.5 rounded-full text-[10.5px] font-bold border border-indigo-200 bg-indigo-50 text-indigo-700">{settings.style}</span>

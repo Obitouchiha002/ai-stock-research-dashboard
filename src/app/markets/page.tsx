@@ -5,6 +5,7 @@ import Link from "next/link";
 import { Globe, RefreshCw, IndianRupee, Coins, Bitcoin, Plus, Trash2, Star, GripVertical, Search, Pencil } from "lucide-react";
 import StockEditor, { parseTriggers, type EditorValue } from "@/components/StockEditor";
 import RemarksEditor from "@/components/RemarksEditor";
+import PortfolioAnalysis from "@/components/PortfolioAnalysis";
 
 type RemarksEdit = { title: string; subtitle?: string; value: string; onSave: (t: string) => void };
 import {
@@ -220,6 +221,7 @@ export default function MarketsPage() {
   const [updatedAt, setUpdatedAt] = useState<number | null>(mktCache.at || null);
   const [auto, setAuto] = useState(false);
   const [tab, setTab] = useState("us");
+  const [mktView, setMktView] = useState<"quotes" | "technical">("quotes");
   // user's own symbols ("Custom" tab)
   const [custom, setCustom] = useState<{ symbol: string; label: string }[]>([]);
   const [marks, setMarks] = useState<Record<string, string>>({});
@@ -542,7 +544,15 @@ export default function MarketsPage() {
           <p className="text-slate-500 mt-1 font-medium">Live Indian &amp; global indices, commodities and crypto.</p>
         </div>
         <div className="flex items-center gap-3">
-          {updatedAt && !loadError && (
+          <div className="flex rounded-lg bg-slate-100 p-1">
+            {(["quotes", "technical"] as const).map((v) => (
+              <button key={v} onClick={() => setMktView(v)}
+                className={`px-3 py-1.5 rounded-md text-xs font-black transition ${mktView === v ? "bg-white text-indigo-700 shadow-sm" : "text-slate-500 hover:text-slate-700"}`}>
+                {v === "quotes" ? "Quotes" : "📈 Technical"}
+              </button>
+            ))}
+          </div>
+          {updatedAt && !loadError && mktView === "quotes" && (
             <span className="text-xs text-slate-400 font-medium">Updated {agoLabel(updatedAt)}</span>
           )}
           {loadError && (
@@ -596,6 +606,17 @@ export default function MarketsPage() {
           </button>
         </div>
 
+        {mktView === "technical" ? (
+          <div className="p-5">
+            <PortfolioAnalysis
+              market={tab === "in" ? "Indian Stocks" : "US Stocks"}
+              holdingsOverride={baseRows.map((r) => ({ symbol: r.symbol, name: r.label }))}
+              hideFundamental
+              label={`${isCustomTab ? "Custom" : active?.title || "Market"} · Technical Analysis`}
+            />
+          </div>
+        ) : (
+        <>
         {/* Add your own symbol into whichever tab is open */}
         <div className="px-5 py-3 bg-slate-50 border-b border-slate-100 flex flex-wrap items-center gap-2">
             <span className="text-[11px] font-black uppercase tracking-wide text-slate-400">
@@ -844,6 +865,8 @@ export default function MarketsPage() {
             </tbody>
           </table>
         </div>
+        </>
+        )}
       </div>
 
       <p className="mt-4 text-[11px] text-slate-400 italic">
