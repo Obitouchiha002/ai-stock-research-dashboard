@@ -70,7 +70,7 @@ export async function POST(req: NextRequest) {
     await mapLimit(positions, 8, async (p) => {
       try {
         const s: any = await yahooFinance.quoteSummary(p.symbol, {
-          modules: ["assetProfile", "summaryDetail", "financialData", "defaultKeyStatistics", "earnings"],
+          modules: ["assetProfile", "summaryDetail", "financialData", "defaultKeyStatistics", "earnings", "cashflowStatementHistory", "incomeStatementHistory", "price"],
         });
         funda[p.symbol] = s;
       } catch { funda[p.symbol] = null; }
@@ -83,19 +83,40 @@ export async function POST(req: NextRequest) {
       const sd = f.summaryDetail || {};
       const fd = f.financialData || {};
       const ks = f.defaultKeyStatistics || {};
-      const mc = typeof qi.marketCap === "number" ? qi.marketCap : (sd.marketCap ?? null);
-      const beta = typeof sd.beta === "number" ? sd.beta : (typeof ks.beta === "number" ? ks.beta : null);
-      const tpe = typeof qi.trailingPE === "number" && qi.trailingPE > 0 ? qi.trailingPE : (sd.trailingPE > 0 ? sd.trailingPE : null);
-      const fpe = typeof qi.forwardPE === "number" && qi.forwardPE > 0 ? qi.forwardPE : (ks.forwardPE > 0 ? ks.forwardPE : null);
-      const revGrowthYoY = pctNorm(fd.revenueGrowth);
-      const earnGrowthYoY = pctNorm(fd.earningsGrowth ?? ks.earningsQuarterlyGrowth);
-      const opCF = typeof fd.operatingCashflow === "number" ? fd.operatingCashflow : null;
-      const netInc = typeof ks.netIncomeToCommon === "number" ? ks.netIncomeToCommon : null;
+      const pr = f.price || {};
+      const num = (...vals: any[]) => { for (const v of vals) if (typeof v === "number" && !Number.isNaN(v)) return v; return null; };
+      const pos = (...vals: any[]) => { for (const v of vals) if (typeof v === "number" && v > 0) return v; return null; };
+      const price = num(qi.regularMarketPrice, fd.currentPrice, pr.regularMarketPrice);
+      const mc = num(qi.marketCap, sd.marketCap, pr.marketCap);
+      const beta = num(sd.beta, ks.beta, qi.beta);
+      const epsT = num(ks.trailingEps, qi.epsTrailingTwelveMonths);
+      const epsF = num(ks.forwardEps, qi.epsForward);
+      // PE: reported → else compute price / eps.
+      let tpe = pos(qi.trailingPE, sd.trailingPE);
+      if (tpe == null && price != null && epsT != null && epsT > 0) tpe = price / epsT;
+      let fpe = pos(qi.forwardPE, ks.forwardPE, sd.forwardPE);
+      if (fpe == null && price != null && epsF != null && epsF > 0) fpe = price / epsF;
+      // Revenue growth YoY: financialData → else last two yearly revenues.
+      let revGrowthYoY = pctNorm(fd.revenueGrowth);
+      const yearly = f.earnings?.financialsChart?.yearly;
+      if (revGrowthYoY == null && Array.isArray(yearly) && yearly.length >= 2) {
+        const c = yearly[yearly.length - 1]?.revenue, pV = yearly[yearly.length - 2]?.revenue;
+        if (typeof c === "number" && typeof pV === "number" && pV > 0) revGrowthYoY = Math.round(((c - pV) / pV) * 1000) / 10;
+      }
+      // Earnings growth YoY: financialData → quarterly growth → last two yearly earnings.
+      let earnGrowthYoY = pctNorm(fd.earningsGrowth ?? ks.earningsQuarterlyGrowth);
+      if (earnGrowthYoY == null && Array.isArray(yearly) && yearly.length >= 2) {
+        const c = yearly[yearly.length - 1]?.earnings, pV = yearly[yearly.length - 2]?.earnings;
+        if (typeof c === "number" && typeof pV === "number" && pV > 0) earnGrowthYoY = Math.round(((c - pV) / pV) * 1000) / 10;
+      }
+      // CFO/PAT: financialData opCF → cashflow statement; netIncome from keyStats → income statement.
+      const cfList = f.cashflowStatementHistory?.cashflowStatements;
+      const isList = f.incomeStatementHistory?.incomeStatementHistory;
+      const opCF = num(fd.operatingCashflow, Array.isArray(cfList) ? cfList[0]?.totalCashFromOperatingActivities : null);
+      const netInc = num(ks.netIncomeToCommon, Array.isArray(isList) ? isList[0]?.netIncome : null);
       const cfoToPat = opCF != null && netInc != null && netInc > 0 ? Math.round((opCF / netInc) * 100) / 100 : null;
       const profitMargin = pctNorm(fd.profitMargins);
       const roe = pctNorm(fd.returnOnEquity);
-      const epsT = typeof ks.trailingEps === "number" ? ks.trailingEps : null;
-      const epsF = typeof ks.forwardEps === "number" ? ks.forwardEps : null;
       const fwdEarnGrowth = epsT != null && epsF != null && epsT > 0 ? Math.round(((epsF - epsT) / Math.abs(epsT)) * 1000) / 10 : null;
       // QoQ revenue from quarterly earnings chart.
       let revQoQ: number | null = null;
