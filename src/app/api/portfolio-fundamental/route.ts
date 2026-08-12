@@ -58,11 +58,16 @@ export async function POST(req: NextRequest) {
     const symbols = positions.map((p) => p.symbol);
     const totalW = positions.reduce((s, p) => s + p.value, 0) || 1;
 
-    // 1) Quote for marketCap / PE / EPS — CHUNKED (a single 74-symbol call is
+    // For Indian holdings stored without a suffix, try the NSE (.NS) then BSE
+    // (.BO) listing so bare tickers like RELIANCE / TCS resolve on Yahoo.
+    const candOf = (s: string) => (s.includes(".") ? [s] : india ? [`${s}.NS`, `${s}.BO`] : [s]);
+    const allCands = Array.from(new Set(positions.flatMap((p) => candOf(p.symbol))));
+
+    // 1) Quote for marketCap / PE / EPS — CHUNKED (a single big call is
     //    unreliable / can be truncated by Yahoo), each chunk retried once.
     const q: Record<string, any> = {};
     const chunks: string[][] = [];
-    for (let i = 0; i < symbols.length; i += 20) chunks.push(symbols.slice(i, i + 20));
+    for (let i = 0; i < allCands.length; i += 20) chunks.push(allCands.slice(i, i + 20));
     await Promise.all(chunks.map(async (ch) => {
       for (let attempt = 0; attempt < 2; attempt++) {
         try {
@@ -73,12 +78,20 @@ export async function POST(req: NextRequest) {
       }
     }));
 
-    // 2) quoteSummary per holding for the fundamentals — retried once.
+    // Resolve each holding to the Yahoo symbol that actually returned data.
+    const ySymOf: Record<string, string> = {};
+    positions.forEach((p) => {
+      const cands = candOf(p.symbol);
+      ySymOf[p.symbol] = cands.find((c) => q[c] && (typeof q[c].regularMarketPrice === "number" || typeof q[c].marketCap === "number")) || cands[0];
+    });
+
+    // 2) quoteSummary per holding (on the resolved symbol) — retried once.
     const funda: Record<string, any> = {};
     await mapLimit(positions, 6, async (p) => {
+      const y = ySymOf[p.symbol];
       for (let attempt = 0; attempt < 2; attempt++) {
         try {
-          const s: any = await yahooFinance.quoteSummary(p.symbol, {
+          const s: any = await yahooFinance.quoteSummary(y, {
             modules: ["assetProfile", "summaryDetail", "financialData", "defaultKeyStatistics", "earnings", "cashflowStatementHistory", "incomeStatementHistory", "price"],
           });
           funda[p.symbol] = s;
@@ -90,7 +103,7 @@ export async function POST(req: NextRequest) {
 
     // 3) Build per-stock fundamentals.
     const stocks = positions.map((p) => {
-      const qi = q[p.symbol] || {};
+      const qi = q[ySymOf[p.symbol]] || {};
       const f = funda[p.symbol] || {};
       const sd = f.summaryDetail || {};
       const fd = f.financialData || {};
@@ -197,7 +210,7 @@ export async function POST(req: NextRequest) {
         const returns: Record<string, number[]> = {};
         await mapLimit(corrSymbols, 8, async (sym) => {
           try {
-            const ch: any = await yahooFinance.chart(sym, { period1, interval: "1d" }).catch(() => null);
+            const ch: any = await yahooFinance.chart(ySymOf[sym] || sym, { period1, interval: "1d" }).catch(() => null);
             const closes = (ch?.quotes || []).filter((r: any) => r?.close != null).map((r: any) => r.close);
             const ret: number[] = [];
             for (let i = 1; i < closes.length; i++) ret.push((closes[i] - closes[i - 1]) / closes[i - 1]);
