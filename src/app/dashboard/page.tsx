@@ -21,6 +21,7 @@ import {
 import { ResponsiveContainer, AreaChart, Area } from "recharts";
 import { motion } from "motion/react";
 import { useGlobal } from "@/context/GlobalContext";
+import PortfolioAnalysis from "@/components/PortfolioAnalysis";
 
 // Market overview — live indices, split by market.
 // One live market board with an India / US tab switch, plus a crypto strip.
@@ -185,6 +186,7 @@ export default function Dashboard() {
   const [myMovers, setMyMovers] = useState<any[]>([]);
   const [moversLoading, setMoversLoading] = useState(true);
   const [mktTab, setMktTab] = useState<"india" | "us">("india");
+  const [dashTech, setDashTech] = useState(false);
   // Breadth quotes per market — fetched lazily when a tab is first opened.
   const [breadth, setBreadth] = useState<Record<string, Record<string, any>>>({ india: {}, us: {} });
 
@@ -570,12 +572,31 @@ export default function Dashboard() {
                 transition={{ duration: 0.4, delay: 0.32, ease: "easeOut" }}
                 className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden"
               >
-                <div className="px-4 py-3.5 border-b border-slate-100 flex items-center justify-between">
+                <div className="px-4 py-3.5 border-b border-slate-100 flex items-center justify-between gap-3">
                   <h3 className="text-[16px] font-black text-slate-900 tracking-tight">
-                    Top 10 {m.title} companies · by market cap
+                    Top 10 {m.title} companies{dashTech ? " · technical" : " · by market cap"}
                   </h3>
-                  <span className="text-[11px] text-indigo-500 font-black">tap to analyse →</span>
+                  <div className="flex rounded-lg bg-slate-100 p-0.5 shrink-0">
+                    {([["quotes", "Quotes"], ["tech", "📈 Technical"]] as const).map(([k, lbl]) => (
+                      <button key={k} onClick={() => setDashTech(k === "tech")}
+                        className={`px-2.5 py-1 rounded-md text-[11px] font-black transition ${(dashTech ? "tech" : "quotes") === k ? "bg-white text-indigo-700 shadow-sm" : "text-slate-500 hover:text-slate-700"}`}>
+                        {lbl}
+                      </button>
+                    ))}
+                  </div>
                 </div>
+                {dashTech ? (
+                  <div className="p-4">
+                    <PortfolioAnalysis
+                      market={mktTab === "us" ? "US Stocks" : "Indian Stocks"}
+                      holdingsOverride={m.stocks.map((s) => ({ symbol: s.symbol, name: s.label }))}
+                      hideFundamental
+                      label={`Top 10 ${m.title} · Technical Analysis`}
+                    />
+                  </div>
+                ) : (
+                <>
+
                 {/* column header (hidden on phones — the card layout stacks) */}
                 <div className="hidden sm:grid grid-cols-[2.5rem_1.8fr_1.2fr_1.2fr_1fr_1.25rem] items-center gap-4 px-4 py-2.5 border-b-2 border-slate-100 bg-slate-50 text-[12px] font-black uppercase tracking-wide text-slate-600">
                   <span>#</span>
@@ -629,6 +650,8 @@ export default function Dashboard() {
                     );
                   })}
                 </div>
+                </>
+                )}
               </motion.div>
             </div>
           );
