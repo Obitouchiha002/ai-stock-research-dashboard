@@ -11,6 +11,7 @@ import {
   getPfAnalysisSettings, setPfAnalysisSettings, DEFAULT_PF_ANALYSIS_SETTINGS,
   type PortfolioMarket, type PfAnalysisSettings,
 } from "@/lib/storage";
+import PortfolioFundamentals from "@/components/PortfolioFundamentals";
 
 const STYLE_OPTS = ["Long-term investor", "Position trader", "Swing trader", "Day trader"];
 const RISK_OPTS = ["Conservative", "Balanced", "Aggressive"];
@@ -50,6 +51,7 @@ export default function PortfolioAnalysis({ market }: { market: PortfolioMarket 
   const [settings, setSettings] = useState<PfAnalysisSettings>(DEFAULT_PF_ANALYSIS_SETTINGS);
   const [showSettings, setShowSettings] = useState(false);
   const [timeframe, setTimeframe] = useState<"1d" | "1h">("1d");
+  const [mode, setMode] = useState<"technical" | "fundamental">("technical");
   useEffect(() => { setSettings(getPfAnalysisSettings()); }, []);
 
   const holdings = useMemo(() => getPortfolio().filter((h) => h.market === market), [market]);
@@ -117,6 +119,20 @@ export default function PortfolioAnalysis({ market }: { market: PortfolioMarket 
 
   return (
     <div className="space-y-5">
+      {/* Technical / Fundamental sub-toggle */}
+      <div className="flex rounded-xl bg-slate-100 p-1 w-fit">
+        {(["technical", "fundamental"] as const).map((m) => (
+          <button key={m} onClick={() => setMode(m)}
+            className={`px-4 py-1.5 rounded-lg text-xs font-black transition ${mode === m ? "bg-white text-indigo-700 shadow-sm" : "text-slate-500 hover:text-slate-700"}`}>
+            {m === "technical" ? "📈 Technical" : "🏛 Fundamental"}
+          </button>
+        ))}
+      </div>
+
+      {mode === "fundamental" ? (
+        <PortfolioFundamentals market={market} />
+      ) : (
+      <>
       {/* Header */}
       <div className="flex flex-wrap items-center justify-between gap-3 bg-gradient-to-br from-indigo-50 to-white rounded-2xl border border-indigo-100 p-5">
         <div>
@@ -454,6 +470,8 @@ export default function PortfolioAnalysis({ market }: { market: PortfolioMarket 
         </div>
       )}
       {ai?.error && <div className="text-[13px] text-slate-500 bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5">{ai.error}</div>}
+      </>
+      )}
     </div>
   );
 }
