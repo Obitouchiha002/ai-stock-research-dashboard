@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import {
   Activity, Sparkles, RefreshCw, AlertTriangle, Bell, ShieldAlert,
@@ -54,15 +54,26 @@ export default function PortfolioAnalysis({ market, holdingsOverride, hideFundam
   const [timeframe, setTimeframe] = useState<"1d" | "1h">("1d");
   const [mode, setMode] = useState<"technical" | "fundamental">("technical");
   const [openRow, setOpenRow] = useState<string | null>(null);
-  useEffect(() => { setSettings(getPfAnalysisSettings()); }, []);
+  const [ready, setReady] = useState(false);
+  // Cache results per {timeframe|symbol-set} so toggling Daily↔Hourly or
+  // switching markets/tabs and back is instant (5-minute freshness).
+  const cacheRef = useRef<Record<string, { j: any; at: number }>>({});
+  const CACHE_TTL = 5 * 60 * 1000;
+  useEffect(() => { setSettings(getPfAnalysisSettings()); setReady(true); }, []);
 
   const holdings = useMemo<Holdingish[]>(() => holdingsOverride ?? getPortfolio().filter((h) => h.market === market), [holdingsOverride, market]);
   const sig = useMemo(() => holdings.map((h) => h.symbol).join(","), [holdings]);
 
-  const run = async (withAi: boolean, over?: PfAnalysisSettings, tfOver?: "1d" | "1h") => {
+  const run = async (withAi: boolean, over?: PfAnalysisSettings, tfOver?: "1d" | "1h", force = false) => {
     if (holdings.length === 0) { setErr(hideFundamental ? "No symbols to analyze." : "No holdings in this market yet."); return; }
     const cfg = over || settings;
     const tf = tfOver || timeframe;
+    const key = `${tf}|${sig}`;
+    // Serve a fresh cached result instantly (unless forcing or asking for AI).
+    if (!withAi && !force) {
+      const c = cacheRef.current[key];
+      if (c && Date.now() - c.at < CACHE_TTL) { setData(c.j); setNewBySymbol({}); setErr(""); return; }
+    }
     withAi ? setAiLoading(true) : setLoading(true);
     setErr("");
     try {
@@ -83,6 +94,7 @@ export default function PortfolioAnalysis({ market, holdingsOverride, hideFundam
       const j = await res.json();
       if (j.error && !j.holdings) { setErr(j.error); return; }
       setData(j);
+      cacheRef.current[key] = { j, at: Date.now() };
       if (j.ai && !j.ai.error) logAiUsageDetailed("Portfolio AI Analysis", { tokens: j.ai.aiTokens });
 
       // Diff signals vs last-seen to surface what changed, then update the baseline.
@@ -107,13 +119,16 @@ export default function PortfolioAnalysis({ market, holdingsOverride, hideFundam
     }
   };
 
-  // Auto-load the fast technical watch on open / when the symbol set changes.
-  useEffect(() => { setData(null); setNewBySymbol({}); if (holdings.length) run(false); /* eslint-disable-next-line */ }, [sig, market]);
+  // Auto-load the fast technical watch on open / when the symbol set changes —
+  // but only after saved settings have loaded, so the first run uses the user's
+  // own thresholds (not the defaults).
+  useEffect(() => { if (!ready) return; setData(null); setNewBySymbol({}); if (holdings.length) run(false); /* eslint-disable-next-line */ }, [sig, market, ready]);
 
   const switchTf = (tf: "1d" | "1h") => { if (tf === timeframe) return; setTimeframe(tf); setNewBySymbol({}); run(false, undefined, tf); };
   const setF = (k: keyof PfAnalysisSettings, v: any) => setSettings((s) => ({ ...s, [k]: v }));
-  const applySettings = () => { setPfAnalysisSettings(settings); setShowSettings(false); run(false, settings); };
-  const resetSettings = () => { setSettings(DEFAULT_PF_ANALYSIS_SETTINGS); setPfAnalysisSettings(DEFAULT_PF_ANALYSIS_SETTINGS); run(false, DEFAULT_PF_ANALYSIS_SETTINGS); };
+  // Thresholds change server-side output, so bypass the cache when applying them.
+  const applySettings = () => { setPfAnalysisSettings(settings); setShowSettings(false); cacheRef.current = {}; run(false, settings, undefined, true); };
+  const resetSettings = () => { setSettings(DEFAULT_PF_ANALYSIS_SETTINGS); setPfAnalysisSettings(DEFAULT_PF_ANALYSIS_SETTINGS); cacheRef.current = {}; run(false, DEFAULT_PF_ANALYSIS_SETTINGS, undefined, true); };
 
   const totals = data?.totals;
   const rows = (data?.holdings || []) as any[];
@@ -167,7 +182,7 @@ export default function PortfolioAnalysis({ market, holdingsOverride, hideFundam
             className={`inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-black border transition ${showSettings ? "border-indigo-300 bg-indigo-50 text-indigo-700" : "border-slate-200 bg-white text-slate-700 hover:bg-slate-50"}`}>
             <SlidersHorizontal className="w-3.5 h-3.5" /> Customize
           </button>
-          <button onClick={() => run(false)} disabled={loading}
+          <button onClick={() => run(false, undefined, undefined, true)} disabled={loading}
             className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-black border border-slate-200 bg-white text-slate-700 hover:bg-slate-50 disabled:opacity-50">
             <RefreshCw className={`w-3.5 h-3.5 ${loading ? "animate-spin" : ""}`} /> Refresh
           </button>
@@ -350,7 +365,7 @@ export default function PortfolioAnalysis({ market, holdingsOverride, hideFundam
                       <tr className="bg-indigo-50/30 border-b border-slate-200">
                         <td colSpan={6} className="px-5 py-3.5">
                           <div className="grid sm:grid-cols-2 gap-x-8 gap-y-2">
-                            {readLines(t, fresh).map((l, i) => (
+                            {readLines(t, timeframe).map((l, i) => (
                               <div key={i} className="text-[13px] leading-relaxed">
                                 <span className="font-black text-slate-700">{l.label}:</span>{" "}
                                 <span className="text-slate-600">{l.text}</span>
@@ -527,7 +542,10 @@ function SelField({ label, value, opts, onChange }: { label: string; value: stri
 }
 
 // Full written interpretation for one holding on the current timeframe.
-function readLines(t: any, _fresh: string[] = []): { label: string; text: string }[] {
+function readLines(t: any, tf: "1d" | "1h" = "1d"): { label: string; text: string }[] {
+  const hourly = tf === "1h";
+  const barUnit = hourly ? "bar" : "day"; // SMA period unit
+  const rangeLabel = hourly ? "recent-range" : "52-week"; // near-extreme label
   const lines: { label: string; text: string }[] = [];
   if (t.rsi != null) {
     const dir = t.rsiTrend === "rising" ? "rising" : t.rsiTrend === "falling" ? "falling" : t.rsiTrend === "stagnant" ? "flat / stagnant" : "";
@@ -543,12 +561,12 @@ function readLines(t: any, _fresh: string[] = []): { label: string; text: string
     lines.push({ label: "ADX / DI", text: `ADX ${t.adx}, +DI ${t.plusDI != null ? Math.round(t.plusDI) : "—"} / −DI ${t.minusDI != null ? Math.round(t.minusDI) : "—"} — ${who}${who ? ", " : ""}${strength}` });
   }
   if (t.volVs5Pct != null) {
-    lines.push({ label: "Volume", text: `${t.volVs5Pct > 0 ? "+" : ""}${Math.round(t.volVs5Pct)}% vs 5-day avg${t.volVs10Pct != null ? `, ${t.volVs10Pct > 0 ? "+" : ""}${Math.round(t.volVs10Pct)}% vs 10-day` : ""} — ${t.volRising ? "rising participation" : "fading volume"}` });
+    lines.push({ label: "Volume", text: `${t.volVs5Pct > 0 ? "+" : ""}${Math.round(t.volVs5Pct)}% vs 5-${barUnit} avg${t.volVs10Pct != null ? `, ${t.volVs10Pct > 0 ? "+" : ""}${Math.round(t.volVs10Pct)}% vs 10-${barUnit}` : ""} — ${t.volRising ? "rising participation" : "fading volume"}` });
   }
-  if (t.maStack) lines.push({ label: "Moving averages", text: `${t.maStack.label} — price read against the 10 / 20 / 50 / 200-day SMAs` });
+  if (t.maStack) lines.push({ label: "Moving averages", text: `${t.maStack.label} — price read against the 10 / 20 / 50 / 200-${barUnit} SMAs` });
   if ((t.patterns || []).length) lines.push({ label: "Candle", text: `${t.patterns[0].name} — ${t.patterns[0].meaning}` });
   else lines.push({ label: "Candle", text: "No notable formation right now" });
-  if (t.near52w) lines.push({ label: "Important", text: t.near52w === "high" ? "Trading near its 52-week high — watch for overhead resistance on higher timeframes" : "Trading near its 52-week low — watch for support / signs of capitulation" });
+  if (t.near52w) lines.push({ label: "Important", text: t.near52w === "high" ? `Trading near its ${rangeLabel} high — watch for overhead resistance${hourly ? "" : " on higher timeframes"}` : `Trading near its ${rangeLabel} low — watch for support / signs of capitulation` });
   if ((t.signals || []).length) lines.push({ label: "Signals", text: t.signals.map((s: any) => s.label).join(" · ") });
   if (t.overall) lines.push({ label: "Overall read", text: t.overall.label });
   return lines;

@@ -151,11 +151,19 @@ export async function POST(req: NextRequest) {
         if (typeof cur2 === "number" && typeof prev === "number" && prev > 0) revQoQ = Math.round(((cur2 - prev) / prev) * 1000) / 10;
       }
       const bucket = capBucket(mc, india);
+      const sector = f.assetProfile?.sector || "Unknown";
+      const isFinancial = /financ|bank|insur/i.test(sector) || /bank|financ|insur/i.test(f.assetProfile?.industry || "");
+      // A % growth off a near-zero base explodes into a meaningless figure
+      // (e.g. +9000%); drop anything beyond ±900% rather than mislead.
+      const sane = (v: number | null) => (v == null || Math.abs(v) > 900 ? null : v);
       return {
         symbol: p.symbol, weight: p.weight, plPct: p.plPct, value: p.value,
-        marketCap: mc, bucket, sector: f.assetProfile?.sector || "Unknown", industry: f.assetProfile?.industry || null,
+        marketCap: mc, bucket, sector, industry: f.assetProfile?.industry || null,
         beta: r2(beta), trailingPE: r2(tpe), forwardPE: r2(fpe),
-        revGrowthYoY, revQoQ, earnGrowthYoY, fwdEarnGrowth, cfoToPat, profitMargin, roe,
+        revGrowthYoY: sane(revGrowthYoY), revQoQ: sane(revQoQ), earnGrowthYoY: sane(earnGrowthYoY), fwdEarnGrowth: sane(fwdEarnGrowth),
+        // Operating cash flow isn't a quality signal for banks/insurers.
+        cfoToPat: isFinancial ? null : cfoToPat,
+        profitMargin, roe,
         unprofitable: netInc != null ? netInc < 0 : (epsT != null ? epsT < 0 : null),
       };
     });

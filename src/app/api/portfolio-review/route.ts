@@ -49,26 +49,47 @@ export async function POST(req: NextRequest) {
     const positions: Pos[] = Array.isArray(body.positions) ? body.positions : [];
     if (positions.length === 0) return NextResponse.json({ error: "no positions" }, { status: 400 });
 
+    const india = /Indian/i.test(market);
     const symbols = positions.map((p) => p.symbol);
     const posBySym: Record<string, Pos> = {};
     positions.forEach((p) => { posBySym[p.symbol] = p; });
 
-    // 1) Batch quote for marketCap / PE / EPS / 52w change (cheap, all holdings).
-    const fund: Record<string, any> = {};
-    try {
-      const quotes = await yahooFinance.quote(symbols).catch(() => []);
-      (Array.isArray(quotes) ? quotes : [quotes]).forEach((q: any) => {
-        if (q?.symbol) fund[q.symbol] = q;
-      });
-    } catch { /* ignore */ }
+    // Resolve bare Indian tickers to their .NS/.BO listing.
+    const candOf = (s: string) => (s.includes(".") ? [s] : india ? [`${s}.NS`, `${s}.BO`] : [s]);
+    const allCands = Array.from(new Set(positions.flatMap((p) => candOf(p.symbol))));
 
-    // 2) quoteSummary for beta + sector on the largest positions (concurrency-limited).
+    // 1) Quote for marketCap / PE / EPS / 52w change — CHUNKED (a single big call
+    //    is unreliable / can be truncated by Yahoo), each chunk retried once.
+    const quoteBy: Record<string, any> = {};
+    const chunks: string[][] = [];
+    for (let i = 0; i < allCands.length; i += 20) chunks.push(allCands.slice(i, i + 20));
+    await Promise.all(chunks.map(async (ch) => {
+      for (let attempt = 0; attempt < 2; attempt++) {
+        try {
+          const quotes = await yahooFinance.quote(ch);
+          (Array.isArray(quotes) ? quotes : [quotes]).forEach((q: any) => { if (q?.symbol) quoteBy[q.symbol] = q; });
+          if (ch.every((s) => quoteBy[s])) break;
+        } catch { /* retry */ }
+      }
+    }));
+    // Map each holding to the Yahoo symbol that actually returned data.
+    const ySymOf: Record<string, string> = {};
+    const fund: Record<string, any> = {};
+    positions.forEach((p) => {
+      const cands = candOf(p.symbol);
+      const y = cands.find((c) => quoteBy[c] && (typeof quoteBy[c].regularMarketPrice === "number" || typeof quoteBy[c].marketCap === "number")) || cands[0];
+      ySymOf[p.symbol] = y;
+      if (quoteBy[y]) fund[p.symbol] = quoteBy[y];
+    });
+
+    // 2) quoteSummary for beta + sector — cover MOST of the book (up to 90) so
+    //    the sector allocation & weighted beta aren't dominated by "Unknown".
     const ranked = [...positions].sort((a, b) => b.weight - a.weight);
-    const detailTargets = ranked.slice(0, 45);
+    const detailTargets = ranked.slice(0, 90);
     const detail: Record<string, { beta: number | null; sector: string | null }> = {};
-    await mapLimit(detailTargets, 8, async (p) => {
+    await mapLimit(detailTargets, 6, async (p) => {
       try {
-        const qs: any = await yahooFinance.quoteSummary(p.symbol, { modules: ["summaryDetail", "assetProfile", "defaultKeyStatistics"] });
+        const qs: any = await yahooFinance.quoteSummary(ySymOf[p.symbol], { modules: ["summaryDetail", "assetProfile", "defaultKeyStatistics"] });
         detail[p.symbol] = {
           beta: qs?.summaryDetail?.beta ?? qs?.defaultKeyStatistics?.beta ?? null,
           sector: qs?.assetProfile?.sector ?? null,

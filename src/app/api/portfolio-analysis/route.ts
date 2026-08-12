@@ -31,24 +31,28 @@ async function mapLimit<T, R>(items: T[], limit: number, fn: (t: T, i: number) =
   return out;
 }
 
-async function techFor(symbol: string, s: Settings, timeframe: "1d" | "1h"): Promise<TechSnapshot | null> {
+async function techFor(symbol: string, s: Settings, timeframe: "1d" | "1h", india: boolean): Promise<TechSnapshot | null> {
   // Hourly needs a wider window so SMA200 (200 hourly bars) can warm up.
   const days = timeframe === "1h" ? 180 : 400;
   const interval = timeframe === "1h" ? "1h" : "1d";
   const period1 = subDays(new Date(), days).toISOString().split("T")[0];
-  // Retry once — most "data unavailable" cases are transient Yahoo hiccups.
-  for (let attempt = 0; attempt < 2; attempt++) {
-    try {
-      const chartRes = await yahooFinance.chart(symbol, { period1, interval: interval as any }).catch(() => null);
-      const quotes = (chartRes as any)?.quotes || [];
-      const rows = quotes.filter((q: any) => q && q.close != null && q.high != null && q.low != null);
-      if (rows.length >= 30) {
-        return buildSnapshot(
-          rows.map((r: any) => ({ open: r.open, high: r.high, low: r.low, close: r.close, volume: r.volume })),
-          { rsiOverbought: s.rsiOverbought, rsiOversold: s.rsiOversold, adxTrend: s.adxTrend },
-        );
-      }
-    } catch { /* retry */ }
+  // For a bare Indian ticker (RELIANCE / TCS), try the NSE then BSE listing.
+  const cands = symbol.includes(".") ? [symbol] : india ? [`${symbol}.NS`, `${symbol}.BO`] : [symbol];
+  // Two rounds so a single US symbol still gets one retry on a transient hiccup.
+  for (let round = 0; round < 2; round++) {
+    for (const sym of cands) {
+      try {
+        const chartRes = await yahooFinance.chart(sym, { period1, interval: interval as any }).catch(() => null);
+        const quotes = (chartRes as any)?.quotes || [];
+        const rows = quotes.filter((q: any) => q && q.close != null && q.high != null && q.low != null);
+        if (rows.length >= 30) {
+          return buildSnapshot(
+            rows.map((r: any) => ({ open: r.open, high: r.high, low: r.low, close: r.close, volume: r.volume })),
+            { rsiOverbought: s.rsiOverbought, rsiOversold: s.rsiOversold, adxTrend: s.adxTrend },
+          );
+        }
+      } catch { /* try next candidate / round */ }
+    }
   }
   return null;
 }
@@ -61,11 +65,12 @@ export async function POST(req: NextRequest) {
     const withAi: boolean = !!body.withAi;
     const timeframe: "1d" | "1h" = body.timeframe === "1h" ? "1h" : "1d";
     const settings: Settings = { ...DEFAULTS, ...(body.settings || {}) };
+    const india = /Indian/i.test(market);
     if (holdings.length === 0) return NextResponse.json({ error: "no holdings" }, { status: 400 });
 
     // 1) Technical snapshot per holding (concurrency-limited), user's thresholds + timeframe.
     const enriched = await mapLimit(holdings, 10, async (h) => {
-        const tech = await techFor(h.symbol, settings, timeframe);
+        const tech = await techFor(h.symbol, settings, timeframe, india);
         const price = h.currentPrice || tech?.price || h.buyPrice || 0;
         const shares = h.shares || 0;
         const value = shares * price;

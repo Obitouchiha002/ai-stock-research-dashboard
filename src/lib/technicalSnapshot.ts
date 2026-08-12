@@ -261,7 +261,10 @@ export function buildSnapshot(candles: { open?: number; high: number; low: numbe
   // --- Volume momentum ---
   const volArr = candles.map((c) => (typeof c.volume === "number" ? c.volume : null));
   const lastVol = volArr[volArr.length - 1];
-  const avgOf = (n: number) => { const v = volArr.filter((x): x is number => x != null).slice(-n); return v.length ? v.reduce((a, b) => a + b, 0) / v.length : null; };
+  // Average the PRIOR n bars (exclude the current bar so its own volume doesn't
+  // dilute the baseline — a true 2× day should read ~+100%).
+  const volClean = volArr.filter((x): x is number => x != null);
+  const avgOf = (n: number) => { const v = volClean.slice(-(n + 1), -1); return v.length ? v.reduce((a, b) => a + b, 0) / v.length : null; };
   const avg5 = avgOf(5), avg10 = avgOf(10);
   const volVs5 = lastVol != null && avg5 ? ((lastVol - avg5) / avg5) * 100 : null;
   const volVs10 = lastVol != null && avg10 ? ((lastVol - avg10) / avg10) * 100 : null;
