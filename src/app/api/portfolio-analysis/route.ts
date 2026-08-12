@@ -44,7 +44,7 @@ async function techFor(symbol: string, s: Settings, timeframe: "1d" | "1h"): Pro
       const rows = quotes.filter((q: any) => q && q.close != null && q.high != null && q.low != null);
       if (rows.length >= 30) {
         return buildSnapshot(
-          rows.map((r: any) => ({ open: r.open, high: r.high, low: r.low, close: r.close })),
+          rows.map((r: any) => ({ open: r.open, high: r.high, low: r.low, close: r.close, volume: r.volume })),
           { rsiOverbought: s.rsiOverbought, rsiOversold: s.rsiOversold, adxTrend: s.adxTrend },
         );
       }
@@ -125,11 +125,17 @@ export async function POST(req: NextRequest) {
         trend: r.tech?.trend ?? "—",
         maStack: r.tech?.maStack?.label ?? null,
         diUp: r.tech?.diUp ?? null,
+        rsiTrend: r.tech?.rsiTrend ?? null,
+        divergence: r.tech?.divergence ?? null,
+        volVs5Pct: r.tech?.volVs5Pct ?? null,
+        volRising: r.tech?.volRising ?? null,
+        near52w: r.tech?.near52w ?? null,
+        overall: r.tech?.overall?.label ?? null,
         signals: (r.tech?.signals || []).map((s) => s.label),
         candlePatterns: (r.tech?.patterns || []).map((p) => p.name),
       }));
       const tfLabel = timeframe === "1h" ? "HOURLY (intraday)" : "DAILY";
-      const prompt = `You are a highly experienced, professional equity research analyst reviewing a client's ${market || ""} stock portfolio on the ${tfLabel} timeframe. You have deep experience reading technical conditions and market context. All the technical readings below are computed on the ${tfLabel} timeframe — frame your read accordingly (hourly = short-term/intraday swings; daily = the primary trend). Each holding also carries a "maStack" moving-average alignment read (Perfect uptrend / Perfect downtrend / etc.) and "diUp" (true if +DI>-DI). Use them.
+      const prompt = `You are a highly experienced, professional equity research analyst reviewing a client's ${market || ""} stock portfolio on the ${tfLabel} timeframe. You have deep experience reading technical conditions and market context. All the technical readings below are computed on the ${tfLabel} timeframe — frame your read accordingly (hourly = short-term/intraday swings; daily = the primary trend). Each holding carries: "rsiTrend" (rising/falling/stagnant) and "divergence"; "diUp" (+DI>-DI); "maStack" (moving-average alignment: Perfect uptrend / Below 50-DMA / Perfect downtrend / etc.); "volVs5Pct" + "volRising" (volume vs 5-day average); "near52w" (near 52-week high/low); and "overall" (a weighted verdict). Weave RSI direction, volume momentum, MA alignment, candlesticks and the overall read into your per-holding notes. When a holding is near its 52-week high/low or shows divergence, call it out as an important note (e.g. daily strength but an overhead higher-timeframe resistance).
 
 THIS CLIENT'S PROFILE — tailor EVERY point to it, do not give generic advice:
 - Investing style: ${settings.style}

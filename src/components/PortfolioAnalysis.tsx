@@ -52,6 +52,7 @@ export default function PortfolioAnalysis({ market }: { market: PortfolioMarket 
   const [showSettings, setShowSettings] = useState(false);
   const [timeframe, setTimeframe] = useState<"1d" | "1h">("1d");
   const [mode, setMode] = useState<"technical" | "fundamental">("technical");
+  const [openRow, setOpenRow] = useState<string | null>(null);
   useEffect(() => { setSettings(getPfAnalysisSettings()); }, []);
 
   const holdings = useMemo(() => getPortfolio().filter((h) => h.market === market), [market]);
@@ -263,7 +264,7 @@ export default function PortfolioAnalysis({ market }: { market: PortfolioMarket 
           <div className="px-4 py-2.5 bg-gradient-to-r from-indigo-50 to-slate-50 border-b border-slate-200 flex items-center gap-2">
             <span className="w-1.5 h-4 rounded-full bg-indigo-500" />
             <h3 className="text-[12px] font-black uppercase tracking-wide text-slate-600">Technical Watch · {timeframe === "1h" ? "Hourly" : "Daily"}</h3>
-            <span className="text-[11px] text-slate-400 font-semibold ml-auto hidden sm:block">RSI · ADX(±DI) · trend · moving-average stack</span>
+            <span className="text-[11px] text-slate-400 font-semibold ml-auto hidden sm:block">tap a row for the full read · RSI · ADX(±DI) · volume · MA stack · overall</span>
           </div>
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
@@ -272,9 +273,9 @@ export default function PortfolioAnalysis({ market }: { market: PortfolioMarket 
                   <th className="text-left px-4 py-2.5">Stock</th>
                   <th className="text-right px-2 py-2.5">RSI</th>
                   <th className="text-center px-2 py-2.5">ADX (±DI)</th>
-                  <th className="text-center px-2 py-2.5">Trend</th>
+                  <th className="text-right px-2 py-2.5">Volume</th>
                   <th className="text-left px-3 py-2.5">Moving average</th>
-                  <th className="text-left px-3 py-2.5">Signals</th>
+                  <th className="text-center px-2 py-2.5">Overall</th>
                 </tr>
               </thead>
               <tbody>
@@ -287,18 +288,26 @@ export default function PortfolioAnalysis({ market }: { market: PortfolioMarket 
                     : t.rsi <= os ? "bg-amber-100 text-amber-800"
                     : t.rsi >= 50 ? "text-emerald-700" : "text-slate-600";
                   const rsiHasBg = t?.rsi != null && (t.rsi >= ob || t.rsi <= os);
+                  const rsiArrow = t?.rsiTrend === "rising" ? "↑" : t?.rsiTrend === "falling" ? "↓" : t?.rsiTrend === "stagnant" ? "→" : "";
+                  const open = openRow === r.symbol;
                   return (
-                    <tr key={r.symbol} className="border-b border-slate-100 last:border-0 even:bg-slate-50/50 hover:bg-indigo-50/40 align-top">
+                    <React.Fragment key={r.symbol}>
+                    <tr onClick={() => t?.ok && setOpenRow(open ? null : r.symbol)}
+                      className={`border-b border-slate-100 even:bg-slate-50/50 hover:bg-indigo-50/40 align-top ${t?.ok ? "cursor-pointer" : ""} ${open ? "bg-indigo-50/60" : ""}`}>
                       <td className="px-4 py-2.5">
-                        <Link href={`/charts?symbol=${encodeURIComponent(r.symbol)}`} className="font-black text-slate-900 hover:text-indigo-600">{r.symbol}</Link>
-                        <div className="text-[11px] text-slate-500 font-medium truncate max-w-[160px]">{r.name}</div>
+                        <div className="flex items-center gap-1.5">
+                          {t?.ok && <span className={`text-slate-400 text-[10px] transition-transform ${open ? "rotate-90" : ""}`}>▶</span>}
+                          <Link href={`/charts?symbol=${encodeURIComponent(r.symbol)}`} onClick={(e) => e.stopPropagation()} className="font-black text-slate-900 hover:text-indigo-600">{r.symbol}</Link>
+                        </div>
+                        <div className="text-[11px] text-slate-500 font-medium truncate max-w-[160px] pl-4">{r.name}</div>
                       </td>
                       {!t?.ok ? (
                         <td colSpan={5} className="px-3 py-2.5"><span className="text-[11px] font-bold text-slate-500 bg-slate-100 border border-slate-200 rounded-full px-2.5 py-0.5">Technical data unavailable</span></td>
                       ) : (
                         <>
-                          <td className="px-2 py-2.5 text-right">
+                          <td className="px-2 py-2.5 text-right whitespace-nowrap">
                             <span className={`inline-block text-[15px] font-black tabular-nums ${rsiHasBg ? "px-1.5 py-0.5 rounded-md" : ""} ${rsiBadge}`}>{t.rsi ?? "—"}</span>
+                            {rsiArrow && <span className={`ml-1 text-[12px] font-black ${t.rsiTrend === "rising" ? "text-emerald-600" : t.rsiTrend === "falling" ? "text-rose-600" : "text-slate-400"}`}>{rsiArrow}</span>}
                           </td>
                           <td className="px-2 py-2.5 text-center whitespace-nowrap">
                             <div className={`font-black tabular-nums text-[15px] leading-tight ${t.diUp == null ? "text-slate-800" : t.diUp ? "text-emerald-600" : "text-rose-600"}`}>
@@ -312,35 +321,49 @@ export default function PortfolioAnalysis({ market }: { market: PortfolioMarket 
                               </div>
                             )}
                           </td>
-                          <td className="px-2 py-2.5 text-center">
-                            <span className={`inline-block px-2.5 py-0.5 rounded-full text-[12px] font-black border ${TREND_BADGE[t.trend] || TREND_BADGE["—"]}`}>{t.trend}</span>
+                          <td className="px-2 py-2.5 text-right whitespace-nowrap">
+                            {t.volVs5Pct != null ? (
+                              <>
+                                <div className={`font-black tabular-nums text-[13px] ${t.volRising ? "text-emerald-600" : "text-slate-500"}`}>{t.volRising ? "▲" : "▼"} {t.volVs5Pct > 0 ? "+" : ""}{Math.round(t.volVs5Pct)}%</div>
+                                <div className="text-[10px] text-slate-400">vs 5-day avg</div>
+                              </>
+                            ) : <span className="text-slate-400">—</span>}
                           </td>
                           <td className="px-3 py-2.5">
                             {t.maStack ? (
                               <span className={`inline-block px-2.5 py-0.5 rounded-full text-[12px] font-bold border ${TONE[t.maStack.tone] || TONE.info}`}>{t.maStack.label}</span>
                             ) : <span className="text-[12px] text-slate-400">—</span>}
                           </td>
-                          <td className="px-3 py-2.5">
-                            <div className="flex flex-wrap gap-1">
-                              {(t.signals || []).length === 0 && <span className="text-[12px] text-slate-400">—</span>}
-                              {(t.signals || []).map((s: any) => (
-                                <span key={s.key} className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11.5px] font-bold border ${TONE[s.tone] || TONE.info} ${fresh.includes(s.key) ? "ring-2 ring-amber-400" : ""}`}>
-                                  {fresh.includes(s.key) && <span className="text-[8px] font-black text-amber-600">NEW</span>}
-                                  {s.label}
-                                </span>
-                              ))}
-                            </div>
+                          <td className="px-2 py-2.5 text-center">
+                            {t.overall ? (
+                              <span className={`inline-block px-2.5 py-0.5 rounded-full text-[12px] font-black border ${TONE[t.overall.tone] || TONE.info}`}>{t.overall.label}</span>
+                            ) : <span className="text-[12px] text-slate-400">—</span>}
                           </td>
                         </>
                       )}
                     </tr>
+                    {open && t?.ok && (
+                      <tr className="bg-indigo-50/30 border-b border-slate-200">
+                        <td colSpan={6} className="px-5 py-3.5">
+                          <div className="grid sm:grid-cols-2 gap-x-8 gap-y-2">
+                            {readLines(t, fresh).map((l, i) => (
+                              <div key={i} className="text-[13px] leading-relaxed">
+                                <span className="font-black text-slate-700">{l.label}:</span>{" "}
+                                <span className="text-slate-600">{l.text}</span>
+                              </div>
+                            ))}
+                          </div>
+                        </td>
+                      </tr>
+                    )}
+                    </React.Fragment>
                   );
                 })}
               </tbody>
             </table>
           </div>
           <div className="px-4 py-2 text-[11px] text-slate-500 border-t border-slate-100 bg-slate-50/60">
-            Research support only — not buy/sell advice. Signals describe the current chart condition.
+            Tap any row for the full RSI / ADX / volume / moving-average / candle read on the {timeframe === "1h" ? "hourly" : "daily"} timeframe. Research only — not buy/sell advice.
           </div>
         </div>
       )}
@@ -497,6 +520,34 @@ function SelField({ label, value, opts, onChange }: { label: string; value: stri
       </select>
     </div>
   );
+}
+
+// Full written interpretation for one holding on the current timeframe.
+function readLines(t: any, _fresh: string[] = []): { label: string; text: string }[] {
+  const lines: { label: string; text: string }[] = [];
+  if (t.rsi != null) {
+    const dir = t.rsiTrend === "rising" ? "rising" : t.rsiTrend === "falling" ? "falling" : t.rsiTrend === "stagnant" ? "flat / stagnant" : "";
+    let s = `${t.rsi}${dir ? `, ${dir}` : ""}`;
+    if (t.rsi >= 70) s += " — in the overbought zone";
+    else if (t.rsi <= 30) s += " — in the oversold zone";
+    if (t.divergence) s += ` · ${t.divergence} divergence forming`;
+    lines.push({ label: "RSI", text: s });
+  }
+  if (t.adx != null) {
+    const who = t.diUp == null ? "" : t.diUp ? "buyers (+DI) in control" : "sellers (−DI) in control";
+    const strength = t.adx >= 25 ? "trend is firm" : t.adx < 20 ? "no real trend yet (choppy)" : "trend still building";
+    lines.push({ label: "ADX / DI", text: `ADX ${t.adx}, +DI ${t.plusDI != null ? Math.round(t.plusDI) : "—"} / −DI ${t.minusDI != null ? Math.round(t.minusDI) : "—"} — ${who}${who ? ", " : ""}${strength}` });
+  }
+  if (t.volVs5Pct != null) {
+    lines.push({ label: "Volume", text: `${t.volVs5Pct > 0 ? "+" : ""}${Math.round(t.volVs5Pct)}% vs 5-day avg${t.volVs10Pct != null ? `, ${t.volVs10Pct > 0 ? "+" : ""}${Math.round(t.volVs10Pct)}% vs 10-day` : ""} — ${t.volRising ? "rising participation" : "fading volume"}` });
+  }
+  if (t.maStack) lines.push({ label: "Moving averages", text: `${t.maStack.label} — price read against the 10 / 20 / 50 / 200-day SMAs` });
+  if ((t.patterns || []).length) lines.push({ label: "Candle", text: `${t.patterns[0].name} — ${t.patterns[0].meaning}` });
+  else lines.push({ label: "Candle", text: "No notable formation right now" });
+  if (t.near52w) lines.push({ label: "Important", text: t.near52w === "high" ? "Trading near its 52-week high — watch for overhead resistance on higher timeframes" : "Trading near its 52-week low — watch for support / signs of capitulation" });
+  if ((t.signals || []).length) lines.push({ label: "Signals", text: t.signals.map((s: any) => s.label).join(" · ") });
+  if (t.overall) lines.push({ label: "Overall read", text: t.overall.label });
+  return lines;
 }
 
 function Stat({ label, value, sub, tone }: { label: string; value: string; sub?: string; tone?: string }) {

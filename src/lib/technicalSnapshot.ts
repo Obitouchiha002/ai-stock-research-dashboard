@@ -196,6 +196,16 @@ export type TechSnapshot = {
   vsSma200Pct: number | null;
   maStack: MaStack;
   diUp: boolean | null; // +DI > -DI (trend leaning up)
+  // Volume momentum.
+  volVs5Pct: number | null;   // latest volume vs 5-bar average
+  volVs10Pct: number | null;  // latest volume vs 10-bar average
+  volRising: boolean | null;
+  // RSI behaviour.
+  rsiTrend: "rising" | "falling" | "stagnant" | "—";
+  divergence: "bullish" | "bearish" | null;
+  near52w: "high" | "low" | null;
+  // Weighted overall read.
+  overall: { label: string; tone: "bull" | "bear" | "warn" | "info" } | null;
   signals: Signal[];
   patterns: CandlePattern[];
 };
@@ -211,14 +221,15 @@ export type SnapshotOpts = { rsiOverbought?: number; rsiOversold?: number; adxTr
 // Build the latest-bar technical snapshot + human-readable signals from OHLC.
 // Thresholds default to the classic 70 / 30 / 25 but the caller can override
 // them so signals follow the user's own settings.
-export function buildSnapshot(candles: { open?: number; high: number; low: number; close: number }[], opts: SnapshotOpts = {}): TechSnapshot {
+export function buildSnapshot(candles: { open?: number; high: number; low: number; close: number; volume?: number }[], opts: SnapshotOpts = {}): TechSnapshot {
   const OB = opts.rsiOverbought ?? 70;
   const OS = opts.rsiOversold ?? 30;
   const ADX_TREND = opts.adxTrend ?? 25;
   const empty: TechSnapshot = {
     ok: false, price: null, rsi: null, rsiPrev: null, adx: null, plusDI: null, minusDI: null,
     sma10: null, sma20: null, sma50: null, sma200: null, trend: "—", vsSma50Pct: null, vsSma200Pct: null,
-    maStack: null, diUp: null, signals: [], patterns: [],
+    maStack: null, diUp: null, volVs5Pct: null, volVs10Pct: null, volRising: null,
+    rsiTrend: "—", divergence: null, near52w: null, overall: null, signals: [], patterns: [],
   };
   if (!candles || candles.length < 30) return empty;
   const highs = candles.map((c) => c.high);
@@ -247,6 +258,43 @@ export function buildSnapshot(candles: { open?: number; high: number; low: numbe
   const maStack = maStackRead(price, s10, s20, s50, s200);
   const diUp = pdi != null && mdi != null ? pdi > mdi : null;
 
+  // --- Volume momentum ---
+  const volArr = candles.map((c) => (typeof c.volume === "number" ? c.volume : null));
+  const lastVol = volArr[volArr.length - 1];
+  const avgOf = (n: number) => { const v = volArr.filter((x): x is number => x != null).slice(-n); return v.length ? v.reduce((a, b) => a + b, 0) / v.length : null; };
+  const avg5 = avgOf(5), avg10 = avgOf(10);
+  const volVs5 = lastVol != null && avg5 ? ((lastVol - avg5) / avg5) * 100 : null;
+  const volVs10 = lastVol != null && avg10 ? ((lastVol - avg10) / avg10) * 100 : null;
+  const volRising = volVs5 != null ? volVs5 > 0 : null;
+
+  // --- RSI behaviour (rising / falling / stagnant over ~4 bars) ---
+  const rsiVals = rsiArr.filter((x): x is number => x != null);
+  let rsiTrend: TechSnapshot["rsiTrend"] = "—";
+  if (rsiVals.length >= 4) {
+    const back = rsiVals[rsiVals.length - 4];
+    const d = (rsiNow as number) - back;
+    rsiTrend = d > 2 ? "rising" : d < -2 ? "falling" : "stagnant";
+  }
+  // --- Divergence (approx over ~10 bars) ---
+  let divergence: TechSnapshot["divergence"] = null;
+  {
+    const n = closes.length, k = 10;
+    if (n > k && rsiArr[n - 1] != null && rsiArr[n - 1 - k] != null) {
+      const pC = (closes[n - 1] - closes[n - 1 - k]) / closes[n - 1 - k];
+      const rC = (rsiArr[n - 1] as number) - (rsiArr[n - 1 - k] as number);
+      if (pC > 0.02 && rC < -3) divergence = "bearish"; // price up, RSI down
+      else if (pC < -0.02 && rC > 3) divergence = "bullish"; // price down, RSI up
+    }
+  }
+  // --- Near 52-week (≈252 sessions) high / low ---
+  let near52w: TechSnapshot["near52w"] = null;
+  if (price != null) {
+    const win = closes.slice(-252);
+    const hi = Math.max(...win), lo = Math.min(...win);
+    if (hi > 0 && (hi - price) / hi <= 0.03) near52w = "high";
+    else if (lo > 0 && (price - lo) / lo <= 0.03) near52w = "low";
+  }
+
   const vs50 = price != null && s50 ? ((price - s50) / s50) * 100 : null;
   const vs200 = price != null && s200 ? ((price - s200) / s200) * 100 : null;
 
@@ -257,6 +305,10 @@ export function buildSnapshot(candles: { open?: number; high: number; low: numbe
     else if (price < s50 && s50 <= s200) trend = "Downtrend";
     else trend = "Sideways";
   } else trend = "—";
+
+  // --- Candlesticks + weighted overall verdict ---
+  const patterns = detectCandles(candles, trend);
+  const overall = overallRead({ rsi: rsiNow, rsiTrend, ob: OB, os: OS, adx: adxNow, adxTrend: ADX_TREND, diUp, maStack, volRising, divergence, pattern: patterns[0] || null });
 
   const signals: Signal[] = [];
   if (rsiNow != null) {
@@ -293,12 +345,55 @@ export function buildSnapshot(candles: { open?: number; high: number; low: numbe
     }
   }
 
-  const patterns = detectCandles(candles, trend);
-
   return {
     ok: true,
     price: r2(price), rsi: r2(rsiNow), rsiPrev: r2(rsiPrev), adx: r2(adxNow), plusDI: r2(pdi), minusDI: r2(mdi),
     sma10: r2(s10), sma20: r2(s20), sma50: r2(s50), sma200: r2(s200), trend,
-    vsSma50Pct: r2(vs50), vsSma200Pct: r2(vs200), maStack, diUp, signals, patterns,
+    vsSma50Pct: r2(vs50), vsSma200Pct: r2(vs200), maStack, diUp,
+    volVs5Pct: r2(volVs5), volVs10Pct: r2(volVs10), volRising,
+    rsiTrend, divergence, near52w, overall, signals, patterns,
   };
+}
+
+// Weighted overall read — blends MA stack (primary trend), ADX/DI (momentum),
+// RSI (momentum + extremes), volume (confirmation) and the candlestick pattern
+// into one plain-language verdict. Research language, not buy/sell.
+function overallRead(x: {
+  rsi: number | null; rsiTrend: TechSnapshot["rsiTrend"]; ob: number; os: number;
+  adx: number | null; adxTrend: number; diUp: boolean | null; maStack: MaStack;
+  volRising: boolean | null; divergence: TechSnapshot["divergence"]; pattern: CandlePattern | null;
+}): TechSnapshot["overall"] {
+  let score = 0;
+  const ml = x.maStack?.label || "";
+  if (ml === "Perfect uptrend") score += 2;
+  else if (ml === "Uptrend intact") score += 1;
+  else if (ml === "Uptrend · below 20-DMA") score += 0;
+  else if (ml === "Below 50-DMA") score -= 1;
+  else if (ml === "Downtrend") score -= 1.5;
+  else if (ml === "Perfect downtrend") score -= 2;
+  // Momentum (ADX + DI).
+  if (x.adx != null && x.adx >= x.adxTrend && x.diUp != null) score += x.diUp ? 1 : -1;
+  // RSI direction.
+  if (x.rsiTrend === "rising") score += 0.7;
+  else if (x.rsiTrend === "falling") score -= 0.7;
+  // Volume confirmation (amplifies the existing lean).
+  if (x.volRising) score += score >= 0 ? 0.4 : -0.4;
+  // Candle.
+  if (x.pattern?.tone === "bull") score += 0.6;
+  else if (x.pattern?.tone === "bear") score -= 0.6;
+
+  const rsi = x.rsi;
+  // Special turning-point reads take priority when extremes align with a signal.
+  if (rsi != null && rsi <= x.os && (x.rsiTrend === "rising" || x.pattern?.tone === "bull" || x.divergence === "bullish"))
+    return { label: "Bottoming — may be turning up", tone: "warn" };
+  if (rsi != null && rsi >= x.ob && (x.rsiTrend === "falling" || x.pattern?.tone === "bear" || x.divergence === "bearish"))
+    return { label: "Topping — losing steam", tone: "warn" };
+  if (x.divergence === "bearish" && score > 0) return { label: "Uptrend but weakening (bearish divergence)", tone: "warn" };
+  if (x.divergence === "bullish" && score < 0) return { label: "Downtrend but firming (bullish divergence)", tone: "warn" };
+
+  if (score >= 2.5) return { label: "Strong uptrend", tone: "bull" };
+  if (score >= 1) return { label: "Uptrend", tone: "bull" };
+  if (score > -1) return { label: "Sideways / range", tone: "info" };
+  if (score > -2.5) return { label: "Downtrend", tone: "bear" };
+  return { label: "Strong downtrend", tone: "bear" };
 }
