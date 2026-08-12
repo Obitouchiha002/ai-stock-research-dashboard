@@ -29,6 +29,19 @@ const TREND_BADGE: Record<string, string> = {
   Sideways: "text-amber-900 bg-amber-200 border-amber-400",
   "—": "text-slate-500 bg-slate-100 border-slate-300",
 };
+const ACTION: Record<string, string> = {
+  Buy: "text-white bg-emerald-600 border-emerald-600",
+  Sell: "text-white bg-rose-600 border-rose-600",
+  Hold: "text-amber-900 bg-amber-200 border-amber-400",
+};
+// The price-vs-MA combination the moving-average read is based on, e.g. CMP>10>20>50>200.
+function maCombo(t: any): string | null {
+  const seq: [string, number | null][] = [["CMP", t.price], ["10", t.sma10], ["20", t.sma20], ["50", t.sma50], ["200", t.sma200]];
+  if (seq.some(([, v]) => v == null)) return null;
+  let s = "";
+  for (let i = 0; i < seq.length; i++) { s += seq[i][0]; if (i < seq.length - 1) s += (seq[i][1]! > seq[i + 1][1]! ? ">" : "<"); }
+  return s;
+}
 const HEALTH: Record<string, string> = {
   Healthy: "text-white bg-emerald-600 border-emerald-600",
   Watch: "text-amber-900 bg-amber-200 border-amber-400",
@@ -53,7 +66,6 @@ export default function PortfolioAnalysis({ market, holdingsOverride, hideFundam
   const [showSettings, setShowSettings] = useState(false);
   const [timeframe, setTimeframe] = useState<"1d" | "1h">("1d");
   const [mode, setMode] = useState<"technical" | "fundamental">("technical");
-  const [openRow, setOpenRow] = useState<string | null>(null);
   const [ready, setReady] = useState(false);
   // Cache results per {timeframe|symbol-set} so toggling Daily↔Hourly or
   // switching markets/tabs and back is instant (5-minute freshness).
@@ -283,7 +295,7 @@ export default function PortfolioAnalysis({ market, holdingsOverride, hideFundam
           <div className="px-4 py-2.5 bg-gradient-to-r from-indigo-50 to-slate-50 border-b border-slate-200 flex items-center gap-2">
             <span className="w-1.5 h-4 rounded-full bg-indigo-500" />
             <h3 className="text-[12px] font-black uppercase tracking-wide text-slate-600">Technical Watch · {timeframe === "1h" ? "Hourly" : "Daily"}</h3>
-            <span className="text-[11px] text-slate-400 font-semibold ml-auto hidden sm:block">tap a row for the full read · RSI · ADX(±DI) · volume · MA stack · overall</span>
+            <span className="text-[11px] text-slate-400 font-semibold ml-auto hidden sm:block">RSI · ADX(±DI) · volume · MA stack · candle action</span>
           </div>
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
@@ -294,7 +306,7 @@ export default function PortfolioAnalysis({ market, holdingsOverride, hideFundam
                   <th className="text-center px-2 py-2.5">ADX (±DI)</th>
                   <th className="text-right px-2 py-2.5">Volume</th>
                   <th className="text-left px-3 py-2.5">Moving average</th>
-                  <th className="text-center px-2 py-2.5">Overall</th>
+                  <th className="text-center px-2 py-2.5">Action</th>
                 </tr>
               </thead>
               <tbody>
@@ -308,17 +320,12 @@ export default function PortfolioAnalysis({ market, holdingsOverride, hideFundam
                     : t.rsi >= 50 ? "text-emerald-700" : "text-slate-600";
                   const rsiHasBg = t?.rsi != null && (t.rsi >= ob || t.rsi <= os);
                   const rsiArrow = t?.rsiTrend === "rising" ? "↑" : t?.rsiTrend === "falling" ? "↓" : t?.rsiTrend === "stagnant" ? "→" : "";
-                  const open = openRow === r.symbol;
+                  const combo = t?.ok ? maCombo(t) : null;
                   return (
-                    <React.Fragment key={r.symbol}>
-                    <tr onClick={() => t?.ok && setOpenRow(open ? null : r.symbol)}
-                      className={`border-b border-slate-100 even:bg-slate-50/50 hover:bg-indigo-50/40 align-top ${t?.ok ? "cursor-pointer" : ""} ${open ? "bg-indigo-50/60" : ""}`}>
+                    <tr key={r.symbol} className="border-b border-slate-100 even:bg-slate-50/50 hover:bg-indigo-50/40 align-top">
                       <td className="px-4 py-2.5">
-                        <div className="flex items-center gap-1.5">
-                          {t?.ok && <span className={`text-slate-400 text-[10px] transition-transform ${open ? "rotate-90" : ""}`}>▶</span>}
-                          <Link href={`/charts?symbol=${encodeURIComponent(r.symbol)}`} onClick={(e) => e.stopPropagation()} className="font-black text-slate-900 hover:text-indigo-600">{r.symbol}</Link>
-                        </div>
-                        <div className="text-[11px] text-slate-500 font-medium truncate max-w-[160px] pl-4">{r.name}</div>
+                        <Link href={`/charts?symbol=${encodeURIComponent(r.symbol)}`} className="font-black text-slate-900 hover:text-indigo-600">{r.symbol}</Link>
+                        <div className="text-[11px] text-slate-500 font-medium truncate max-w-[160px]">{r.name}</div>
                       </td>
                       {!t?.ok ? (
                         <td colSpan={5} className="px-3 py-2.5"><span className="text-[11px] font-bold text-slate-500 bg-slate-100 border border-slate-200 rounded-full px-2.5 py-0.5">Technical data unavailable</span></td>
@@ -350,39 +357,27 @@ export default function PortfolioAnalysis({ market, holdingsOverride, hideFundam
                           </td>
                           <td className="px-3 py-2.5">
                             {t.maStack ? (
-                              <span className={`inline-block px-2.5 py-0.5 rounded-full text-[12px] font-bold border ${TONE[t.maStack.tone] || TONE.info}`}>{t.maStack.label}</span>
+                              <>
+                                <span className={`inline-block px-2.5 py-0.5 rounded-full text-[12px] font-bold border ${TONE[t.maStack.tone] || TONE.info}`}>{t.maStack.label}</span>
+                                {combo && <div className="text-[10px] text-slate-400 font-bold tabular-nums mt-0.5 tracking-tight">{combo}</div>}
+                              </>
                             ) : <span className="text-[12px] text-slate-400">—</span>}
                           </td>
                           <td className="px-2 py-2.5 text-center">
-                            {t.overall ? (
-                              <span className={`inline-block px-2.5 py-0.5 rounded-full text-[12px] font-black border ${TONE[t.overall.tone] || TONE.info}`}>{t.overall.label}</span>
-                            ) : <span className="text-[12px] text-slate-400">—</span>}
+                            <span className={`inline-block px-2.5 py-0.5 rounded-full text-[12.5px] font-black border ${ACTION[t.action] || ACTION.Hold}`}>{t.action}</span>
+                            {t.overall && <div className="text-[10px] text-slate-400 font-semibold mt-0.5 max-w-[130px] mx-auto leading-tight">{t.overall.label}</div>}
+                            {(t.patterns || []).length > 0 && <div className="text-[10px] text-indigo-500 font-bold mt-0.5">{t.patterns[0].name}</div>}
                           </td>
                         </>
                       )}
                     </tr>
-                    {open && t?.ok && (
-                      <tr className="bg-indigo-50/30 border-b border-slate-200">
-                        <td colSpan={6} className="px-5 py-3.5">
-                          <div className="grid sm:grid-cols-2 gap-x-8 gap-y-2">
-                            {readLines(t, timeframe).map((l, i) => (
-                              <div key={i} className="text-[13px] leading-relaxed">
-                                <span className="font-black text-slate-700">{l.label}:</span>{" "}
-                                <span className="text-slate-600">{l.text}</span>
-                              </div>
-                            ))}
-                          </div>
-                        </td>
-                      </tr>
-                    )}
-                    </React.Fragment>
                   );
                 })}
               </tbody>
             </table>
           </div>
           <div className="px-4 py-2 text-[11px] text-slate-500 border-t border-slate-100 bg-slate-50/60">
-            Tap any row for the full RSI / ADX / volume / moving-average / candle read on the {timeframe === "1h" ? "hourly" : "daily"} timeframe. Research only — not buy/sell advice.
+            Action is a candlestick + trend technical signal on the {timeframe === "1h" ? "hourly" : "daily"} timeframe — a chart read, not personalised buy/sell advice. Always confirm before acting.
           </div>
         </div>
       )}
@@ -539,37 +534,6 @@ function SelField({ label, value, opts, onChange }: { label: string; value: stri
       </select>
     </div>
   );
-}
-
-// Full written interpretation for one holding on the current timeframe.
-function readLines(t: any, tf: "1d" | "1h" = "1d"): { label: string; text: string }[] {
-  const hourly = tf === "1h";
-  const barUnit = hourly ? "bar" : "day"; // SMA period unit
-  const rangeLabel = hourly ? "recent-range" : "52-week"; // near-extreme label
-  const lines: { label: string; text: string }[] = [];
-  if (t.rsi != null) {
-    const dir = t.rsiTrend === "rising" ? "rising" : t.rsiTrend === "falling" ? "falling" : t.rsiTrend === "stagnant" ? "flat / stagnant" : "";
-    let s = `${t.rsi}${dir ? `, ${dir}` : ""}`;
-    if (t.rsi >= 70) s += " — in the overbought zone";
-    else if (t.rsi <= 30) s += " — in the oversold zone";
-    if (t.divergence) s += ` · ${t.divergence} divergence forming`;
-    lines.push({ label: "RSI", text: s });
-  }
-  if (t.adx != null) {
-    const who = t.diUp == null ? "" : t.diUp ? "buyers (+DI) in control" : "sellers (−DI) in control";
-    const strength = t.adx >= 25 ? "trend is firm" : t.adx < 20 ? "no real trend yet (choppy)" : "trend still building";
-    lines.push({ label: "ADX / DI", text: `ADX ${t.adx}, +DI ${t.plusDI != null ? Math.round(t.plusDI) : "—"} / −DI ${t.minusDI != null ? Math.round(t.minusDI) : "—"} — ${who}${who ? ", " : ""}${strength}` });
-  }
-  if (t.volVs5Pct != null) {
-    lines.push({ label: "Volume", text: `${t.volVs5Pct > 0 ? "+" : ""}${Math.round(t.volVs5Pct)}% vs 5-${barUnit} avg${t.volVs10Pct != null ? `, ${t.volVs10Pct > 0 ? "+" : ""}${Math.round(t.volVs10Pct)}% vs 10-${barUnit}` : ""} — ${t.volRising ? "rising participation" : "fading volume"}` });
-  }
-  if (t.maStack) lines.push({ label: "Moving averages", text: `${t.maStack.label} — price read against the 10 / 20 / 50 / 200-${barUnit} SMAs` });
-  if ((t.patterns || []).length) lines.push({ label: "Candle", text: `${t.patterns[0].name} — ${t.patterns[0].meaning}` });
-  else lines.push({ label: "Candle", text: "No notable formation right now" });
-  if (t.near52w) lines.push({ label: "Important", text: t.near52w === "high" ? `Trading near its ${rangeLabel} high — watch for overhead resistance${hourly ? "" : " on higher timeframes"}` : `Trading near its ${rangeLabel} low — watch for support / signs of capitulation` });
-  if ((t.signals || []).length) lines.push({ label: "Signals", text: t.signals.map((s: any) => s.label).join(" · ") });
-  if (t.overall) lines.push({ label: "Overall read", text: t.overall.label });
-  return lines;
 }
 
 function Stat({ label, value, sub, tone }: { label: string; value: string; sub?: string; tone?: string }) {

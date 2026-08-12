@@ -206,6 +206,8 @@ export type TechSnapshot = {
   near52w: "high" | "low" | null;
   // Weighted overall read.
   overall: { label: string; tone: "bull" | "bear" | "warn" | "info" } | null;
+  // Candlestick-driven technical action (a chart signal, not personalised advice).
+  action: "Buy" | "Sell" | "Hold";
   signals: Signal[];
   patterns: CandlePattern[];
 };
@@ -229,7 +231,7 @@ export function buildSnapshot(candles: { open?: number; high: number; low: numbe
     ok: false, price: null, rsi: null, rsiPrev: null, adx: null, plusDI: null, minusDI: null,
     sma10: null, sma20: null, sma50: null, sma200: null, trend: "—", vsSma50Pct: null, vsSma200Pct: null,
     maStack: null, diUp: null, volVs5Pct: null, volVs10Pct: null, volRising: null,
-    rsiTrend: "—", divergence: null, near52w: null, overall: null, signals: [], patterns: [],
+    rsiTrend: "—", divergence: null, near52w: null, overall: null, action: "Hold", signals: [], patterns: [],
   };
   if (!candles || candles.length < 30) return empty;
   const highs = candles.map((c) => c.high);
@@ -312,6 +314,15 @@ export function buildSnapshot(candles: { open?: number; high: number; low: numbe
   // --- Candlesticks + weighted overall verdict ---
   const patterns = detectCandles(candles, trend);
   const overall = overallRead({ rsi: rsiNow, rsiTrend, ob: OB, os: OS, adx: adxNow, adxTrend: ADX_TREND, diUp, maStack, volRising, divergence, pattern: patterns[0] || null });
+  // Candlestick-led action → falls back to the overall verdict when no candle.
+  let action: TechSnapshot["action"] = "Hold";
+  const pTone = patterns[0]?.tone;
+  if (pTone === "bull") action = "Buy";
+  else if (pTone === "bear") action = "Sell";
+  else if (overall?.label?.startsWith("Bottoming")) action = "Buy";
+  else if (overall?.label?.startsWith("Topping")) action = "Sell";
+  else if (overall?.tone === "bull") action = "Buy";
+  else if (overall?.tone === "bear") action = "Sell";
 
   const signals: Signal[] = [];
   if (rsiNow != null) {
@@ -354,7 +365,7 @@ export function buildSnapshot(candles: { open?: number; high: number; low: numbe
     sma10: r2(s10), sma20: r2(s20), sma50: r2(s50), sma200: r2(s200), trend,
     vsSma50Pct: r2(vs50), vsSma200Pct: r2(vs200), maStack, diUp,
     volVs5Pct: r2(volVs5), volVs10Pct: r2(volVs10), volRising,
-    rsiTrend, divergence, near52w, overall, signals, patterns,
+    rsiTrend, divergence, near52w, overall, action, signals, patterns,
   };
 }
 
