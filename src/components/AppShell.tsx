@@ -128,6 +128,22 @@ const MORE_GROUPS = [
 
 const MORE_HREFS = MORE_GROUPS.flatMap((g) => g.items.map((i) => i.href));
 
+// Tapping the app logo 5× within 2.5s toggles the hidden developer markup mode
+// (works on iPad/touch where the keyboard shortcut isn't available).
+let _devTaps: number[] = [];
+function bumpDevTap() {
+  try {
+    const now = Date.now();
+    _devTaps = [..._devTaps.filter((t) => now - t < 2500), now];
+    if (_devTaps.length >= 5) {
+      _devTaps = [];
+      const on = localStorage.getItem("sa_devmode") !== "1";
+      localStorage.setItem("sa_devmode", on ? "1" : "0");
+      window.dispatchEvent(new Event("sa-devmode"));
+    }
+  } catch { /* ignore */ }
+}
+
 export function AppShell({ children }: { children: React.ReactNode }) {
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false); // off-canvas drawer on phones
@@ -294,7 +310,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         <div className="h-16 flex items-center justify-between px-4 border-b border-white/5">
           {(!isCollapsed || mobileOpen) && (
             <div className="flex items-center gap-2.5 overflow-hidden">
-              <div className="w-9 h-9 rounded-xl flex-shrink-0 grid place-items-center bg-gradient-to-br from-amber-400 to-orange-500 shadow-sm shadow-amber-500/30">
+              <div onClick={bumpDevTap} className="w-9 h-9 rounded-xl flex-shrink-0 grid place-items-center bg-gradient-to-br from-amber-400 to-orange-500 shadow-sm shadow-amber-500/30 cursor-pointer">
                 <CandlestickChart className="w-5 h-5 text-white" strokeWidth={2.5} />
               </div>
               <span className="text-[19px] font-black text-white tracking-tight whitespace-nowrap md:inline">
