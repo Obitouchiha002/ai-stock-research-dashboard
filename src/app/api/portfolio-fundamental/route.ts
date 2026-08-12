@@ -58,22 +58,34 @@ export async function POST(req: NextRequest) {
     const symbols = positions.map((p) => p.symbol);
     const totalW = positions.reduce((s, p) => s + p.value, 0) || 1;
 
-    // 1) Batch quote for marketCap / PE / EPS.
+    // 1) Quote for marketCap / PE / EPS — CHUNKED (a single 74-symbol call is
+    //    unreliable / can be truncated by Yahoo), each chunk retried once.
     const q: Record<string, any> = {};
-    try {
-      const quotes = await yahooFinance.quote(symbols).catch(() => []);
-      (Array.isArray(quotes) ? quotes : [quotes]).forEach((x: any) => { if (x?.symbol) q[x.symbol] = x; });
-    } catch { /* ignore */ }
+    const chunks: string[][] = [];
+    for (let i = 0; i < symbols.length; i += 20) chunks.push(symbols.slice(i, i + 20));
+    await Promise.all(chunks.map(async (ch) => {
+      for (let attempt = 0; attempt < 2; attempt++) {
+        try {
+          const quotes = await yahooFinance.quote(ch);
+          (Array.isArray(quotes) ? quotes : [quotes]).forEach((x: any) => { if (x?.symbol) q[x.symbol] = x; });
+          if (ch.every((s) => q[s])) break;
+        } catch { /* retry */ }
+      }
+    }));
 
-    // 2) quoteSummary per holding for the fundamentals.
+    // 2) quoteSummary per holding for the fundamentals — retried once.
     const funda: Record<string, any> = {};
-    await mapLimit(positions, 8, async (p) => {
-      try {
-        const s: any = await yahooFinance.quoteSummary(p.symbol, {
-          modules: ["assetProfile", "summaryDetail", "financialData", "defaultKeyStatistics", "earnings", "cashflowStatementHistory", "incomeStatementHistory", "price"],
-        });
-        funda[p.symbol] = s;
-      } catch { funda[p.symbol] = null; }
+    await mapLimit(positions, 6, async (p) => {
+      for (let attempt = 0; attempt < 2; attempt++) {
+        try {
+          const s: any = await yahooFinance.quoteSummary(p.symbol, {
+            modules: ["assetProfile", "summaryDetail", "financialData", "defaultKeyStatistics", "earnings", "cashflowStatementHistory", "incomeStatementHistory", "price"],
+          });
+          funda[p.symbol] = s;
+          return;
+        } catch { /* retry */ }
+      }
+      funda[p.symbol] = null;
     });
 
     // 3) Build per-stock fundamentals.
@@ -163,11 +175,15 @@ export async function POST(req: NextRequest) {
     };
     const secAll: Record<string, number> = {};
     stocks.forEach((x) => { secAll[x.sector] = (secAll[x.sector] || 0) + x.value; });
+    const unknownVal = stocks.filter((x) => x.bucket === "unknown").reduce((s, x) => s + x.value, 0);
+    const unclassifiedPct = Math.round((unknownVal / totalW) * 1000) / 10;
+    const unclassifiedCount = stocks.filter((x) => x.bucket === "unknown").length;
     const overall = {
       count: stocks.length,
       beta: wAvgAll("beta"), trailingPE: wAvgAll("trailingPE"), forwardPE: wAvgAll("forwardPE"),
       sectorAlloc: Object.entries(secAll).map(([sector, v]) => ({ sector, pct: Math.round((v / totalW) * 1000) / 10 })).sort((a, b) => b.pct - a.pct),
-      capMix: { large: buckets.large.pct, mid: buckets.mid.pct, small: buckets.small.pct },
+      capMix: { large: buckets.large.pct, mid: buckets.mid.pct, small: buckets.small.pct, unclassified: unclassifiedPct },
+      unclassifiedCount,
     };
 
     // 5) Correlation — same-sector pairs that move together.
@@ -243,7 +259,8 @@ IMPORTANT for flaggedManual: always include that normalized earnings (ex-excepti
       ai = { error: "AI is busy right now. Please try again in a few seconds." };
     }
 
-    return NextResponse.json({ market, currency: cur, overall, buckets, correlations, stocks, ai });
+    const stocksByValue = [...stocks].sort((a, b) => b.value - a.value);
+    return NextResponse.json({ market, currency: cur, overall, buckets, correlations, stocks: stocksByValue, ai });
   } catch (e: any) {
     return NextResponse.json({ error: e?.message || String(e) }, { status: 500 });
   }

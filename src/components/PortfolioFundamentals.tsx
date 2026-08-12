@@ -117,6 +117,12 @@ export default function PortfolioFundamentals({ market }: { market: PortfolioMar
               {(["large", "mid", "small"] as const).map((b) => (
                 <Bar key={b} label={b === "large" ? "Large cap" : b === "mid" ? "Mid cap" : "Small cap"} pct={buckets?.[b]?.pct ?? 0} color={CAP_COLOR[b]} sub={`${buckets?.[b]?.count ?? 0} stocks`} />
               ))}
+              {(overall.capMix?.unclassified ?? 0) > 0 && (
+                <Bar label="Unclassified" pct={overall.capMix.unclassified} color="bg-slate-300" sub={`${overall.unclassifiedCount ?? 0} stocks`} />
+              )}
+              {(overall.capMix?.unclassified ?? 0) >= 30 && (
+                <p className="text-[11px] text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-2 py-1 mt-2">{overall.capMix.unclassified}% of value has no market-cap/sector data from Yahoo (often ETFs, funds, or thinly-covered tickers) — those metrics can't be classified.</p>
+              )}
             </div>
             <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-4">
               <div className="text-[11px] font-black uppercase tracking-wide text-slate-500 mb-2">Weighted portfolio metrics</div>
