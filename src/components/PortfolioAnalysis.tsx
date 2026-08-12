@@ -68,7 +68,7 @@ export default function PortfolioAnalysis({ market, holdingsOverride, hideFundam
     if (holdings.length === 0) { setErr(hideFundamental ? "No symbols to analyze." : "No holdings in this market yet."); return; }
     const cfg = over || settings;
     const tf = tfOver || timeframe;
-    const key = `${tf}|${sig}`;
+    const key = `${market}|${tf}|${sig}`;
     // Serve a fresh cached result instantly (unless forcing or asking for AI).
     if (!withAi && !force) {
       const c = cacheRef.current[key];

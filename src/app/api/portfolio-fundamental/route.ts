@@ -60,7 +60,7 @@ export async function POST(req: NextRequest) {
 
     // For Indian holdings stored without a suffix, try the NSE (.NS) then BSE
     // (.BO) listing so bare tickers like RELIANCE / TCS resolve on Yahoo.
-    const candOf = (s: string) => (s.includes(".") ? [s] : india ? [`${s}.NS`, `${s}.BO`] : [s]);
+    const candOf = (s: string) => (s.includes(".") ? [s] : india ? [`${s}.NS`, `${s}.BO`, s] : [s]);
     const allCands = Array.from(new Set(positions.flatMap((p) => candOf(p.symbol))));
 
     // 1) Quote for marketCap / PE / EPS — CHUNKED (a single big call is

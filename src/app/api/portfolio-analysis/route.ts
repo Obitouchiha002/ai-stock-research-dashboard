@@ -37,7 +37,7 @@ async function techFor(symbol: string, s: Settings, timeframe: "1d" | "1h", indi
   const interval = timeframe === "1h" ? "1h" : "1d";
   const period1 = subDays(new Date(), days).toISOString().split("T")[0];
   // For a bare Indian ticker (RELIANCE / TCS), try the NSE then BSE listing.
-  const cands = symbol.includes(".") ? [symbol] : india ? [`${symbol}.NS`, `${symbol}.BO`] : [symbol];
+  const cands = symbol.includes(".") ? [symbol] : india ? [`${symbol}.NS`, `${symbol}.BO`, symbol] : [symbol];
   // Two rounds so a single US symbol still gets one retry on a transient hiccup.
   for (let round = 0; round < 2; round++) {
     for (const sym of cands) {
@@ -155,6 +155,7 @@ STRICT RULES:
 - Use measured research language ("appears extended", "trend has weakened", "worth monitoring") — never directive language ("you should sell/buy").
 - Base every statement ONLY on the technical data provided plus general, well-known market context. Do not invent numbers.
 - Be specific and useful, like a seasoned analyst briefing THIS client.
+- CRITICAL: This is a ${market || "single-market"} portfolio. Name ONLY the exact tickers listed below — NEVER invent tickers or mention stocks from a different market/country (do not bring Indian names into a US review or vice-versa). Every "symbol" you output must be one of: ${JSON.stringify(holdings.map((h) => h.symbol))}.
 
 PORTFOLIO SUMMARY: total holdings ${totals.holdingsCount}, largest position ${totals.topPosition?.symbol || "-"} at ${concentrationPct}% weight, uptrend ${trendCounts.Uptrend} / downtrend ${trendCounts.Downtrend} / sideways ${trendCounts.Sideways}, ${overbought} overbought (≥${settings.rsiOverbought}), ${oversold} oversold (≤${settings.rsiOversold}), ${belowSma200} below 200-DMA.
 HOLDINGS (technical): ${JSON.stringify(compact)}
@@ -178,6 +179,11 @@ Only include holdings that have data. Keep it concise and expert.`;
           const u = currentUsage();
           return { data: d, aiTokens: u?.tokens ?? 0 };
         });
+        // Defensive: drop any per-holding note / alert whose ticker isn't held
+        // here (stops cross-market names from leaking into the report).
+        const held = new Set(holdings.map((h) => h.symbol.toUpperCase()));
+        const keepHeld = (arr: any) => Array.isArray(arr) ? arr.filter((x) => x?.symbol && held.has(String(x.symbol).toUpperCase())) : arr;
+        if (data) { data.holdings = keepHeld(data.holdings); data.alerts = keepHeld(data.alerts); }
         ai = { ...data, aiTokens };
       } catch (e: any) {
         ai = { error: "AI is busy right now. Please try again in a few seconds." };

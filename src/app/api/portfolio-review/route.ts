@@ -55,7 +55,7 @@ export async function POST(req: NextRequest) {
     positions.forEach((p) => { posBySym[p.symbol] = p; });
 
     // Resolve bare Indian tickers to their .NS/.BO listing.
-    const candOf = (s: string) => (s.includes(".") ? [s] : india ? [`${s}.NS`, `${s}.BO`] : [s]);
+    const candOf = (s: string) => (s.includes(".") ? [s] : india ? [`${s}.NS`, `${s}.BO`, s] : [s]);
     const allCands = Array.from(new Set(positions.flatMap((p) => candOf(p.symbol))));
 
     // 1) Quote for marketCap / PE / EPS / 52w change — CHUNKED (a single big call
