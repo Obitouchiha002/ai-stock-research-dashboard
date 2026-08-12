@@ -72,6 +72,24 @@ export default function DevMarkup() {
 
   useEffect(() => { if (dev) { const d = loadAll()[pathname] || { notes: [], strokes: [] }; setNotes(d.notes || []); setStrokes(d.strokes || []); past.current = []; future.current = []; setHist((n) => n + 1); } }, [pathname, dev]);
 
+  // While dev mode is on, turn the app into a clean drawing surface: block text
+  // selection, the iOS copy/paste long-press callout, copy/cut, and pull-to-
+  // refresh — so drawing never selects/copies the page. Inputs stay editable.
+  useEffect(() => {
+    if (!dev) return;
+    const html = document.documentElement;
+    html.classList.add("dev-markup-active");
+    const inField = (t: any) => t && (t.tagName === "TEXTAREA" || t.tagName === "INPUT" || t.isContentEditable);
+    const noCtx = (e: Event) => e.preventDefault();
+    const noSel = (e: Event) => { if (!inField(e.target)) e.preventDefault(); };
+    const noCopy = (e: Event) => { if (!inField(e.target)) e.preventDefault(); };
+    document.addEventListener("contextmenu", noCtx);
+    document.addEventListener("selectstart", noSel);
+    document.addEventListener("copy", noCopy);
+    document.addEventListener("cut", noCopy);
+    return () => { html.classList.remove("dev-markup-active"); document.removeEventListener("contextmenu", noCtx); document.removeEventListener("selectstart", noSel); document.removeEventListener("copy", noCopy); document.removeEventListener("cut", noCopy); };
+  }, [dev]);
+
   const persist = useCallback((n: Note[], s: Stroke[]) => { const all = loadAll(); all[pathname] = { notes: n, strokes: s }; saveAll(all); }, [pathname]);
   const saveNotes = useCallback((n: Note[]) => { setNotes(n); persist(n, strokesRef.current); }, [persist]);
   const commitStrokes = useCallback((s: Stroke[]) => { setStrokes(s); persist(notesRef.current, s); }, [persist]);

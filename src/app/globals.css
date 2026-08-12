@@ -411,3 +411,26 @@ main :is(.text-slate-300) { color: #94a3b8 !important; } /* 300 → 400: readabl
 .sa-table tbody tr:last-child td { @apply border-b-0; }
 /* Right-aligned numeric cells: tabular figures so columns line up. */
 .sa-num { @apply text-right tabular-nums font-semibold text-slate-800; }
+
+/* ---- Developer markup mode: clean drawing surface ---- */
+/* When dev markup is active, block selection / iOS long-press callout / copy so
+   drawing with the pen never selects or copies the page. Inputs stay editable. */
+html.dev-markup-active,
+html.dev-markup-active main,
+html.dev-markup-active main * {
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
+}
+html.dev-markup-active textarea,
+html.dev-markup-active input,
+html.dev-markup-active [contenteditable="true"] {
+  -webkit-user-select: text;
+  user-select: text;
+  -webkit-touch-callout: default;
+}
+/* Stop pull-to-refresh / rubber-band reloads while marking. */
+html.dev-markup-active,
+html.dev-markup-active main {
+  overscroll-behavior: contain;
+}
