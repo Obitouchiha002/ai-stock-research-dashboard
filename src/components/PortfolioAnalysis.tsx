@@ -147,6 +147,20 @@ export default function PortfolioAnalysis({ market, holdingsOverride, hideFundam
   const rows = (data?.holdings || []) as any[];
   const ai = data?.ai;
   const changedSymbols = Object.keys(newBySymbol);
+  // Extra snapshot detail computed from the rows.
+  const snap = useMemo(() => {
+    const a = { Buy: 0, Sell: 0, Hold: 0 } as Record<string, number>;
+    let bull = 0, bear = 0, volUp = 0, near = 0;
+    rows.forEach((r: any) => {
+      const t = r.tech; if (!t?.ok) return;
+      if (t.action && a[t.action] != null) a[t.action]++;
+      if ((t.patterns || [])[0]?.tone === "bull") bull++;
+      if ((t.patterns || [])[0]?.tone === "bear") bear++;
+      if (t.volRising) volUp++;
+      if (t.near52w) near++;
+    });
+    return { a, bull, bear, volUp, near };
+  }, [rows]);
 
   return (
     <div className="space-y-5">
@@ -287,12 +301,13 @@ export default function PortfolioAnalysis({ market, holdingsOverride, hideFundam
 
       {/* Summary strip — compact stat cards */}
       {totals && (
-        <div className="grid grid-cols-3 sm:grid-cols-5 gap-2.5">
+        <div className="grid grid-cols-3 md:grid-cols-6 gap-2.5">
           <Stat label="Holdings" icon={Layers} tone="indigo" value={String(totals.holdingsCount)} sub={totals.topPosition ? `Top ${totals.topPosition.symbol.replace(".NS", "")} · ${totals.topPosition.pct}%` : ""} />
+          <Stat label="Action" icon={Sparkles} value={`${snap.a.Buy}B · ${snap.a.Sell}S`} sub={`${snap.a.Hold} hold${snap.near ? ` · ${snap.near} @52w` : ""}`} tone={snap.a.Sell > snap.a.Buy ? "bear" : snap.a.Buy > snap.a.Sell ? "bull" : "info"} />
           <Stat label="Trend mix" icon={Activity} value={`${totals.trendCounts.Uptrend}↑ ${totals.trendCounts.Downtrend}↓`} sub={`${totals.trendCounts.Sideways} sideways`} tone={totals.trendCounts.Downtrend > totals.trendCounts.Uptrend ? "bear" : totals.trendCounts.Uptrend > totals.trendCounts.Downtrend ? "bull" : "info"} />
-          <Stat label="MA align" icon={BarChart3} value={`${totals.perfectUp}↑ ${totals.perfectDown}↓`} sub="perfect stacks" tone={totals.perfectDown > totals.perfectUp ? "bear" : totals.perfectUp > totals.perfectDown ? "bull" : "info"} />
+          <Stat label="MA align" icon={BarChart3} value={`${totals.perfectUp}↑ ${totals.perfectDown}↓`} sub={`perfect · ${snap.volUp} vol↑`} tone={totals.perfectDown > totals.perfectUp ? "bear" : totals.perfectUp > totals.perfectDown ? "bull" : "info"} />
           <Stat label="OB / OS" icon={Gauge} value={`${totals.overbought} / ${totals.oversold}`} sub={`RSI ≥${settings.rsiOverbought} / ≤${settings.rsiOversold}`} tone={totals.overbought > 0 ? "warn" : totals.oversold > 0 ? "warn" : "info"} />
-          <Stat label="Below 200-DMA" icon={Waves} value={String(totals.belowSma200)} sub={`${totals.weakTrend} weak trend`} tone={totals.belowSma200 > totals.holdingsCount / 2 ? "bear" : totals.belowSma200 > 0 ? "warn" : "bull"} />
+          <Stat label="Below 200-DMA" icon={Waves} value={String(totals.belowSma200)} sub={`${totals.weakTrend} weak · ${snap.bull}▲ ${snap.bear}▼ candle`} tone={totals.belowSma200 > totals.holdingsCount / 2 ? "bear" : totals.belowSma200 > 0 ? "warn" : "bull"} />
         </div>
       )}
 
