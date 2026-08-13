@@ -151,10 +151,10 @@ export default function PortfolioAnalysis({ market, holdingsOverride, hideFundam
     <div className="space-y-5">
       {/* Technical / Fundamental sub-toggle */}
       {!hideFundamental && (
-        <div className="flex rounded-xl bg-slate-100 p-1 w-fit">
+        <div className="flex rounded-xl bg-slate-100 p-1 w-fit border border-slate-200">
           {(["technical", "fundamental"] as const).map((m) => (
             <button key={m} onClick={() => setMode(m)}
-              className={`px-4 py-1.5 rounded-lg text-xs font-black transition ${mode === m ? "bg-white text-indigo-700 shadow-sm" : "text-slate-500 hover:text-slate-700"}`}>
+              className={`px-5 py-2 rounded-lg text-[13px] font-black transition ${mode === m ? "bg-white text-indigo-700 shadow-sm" : "text-slate-500 hover:text-slate-800"}`}>
               {m === "technical" ? "📈 Technical" : "🏛 Fundamental"}
             </button>
           ))}
@@ -166,43 +166,48 @@ export default function PortfolioAnalysis({ market, holdingsOverride, hideFundam
       ) : (
       <>
       {/* Header */}
-      <div className="flex flex-wrap items-center justify-between gap-3 bg-gradient-to-br from-indigo-50 to-white rounded-2xl border border-indigo-100 p-5">
-        <div>
-          <h2 className="text-xl font-black text-slate-900 flex items-center gap-2">
-            <Activity className="w-5 h-5 text-indigo-600" /> {label || "Advanced Portfolio Analysis"}
-          </h2>
-          <p className="text-[13px] text-slate-500 font-medium mt-0.5">
-            Technical health of every {hideFundamental ? "symbol" : "holding"} + a professional AI analyst read — {market}
-          </p>
-          <div className="flex flex-wrap gap-1.5 mt-2">
-            <span className="px-2 py-0.5 rounded-full text-[10.5px] font-bold border border-indigo-200 bg-indigo-50 text-indigo-700">{settings.style}</span>
-            <span className="px-2 py-0.5 rounded-full text-[10.5px] font-bold border border-slate-200 bg-slate-50 text-slate-600">{settings.risk} · {settings.horizon}</span>
-            <span className="px-2 py-0.5 rounded-full text-[10.5px] font-bold border border-slate-200 bg-slate-50 text-slate-600 tabular-nums">RSI {settings.rsiOverbought}/{settings.rsiOversold} · ADX {settings.adxTrend}</span>
+      <div className="rounded-2xl border border-slate-200 bg-white shadow-sm overflow-hidden">
+        {/* Title + timeframe */}
+        <div className="flex flex-wrap items-center justify-between gap-3 p-4 sm:p-5 bg-gradient-to-r from-indigo-50 via-white to-white border-b border-slate-100">
+          <div className="flex items-center gap-3 min-w-0">
+            <div className="w-11 h-11 rounded-2xl bg-indigo-600 grid place-items-center shadow-md shadow-indigo-600/30 shrink-0">
+              <Activity className="w-6 h-6 text-white" strokeWidth={2.5} />
+            </div>
+            <div className="min-w-0">
+              <h2 className="text-lg sm:text-xl font-black text-slate-900 leading-tight truncate">{label || "Advanced Portfolio Analysis"}</h2>
+              <p className="text-[13px] text-slate-500 font-semibold">Technical health + a professional AI read · {market}</p>
+            </div>
           </div>
-        </div>
-        <div className="flex items-center gap-2 flex-wrap">
-          {/* Timeframe toggle — Daily vs Hourly */}
-          <div className="inline-flex rounded-xl border border-slate-200 bg-slate-100 p-0.5">
+          {/* Daily / Hourly — bigger segmented */}
+          <div className="inline-flex rounded-xl bg-slate-100 p-1 border border-slate-200 shrink-0">
             {(["1d", "1h"] as const).map((tf) => (
               <button key={tf} onClick={() => switchTf(tf)} disabled={loading}
-                className={`px-3 py-1.5 rounded-lg text-xs font-black transition disabled:opacity-50 ${timeframe === tf ? "bg-white text-indigo-700 shadow-sm" : "text-slate-500 hover:text-slate-700"}`}>
+                className={`px-4 sm:px-5 py-2 rounded-lg text-sm font-black transition disabled:opacity-50 ${timeframe === tf ? "bg-white text-indigo-700 shadow-sm" : "text-slate-500 hover:text-slate-800"}`}>
                 {tf === "1d" ? "Daily" : "Hourly"}
               </button>
             ))}
           </div>
-          <button onClick={() => setShowSettings((v) => !v)}
-            className={`inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-black border transition ${showSettings ? "border-indigo-300 bg-indigo-50 text-indigo-700" : "border-slate-200 bg-white text-slate-700 hover:bg-slate-50"}`}>
-            <SlidersHorizontal className="w-3.5 h-3.5" /> Customize
-          </button>
-          <button onClick={() => run(false, undefined, undefined, true)} disabled={loading}
-            className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-black border border-slate-200 bg-white text-slate-700 hover:bg-slate-50 disabled:opacity-50">
-            <RefreshCw className={`w-3.5 h-3.5 ${loading ? "animate-spin" : ""}`} /> Refresh
-          </button>
-          <button onClick={() => run(true)} disabled={aiLoading || !rows.length}
-            className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-black bg-indigo-600 text-white hover:bg-indigo-700 disabled:opacity-50">
-            {aiLoading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Sparkles className="w-3.5 h-3.5" />}
-            {ai ? "Refresh AI report" : "Generate AI report"}
-          </button>
+        </div>
+        {/* Profile chips + actions */}
+        <div className="flex flex-wrap items-center gap-2 px-4 sm:px-5 py-3">
+          <span className="px-2.5 py-1 rounded-lg text-[11.5px] font-black border border-indigo-200 bg-indigo-50 text-indigo-700">{settings.style}</span>
+          <span className="px-2.5 py-1 rounded-lg text-[11.5px] font-bold border border-slate-200 bg-slate-50 text-slate-600">{settings.risk} · {settings.horizon}</span>
+          <span className="px-2.5 py-1 rounded-lg text-[11.5px] font-bold border border-slate-200 bg-slate-50 text-slate-600 tabular-nums">RSI {settings.rsiOverbought}/{settings.rsiOversold} · ADX {settings.adxTrend}</span>
+          <div className="ml-auto flex flex-wrap items-center gap-2">
+            <button onClick={() => setShowSettings((v) => !v)}
+              className={`inline-flex items-center gap-1.5 px-4 py-2.5 rounded-xl text-[13px] font-black border-2 transition ${showSettings ? "border-indigo-500 bg-indigo-50 text-indigo-700" : "border-slate-200 bg-white text-slate-700 hover:border-slate-300 hover:bg-slate-50"}`}>
+              <SlidersHorizontal className="w-4 h-4" /> Customize
+            </button>
+            <button onClick={() => run(false, undefined, undefined, true)} disabled={loading}
+              className="inline-flex items-center gap-1.5 px-4 py-2.5 rounded-xl text-[13px] font-black border-2 border-slate-200 bg-white text-slate-700 hover:border-slate-300 hover:bg-slate-50 disabled:opacity-50">
+              <RefreshCw className={`w-4 h-4 ${loading ? "animate-spin" : ""}`} /> Refresh
+            </button>
+            <button onClick={() => run(true)} disabled={aiLoading || !rows.length}
+              className="inline-flex items-center gap-1.5 px-4 py-2.5 rounded-xl text-[13px] font-black bg-indigo-600 text-white shadow-md shadow-indigo-600/25 hover:bg-indigo-700 disabled:opacity-50">
+              {aiLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}
+              {ai ? "Refresh AI report" : "Generate AI report"}
+            </button>
+          </div>
         </div>
       </div>
 

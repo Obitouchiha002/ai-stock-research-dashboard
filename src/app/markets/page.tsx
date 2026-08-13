@@ -544,11 +544,11 @@ export default function MarketsPage() {
           <p className="text-slate-500 mt-1 font-medium">Live Indian &amp; global indices, commodities and crypto.</p>
         </div>
         <div className="flex items-center gap-3">
-          <div className="flex rounded-lg bg-slate-100 p-1">
+          <div className="flex rounded-xl bg-slate-100 p-1 border border-slate-200">
             {(["quotes", "technical"] as const).map((v) => (
               <button key={v} onClick={() => setMktView(v)}
-                className={`px-3 py-1.5 rounded-md text-xs font-black transition ${mktView === v ? "bg-white text-indigo-700 shadow-sm" : "text-slate-500 hover:text-slate-700"}`}>
-                {v === "quotes" ? "Quotes" : "📈 Technical"}
+                className={`px-4 py-2 rounded-lg text-[13px] font-black transition ${mktView === v ? "bg-white text-indigo-700 shadow-sm" : "text-slate-500 hover:text-slate-800"}`}>
+                {v === "quotes" ? "📋 Manual Analysis" : "🤖 AI Analysis"}
               </button>
             ))}
           </div>
@@ -612,7 +612,7 @@ export default function MarketsPage() {
               market={tab === "in" ? "Indian Stocks" : "US Stocks"}
               holdingsOverride={baseRows.map((r) => ({ symbol: r.symbol, name: r.label }))}
               hideFundamental
-              label={`${isCustomTab ? "Custom" : active?.title || "Market"} · Technical Analysis`}
+              label={`${isCustomTab ? "Custom" : active?.title || "Market"} · AI Analysis`}
             />
           </div>
         ) : (

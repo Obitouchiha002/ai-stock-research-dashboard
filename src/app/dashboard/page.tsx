@@ -574,12 +574,12 @@ export default function Dashboard() {
               >
                 <div className="px-4 py-3.5 border-b border-slate-100 flex items-center justify-between gap-3">
                   <h3 className="text-[16px] font-black text-slate-900 tracking-tight">
-                    Top 10 {m.title} companies{dashTech ? " · technical" : " · by market cap"}
+                    Top 10 {m.title} companies{dashTech ? " · AI analysis" : " · by market cap"}
                   </h3>
-                  <div className="flex rounded-lg bg-slate-100 p-0.5 shrink-0">
-                    {([["quotes", "Quotes"], ["tech", "📈 Technical"]] as const).map(([k, lbl]) => (
+                  <div className="flex rounded-xl bg-slate-100 p-1 border border-slate-200 shrink-0">
+                    {([["quotes", "📋 Manual"], ["tech", "🤖 AI Analysis"]] as const).map(([k, lbl]) => (
                       <button key={k} onClick={() => setDashTech(k === "tech")}
-                        className={`px-2.5 py-1 rounded-md text-[11px] font-black transition ${(dashTech ? "tech" : "quotes") === k ? "bg-white text-indigo-700 shadow-sm" : "text-slate-500 hover:text-slate-700"}`}>
+                        className={`px-3 py-1.5 rounded-lg text-[12px] font-black transition ${(dashTech ? "tech" : "quotes") === k ? "bg-white text-indigo-700 shadow-sm" : "text-slate-500 hover:text-slate-800"}`}>
                         {lbl}
                       </button>
                     ))}
@@ -591,7 +591,7 @@ export default function Dashboard() {
                       market={mktTab === "us" ? "US Stocks" : "Indian Stocks"}
                       holdingsOverride={m.stocks.map((s) => ({ symbol: s.symbol, name: s.label }))}
                       hideFundamental
-                      label={`Top 10 ${m.title} · Technical Analysis`}
+                      label={`Top 10 ${m.title} · AI Analysis`}
                     />
                   </div>
                 ) : (
