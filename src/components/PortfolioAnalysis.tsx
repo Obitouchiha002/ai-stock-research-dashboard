@@ -5,6 +5,7 @@ import Link from "next/link";
 import {
   Activity, Sparkles, RefreshCw, AlertTriangle, Bell, ShieldAlert,
   TrendingUp, TrendingDown, ArrowRight, Eye, Loader2, SlidersHorizontal, RotateCcw,
+  Layers, Gauge, BarChart3, Waves,
 } from "lucide-react";
 import {
   getPortfolio, getPfTechSeen, setPfTechSeen, logAiUsageDetailed,
@@ -286,12 +287,12 @@ export default function PortfolioAnalysis({ market, holdingsOverride, hideFundam
 
       {/* Summary strip — compact stat cards */}
       {totals && (
-        <div className="grid grid-cols-3 sm:grid-cols-5 gap-2">
-          <Stat label="Holdings" value={String(totals.holdingsCount)} sub={totals.topPosition ? `Top ${totals.topPosition.symbol.replace(".NS", "")}` : ""} />
-          <Stat label="Trend mix" value={`${totals.trendCounts.Uptrend}↑ ${totals.trendCounts.Downtrend}↓`} sub={`${totals.trendCounts.Sideways} side`} tone={totals.trendCounts.Downtrend > totals.trendCounts.Uptrend ? "bear" : "bull"} />
-          <Stat label="MA align" value={`${totals.perfectUp}↑ ${totals.perfectDown}↓`} sub="perfect" tone={totals.perfectDown > totals.perfectUp ? "bear" : "bull"} />
-          <Stat label="OB / OS" value={`${totals.overbought} / ${totals.oversold}`} sub={`≥${settings.rsiOverbought}/≤${settings.rsiOversold}`} tone={totals.overbought > 0 ? "warn" : "info"} />
-          <Stat label="Below 200" value={String(totals.belowSma200)} sub={`${totals.weakTrend} weak`} tone={totals.belowSma200 > 0 ? "bear" : "bull"} />
+        <div className="grid grid-cols-3 sm:grid-cols-5 gap-2.5">
+          <Stat label="Holdings" icon={Layers} tone="indigo" value={String(totals.holdingsCount)} sub={totals.topPosition ? `Top ${totals.topPosition.symbol.replace(".NS", "")} · ${totals.topPosition.pct}%` : ""} />
+          <Stat label="Trend mix" icon={Activity} value={`${totals.trendCounts.Uptrend}↑ ${totals.trendCounts.Downtrend}↓`} sub={`${totals.trendCounts.Sideways} sideways`} tone={totals.trendCounts.Downtrend > totals.trendCounts.Uptrend ? "bear" : totals.trendCounts.Uptrend > totals.trendCounts.Downtrend ? "bull" : "info"} />
+          <Stat label="MA align" icon={BarChart3} value={`${totals.perfectUp}↑ ${totals.perfectDown}↓`} sub="perfect stacks" tone={totals.perfectDown > totals.perfectUp ? "bear" : totals.perfectUp > totals.perfectDown ? "bull" : "info"} />
+          <Stat label="OB / OS" icon={Gauge} value={`${totals.overbought} / ${totals.oversold}`} sub={`RSI ≥${settings.rsiOverbought} / ≤${settings.rsiOversold}`} tone={totals.overbought > 0 ? "warn" : totals.oversold > 0 ? "warn" : "info"} />
+          <Stat label="Below 200-DMA" icon={Waves} value={String(totals.belowSma200)} sub={`${totals.weakTrend} weak trend`} tone={totals.belowSma200 > totals.holdingsCount / 2 ? "bear" : totals.belowSma200 > 0 ? "warn" : "bull"} />
         </div>
       )}
 
@@ -571,13 +572,22 @@ function SelField({ label, value, opts, onChange }: { label: string; value: stri
   );
 }
 
-function Stat({ label, value, sub, tone }: { label: string; value: string; sub?: string; tone?: string }) {
-  const vc = tone === "bull" ? "text-emerald-600" : tone === "bear" ? "text-rose-600" : tone === "warn" ? "text-amber-600" : "text-slate-800";
+const STAT_STYLE: Record<string, { card: string; label: string; value: string; icon: string }> = {
+  bull: { card: "bg-emerald-50 border-emerald-200", label: "text-emerald-700", value: "text-emerald-700", icon: "text-emerald-500" },
+  bear: { card: "bg-rose-50 border-rose-200", label: "text-rose-700", value: "text-rose-700", icon: "text-rose-500" },
+  warn: { card: "bg-amber-50 border-amber-200", label: "text-amber-700", value: "text-amber-700", icon: "text-amber-500" },
+  info: { card: "bg-slate-50 border-slate-200", label: "text-slate-500", value: "text-slate-800", icon: "text-slate-400" },
+  indigo: { card: "bg-indigo-50 border-indigo-200", label: "text-indigo-700", value: "text-indigo-700", icon: "text-indigo-500" },
+};
+function Stat({ label, value, sub, tone, icon: Icon }: { label: string; value: string; sub?: string; tone?: string; icon?: any }) {
+  const s = STAT_STYLE[tone || "info"] || STAT_STYLE.info;
   return (
-    <div className="bg-white rounded-xl border border-slate-200 shadow-sm px-3 py-2">
-      <div className="text-[9.5px] font-black uppercase tracking-wide text-slate-400 truncate">{label}</div>
-      <div className={`text-[16px] font-black tabular-nums leading-tight mt-0.5 ${vc}`}>{value}</div>
-      {sub && <div className="text-[10px] text-slate-400 font-medium truncate">{sub}</div>}
+    <div className={`rounded-xl border shadow-sm px-3 py-2.5 ${s.card}`}>
+      <div className={`flex items-center gap-1 text-[9.5px] font-black uppercase tracking-wide truncate ${s.label}`}>
+        {Icon && <Icon className={`w-3 h-3 ${s.icon}`} />}{label}
+      </div>
+      <div className={`text-[18px] font-black tabular-nums leading-tight mt-1 ${s.value}`}>{value}</div>
+      {sub && <div className="text-[10px] text-slate-500 font-semibold truncate mt-0.5">{sub}</div>}
     </div>
   );
 }
