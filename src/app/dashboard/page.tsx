@@ -448,15 +448,16 @@ export default function Dashboard() {
                     <Link
                       key={it.symbol}
                       href={`/charts?symbol=${encodeURIComponent(it.symbol)}`}
-                      className="bg-white rounded-xl border border-slate-200 shadow-sm px-3.5 py-2.5 hover:border-indigo-200 hover:shadow-md transition-all"
+                      className={`relative overflow-hidden rounded-xl border shadow-sm pl-4 pr-3 py-2.5 hover:shadow-md transition-all ${q?.changePct == null ? "bg-white border-slate-200" : up ? "bg-emerald-50/60 border-emerald-200 hover:border-emerald-300" : "bg-rose-50/60 border-rose-200 hover:border-rose-300"}`}
                     >
-                      <div className="text-[10px] font-black uppercase tracking-wider text-slate-400 truncate">{it.label}</div>
-                      <div className="flex items-baseline gap-1.5 mt-1">
+                      <span className={`absolute left-0 top-0 bottom-0 w-1 ${q?.changePct == null ? "bg-slate-200" : up ? "bg-emerald-500" : "bg-rose-500"}`} />
+                      <div className="text-[10px] font-black uppercase tracking-wider text-slate-500 truncate">{it.label}</div>
+                      <div className="flex items-baseline justify-between gap-1.5 mt-1">
                         <span className="text-[15px] font-black text-slate-900 tabular-nums">
                           {q?.price != null ? Number(q.price).toLocaleString(undefined, { maximumFractionDigits: 2 }) : mktLoading ? "…" : "—"}
                         </span>
                         {q?.changePct != null && (
-                          <span className={`text-[11px] font-bold tabular-nums ${up ? "text-emerald-600" : "text-rose-600"}`}>
+                          <span className={`text-[11px] font-black tabular-nums px-1.5 py-0.5 rounded-md ${up ? "bg-emerald-600 text-white" : "bg-rose-600 text-white"}`}>
                             {up ? "+" : ""}{q.changePct.toFixed(2)}%
                           </span>
                         )}
@@ -475,6 +476,7 @@ export default function Dashboard() {
               >
                 <StatCard
                   title="Market Breadth"
+                  tone="indigo"
                   value={
                     <span className="flex items-center gap-1">
                       <span className="text-emerald-600">{adv}</span>
@@ -501,6 +503,7 @@ export default function Dashboard() {
                 />
                 <StatCard
                   title={vixIt?.label || "Volatility"}
+                  tone={vixQ?.changePct != null ? (vixQ.changePct >= 0 ? "rose" : "emerald") : "slate"}
                   value={vixQ?.price != null ? lvl(vixQ.price) : "—"}
                   sub={
                     vixQ?.changePct != null ? (
@@ -1134,14 +1137,16 @@ function DonutRing({ pct, label }: { pct: number; label: string }) {
 // One KPI summary tile for the top stat row.
 function StatCard({
   title, value, sub, tone = "slate", right,
-}: { title: string; value: React.ReactNode; sub?: React.ReactNode; tone?: "slate" | "emerald" | "rose"; right?: React.ReactNode }) {
-  const valTone = tone === "emerald" ? "text-emerald-600" : tone === "rose" ? "text-rose-600" : "text-slate-900";
+}: { title: string; value: React.ReactNode; sub?: React.ReactNode; tone?: "slate" | "emerald" | "rose" | "indigo"; right?: React.ReactNode }) {
+  const card = tone === "emerald" ? "bg-emerald-50 border-emerald-200" : tone === "rose" ? "bg-rose-50 border-rose-200" : tone === "indigo" ? "bg-indigo-50 border-indigo-200" : "bg-white border-slate-200";
+  const labelTone = tone === "emerald" ? "text-emerald-600" : tone === "rose" ? "text-rose-600" : tone === "indigo" ? "text-indigo-600" : "text-slate-400";
+  const valTone = tone === "emerald" ? "text-emerald-700" : tone === "rose" ? "text-rose-700" : tone === "indigo" ? "text-indigo-700" : "text-slate-900";
   return (
-    <div className="bg-white rounded-xl border border-slate-200 shadow-sm px-3.5 py-3 flex items-center justify-between gap-2">
+    <div className={`rounded-xl border shadow-sm px-3.5 py-3 flex items-center justify-between gap-2 ${card}`}>
       <div className="min-w-0">
-        <div className="text-[10px] font-black uppercase tracking-wider text-slate-400 truncate">{title}</div>
-        <div className={`text-[16px] font-black tabular-nums mt-0.5 truncate ${valTone}`}>{value}</div>
-        {sub && <div className="text-[11px] font-bold text-slate-400 mt-0.5 truncate">{sub}</div>}
+        <div className={`text-[10px] font-black uppercase tracking-wider truncate ${labelTone}`}>{title}</div>
+        <div className={`text-[17px] font-black tabular-nums mt-0.5 truncate ${valTone}`}>{value}</div>
+        {sub && <div className="text-[11px] font-bold text-slate-500 mt-0.5 truncate">{sub}</div>}
       </div>
       {right}
     </div>
