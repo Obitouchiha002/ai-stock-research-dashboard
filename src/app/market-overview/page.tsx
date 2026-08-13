@@ -67,16 +67,16 @@ export default function MarketOverviewPage() {
 
       {/* One window: tabs on top, table below */}
       <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
-        {/* Tab bar */}
-        <div className="flex overflow-x-auto border-b border-slate-200 bg-slate-50/60">
+        {/* Tab bar — highlighted boxes */}
+        <div className="flex flex-wrap gap-2 p-3 border-b border-slate-200 bg-slate-50/70">
           {TABS.map((t) => {
             const on = tab === t.key;
             const n = data?.buckets?.[t.key]?.length || 0;
             return (
               <button key={t.key} onClick={() => setTab(t.key)}
-                className={`flex items-center gap-1.5 px-4 py-3 text-[13px] font-black whitespace-nowrap border-b-2 transition ${on ? "border-indigo-600 text-indigo-700 bg-white" : "border-transparent text-slate-500 hover:text-slate-800"}`}>
+                className={`inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-[13px] font-black border transition ${on ? "bg-indigo-600 border-indigo-600 text-white shadow-md shadow-indigo-600/25" : "bg-white border-slate-200 text-slate-600 hover:border-indigo-300 hover:bg-indigo-50/40"}`}>
                 <t.icon className="w-4 h-4" /> {t.label}
-                {data && <span className={`text-[11px] px-1.5 py-0.5 rounded-full ${on ? "bg-indigo-100 text-indigo-700" : "bg-slate-200 text-slate-500"}`}>{n}</span>}
+                {data && <span className={`text-[11px] font-black px-1.5 py-0.5 rounded-full tabular-nums ${on ? "bg-white/25 text-white" : "bg-slate-100 text-slate-500"}`}>{n}</span>}
               </button>
             );
           })}
