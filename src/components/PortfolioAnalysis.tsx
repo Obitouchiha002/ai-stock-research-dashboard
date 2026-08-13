@@ -273,27 +273,25 @@ export default function PortfolioAnalysis({ market, holdingsOverride, hideFundam
         </div>
       )}
 
-      {/* Timeframe overview banner */}
+      {/* Timeframe overview banner — compact single line */}
       {totals && (
-        <div className={`rounded-2xl border p-4 ${timeframe === "1h" ? "border-violet-200 bg-violet-50/50" : "border-sky-200 bg-sky-50/50"}`}>
-          <div className="flex items-center gap-2 mb-1">
-            <span className={`px-2.5 py-0.5 rounded-full text-[12px] font-black ${timeframe === "1h" ? "bg-violet-600 text-white" : "bg-sky-600 text-white"}`}>{timeframe === "1h" ? "⏱ HOURLY" : "📊 DAILY"}</span>
-            <span className="text-[13px] font-bold text-slate-700">{timeframe === "1h" ? "Short-term / intraday swings" : "The primary trend"}</span>
-          </div>
-          <p className="text-[13px] text-slate-600 font-medium">
-            Across {totals.holdingsCount} holdings: <b className="text-emerald-700">{totals.trendCounts.Uptrend} uptrend</b> · <b className="text-rose-700">{totals.trendCounts.Downtrend} downtrend</b> · {totals.trendCounts.Sideways} sideways. <b className="text-emerald-700">{totals.perfectUp}</b> in a perfect up-stack, <b className="text-rose-700">{totals.perfectDown}</b> in a perfect down-stack. {totals.overbought} overbought, {totals.oversold} oversold. Toggle Daily/Hourly above to compare.
-          </p>
+        <div className={`rounded-xl border px-3.5 py-2 flex flex-wrap items-center gap-x-2 gap-y-1 ${timeframe === "1h" ? "border-violet-200 bg-violet-50/60" : "border-sky-200 bg-sky-50/60"}`}>
+          <span className={`px-2 py-0.5 rounded-md text-[11px] font-black shrink-0 ${timeframe === "1h" ? "bg-violet-600 text-white" : "bg-sky-600 text-white"}`}>{timeframe === "1h" ? "⏱ HOURLY" : "📊 DAILY"}</span>
+          <span className="text-[12px] font-bold text-slate-700">{timeframe === "1h" ? "Short-term / intraday" : "The primary trend"}</span>
+          <span className="text-[12px] text-slate-500 font-medium">
+            · <b className="text-emerald-700">{totals.trendCounts.Uptrend} up</b> · <b className="text-rose-700">{totals.trendCounts.Downtrend} down</b> · {totals.trendCounts.Sideways} sideways · {totals.perfectUp}↑{totals.perfectDown}↓ perfect stack · {totals.overbought}/{totals.oversold} OB/OS
+          </span>
         </div>
       )}
 
-      {/* Summary strip */}
+      {/* Summary strip — compact stat cards */}
       {totals && (
-        <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
-          <Stat label="Holdings" value={String(totals.holdingsCount)} sub={totals.topPosition ? `Top ${totals.topPosition.symbol} · ${totals.topPosition.pct}%` : ""} />
-          <Stat label="Trend mix" value={`${totals.trendCounts.Uptrend}↑ ${totals.trendCounts.Downtrend}↓`} sub={`${totals.trendCounts.Sideways} sideways`} tone={totals.trendCounts.Downtrend > totals.trendCounts.Uptrend ? "bear" : "bull"} />
-          <Stat label="MA alignment" value={`${totals.perfectUp}↑ ${totals.perfectDown}↓`} sub="perfect stack" tone={totals.perfectDown > totals.perfectUp ? "bear" : "bull"} />
-          <Stat label="Overbought / Oversold" value={`${totals.overbought} / ${totals.oversold}`} sub={`RSI ≥${settings.rsiOverbought} / ≤${settings.rsiOversold}`} tone={totals.overbought > 0 ? "warn" : "info"} />
-          <Stat label="Below 200-DMA" value={String(totals.belowSma200)} sub={`${totals.weakTrend} weak trend`} tone={totals.belowSma200 > 0 ? "bear" : "bull"} />
+        <div className="grid grid-cols-3 sm:grid-cols-5 gap-2">
+          <Stat label="Holdings" value={String(totals.holdingsCount)} sub={totals.topPosition ? `Top ${totals.topPosition.symbol.replace(".NS", "")}` : ""} />
+          <Stat label="Trend mix" value={`${totals.trendCounts.Uptrend}↑ ${totals.trendCounts.Downtrend}↓`} sub={`${totals.trendCounts.Sideways} side`} tone={totals.trendCounts.Downtrend > totals.trendCounts.Uptrend ? "bear" : "bull"} />
+          <Stat label="MA align" value={`${totals.perfectUp}↑ ${totals.perfectDown}↓`} sub="perfect" tone={totals.perfectDown > totals.perfectUp ? "bear" : "bull"} />
+          <Stat label="OB / OS" value={`${totals.overbought} / ${totals.oversold}`} sub={`≥${settings.rsiOverbought}/≤${settings.rsiOversold}`} tone={totals.overbought > 0 ? "warn" : "info"} />
+          <Stat label="Below 200" value={String(totals.belowSma200)} sub={`${totals.weakTrend} weak`} tone={totals.belowSma200 > 0 ? "bear" : "bull"} />
         </div>
       )}
 
@@ -576,10 +574,10 @@ function SelField({ label, value, opts, onChange }: { label: string; value: stri
 function Stat({ label, value, sub, tone }: { label: string; value: string; sub?: string; tone?: string }) {
   const vc = tone === "bull" ? "text-emerald-600" : tone === "bear" ? "text-rose-600" : tone === "warn" ? "text-amber-600" : "text-slate-800";
   return (
-    <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-3.5">
-      <div className="text-[11px] font-black uppercase tracking-wide text-slate-400">{label}</div>
-      <div className={`text-lg font-black tabular-nums mt-0.5 ${vc}`}>{value}</div>
-      {sub && <div className="text-[11px] text-slate-400 font-medium">{sub}</div>}
+    <div className="bg-white rounded-xl border border-slate-200 shadow-sm px-3 py-2">
+      <div className="text-[9.5px] font-black uppercase tracking-wide text-slate-400 truncate">{label}</div>
+      <div className={`text-[16px] font-black tabular-nums leading-tight mt-0.5 ${vc}`}>{value}</div>
+      {sub && <div className="text-[10px] text-slate-400 font-medium truncate">{sub}</div>}
     </div>
   );
 }
