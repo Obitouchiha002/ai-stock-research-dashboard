@@ -307,15 +307,15 @@ export default function PortfolioAnalysis({ market, holdingsOverride, hideFundam
             <table className="w-full text-sm">
               <thead>
                 <tr className="text-[11px] font-black text-slate-500 uppercase bg-slate-100 border-b border-slate-200">
-                  <th className="text-left px-4 py-2.5">Stock</th>
-                  <th className="text-right px-2 py-2.5">RSI</th>
-                  <th className="text-center px-2 py-2.5">ADX (±DI)</th>
-                  <th className="text-right px-2 py-2.5">Volume</th>
-                  <th className="text-left px-3 py-2.5">Moving average</th>
-                  <th className="text-right px-3 py-2.5">Support / Resist.</th>
-                  <th className="text-left px-3 py-2.5">Pattern</th>
-                  <th className="text-left px-3 py-2.5">Candle</th>
-                  <th className="text-center px-2 py-2.5">Action</th>
+                  <th className="text-left px-4 py-3">Stock</th>
+                  <th className="text-right px-3 py-3">RSI</th>
+                  <th className="text-center px-3 py-3">ADX (±DI)</th>
+                  <th className="text-right px-3 py-3">Volume</th>
+                  <th className="text-left px-3 py-3">Moving average</th>
+                  <th className="text-right px-3 py-3">Support / Resist.</th>
+                  <th className="text-left px-3 py-3">Pattern</th>
+                  <th className="text-left px-3 py-3">Candle</th>
+                  <th className="text-center px-3 py-3">Action</th>
                 </tr>
               </thead>
               <tbody>
@@ -331,32 +331,32 @@ export default function PortfolioAnalysis({ market, holdingsOverride, hideFundam
                   const rsiArrow = t?.rsiTrend === "rising" ? "↑" : t?.rsiTrend === "falling" ? "↓" : t?.rsiTrend === "stagnant" ? "→" : "";
                   const combo = t?.ok ? maCombo(t) : null;
                   return (
-                    <tr key={r.symbol} className="border-b border-slate-100 even:bg-slate-50/50 hover:bg-indigo-50/40 align-top">
-                      <td className="px-4 py-2.5">
+                    <tr key={r.symbol} className="border-b border-slate-100 even:bg-slate-50/40 hover:bg-indigo-50/40 align-middle">
+                      <td className="px-4 py-3 align-middle">
                         <Link href={`/charts?symbol=${encodeURIComponent(r.symbol)}`} className="font-black text-slate-900 hover:text-indigo-600">{r.symbol}</Link>
-                        <div className="text-[11px] text-slate-500 font-medium truncate max-w-[160px]">{r.name}</div>
+                        <div className="text-[11px] text-slate-500 font-medium truncate max-w-[150px]">{r.name}</div>
                       </td>
                       {!t?.ok ? (
-                        <td colSpan={8} className="px-3 py-2.5"><span className="text-[11px] font-bold text-slate-500 bg-slate-100 border border-slate-200 rounded-full px-2.5 py-0.5">Technical data unavailable</span></td>
+                        <td colSpan={8} className="px-3 py-3"><span className="text-[11px] font-bold text-slate-500 bg-slate-100 border border-slate-200 rounded-full px-2.5 py-0.5">Technical data unavailable</span></td>
                       ) : (
                         <>
-                          <td className="px-2 py-2.5 text-right whitespace-nowrap">
+                          <td className="px-3 py-3 text-right whitespace-nowrap align-middle">
                             <span className={`inline-block text-[15px] font-black tabular-nums ${rsiHasBg ? "px-1.5 py-0.5 rounded-md" : ""} ${rsiBadge}`}>{t.rsi ?? "—"}</span>
                             {rsiArrow && <span className={`ml-1 text-[12px] font-black ${t.rsiTrend === "rising" ? "text-emerald-600" : t.rsiTrend === "falling" ? "text-rose-600" : "text-slate-400"}`}>{rsiArrow}</span>}
                           </td>
-                          <td className="px-2 py-2.5 text-center whitespace-nowrap">
+                          <td className="px-3 py-3 text-center whitespace-nowrap align-middle">
                             <div className={`font-black tabular-nums text-[15px] leading-tight ${t.diUp == null ? "text-slate-800" : t.diUp ? "text-emerald-600" : "text-rose-600"}`}>
                               {t.diUp != null && <span className="text-[10px] mr-0.5">{t.diUp ? "▲" : "▼"}</span>}{t.adx ?? "—"}
                             </div>
                             {(t.plusDI != null || t.minusDI != null) && (
-                              <div className="text-[10.5px] font-bold tabular-nums leading-tight mt-0.5">
+                              <div className="text-[10px] font-bold tabular-nums leading-tight mt-0.5">
                                 <span className="text-emerald-600">+DI {t.plusDI != null ? Math.round(t.plusDI) : "—"}</span>
                                 <span className="text-slate-300"> · </span>
                                 <span className="text-rose-600">−DI {t.minusDI != null ? Math.round(t.minusDI) : "—"}</span>
                               </div>
                             )}
                           </td>
-                          <td className="px-2 py-2.5 text-right whitespace-nowrap">
+                          <td className="px-3 py-3 text-right whitespace-nowrap align-middle">
                             {t.volVs5Pct != null ? (
                               <>
                                 <div className={`font-black tabular-nums text-[13px] ${t.volRising ? "text-emerald-600" : "text-slate-500"}`}>{t.volRising ? "▲" : "▼"} {t.volVs5Pct > 0 ? "+" : ""}{Math.round(t.volVs5Pct)}%</div>
@@ -364,15 +364,15 @@ export default function PortfolioAnalysis({ market, holdingsOverride, hideFundam
                               </>
                             ) : <span className="text-slate-400">—</span>}
                           </td>
-                          <td className="px-3 py-2.5">
+                          <td className="px-3 py-3 align-middle min-w-[152px]">
                             {t.maStack ? (
                               <>
-                                <span className={`inline-block px-2.5 py-0.5 rounded-full text-[12px] font-bold border ${TONE[t.maStack.tone] || TONE.info}`}>{t.maStack.label}</span>
-                                {combo && <div className="text-[10px] text-slate-400 font-bold tabular-nums mt-0.5 tracking-tight">{combo}</div>}
+                                <span className={`inline-block whitespace-nowrap px-2.5 py-1 rounded-full text-[11.5px] font-bold border ${TONE[t.maStack.tone] || TONE.info}`}>{t.maStack.label}</span>
+                                {combo && <div className="text-[10px] text-slate-400 font-bold tabular-nums mt-1 tracking-tight">{combo}</div>}
                               </>
                             ) : <span className="text-[12px] text-slate-400">—</span>}
                           </td>
-                          <td className="px-3 py-2.5 text-right whitespace-nowrap">
+                          <td className="px-3 py-3 text-right whitespace-nowrap align-middle leading-tight">
                             {t.resistance != null ? (
                               <>
                                 <div className="text-[12px] font-black text-rose-600 tabular-nums">R {t.resistance}</div>
@@ -381,27 +381,27 @@ export default function PortfolioAnalysis({ market, holdingsOverride, hideFundam
                               </>
                             ) : <span className="text-[12px] text-slate-300">—</span>}
                           </td>
-                          <td className="px-3 py-2.5">
+                          <td className="px-3 py-3 align-middle min-w-[132px]">
                             {t.chartPattern ? (
-                              <span className={`inline-block px-2.5 py-0.5 rounded-full text-[11.5px] font-bold border ${TONE[t.chartPattern.tone] || TONE.info}`}>{t.chartPattern.label}</span>
+                              <span className={`inline-block whitespace-nowrap px-2.5 py-1 rounded-full text-[11.5px] font-bold border ${TONE[t.chartPattern.tone] || TONE.info}`}>{t.chartPattern.label}</span>
                             ) : <span className="text-[12px] text-slate-300">—</span>}
                           </td>
-                          <td className="px-3 py-2.5">
+                          <td className="px-3 py-3 align-middle min-w-[150px] max-w-[190px]">
                             {(t.patterns || []).length > 0 ? (
                               <>
-                                <span className={`inline-block px-2.5 py-0.5 rounded-full text-[11.5px] font-black border ${TONE[t.patterns[0].tone] || TONE.info}`}>
+                                <span className={`inline-block whitespace-nowrap px-2.5 py-1 rounded-full text-[11.5px] font-black border ${TONE[t.patterns[0].tone] || TONE.info}`}>
                                   {t.patterns[0].tone === "bull" ? "▲" : t.patterns[0].tone === "bear" ? "▼" : "◆"} {t.patterns[0].name}
                                 </span>
-                                <div className={`text-[10px] font-bold mt-0.5 ${t.patterns[0].tone === "bull" ? "text-emerald-600" : t.patterns[0].tone === "bear" ? "text-rose-600" : "text-slate-500"}`}>
+                                <div className={`text-[10px] font-bold mt-1 ${t.patterns[0].tone === "bull" ? "text-emerald-600" : t.patterns[0].tone === "bear" ? "text-rose-600" : "text-slate-500"}`}>
                                   {t.patterns[0].tone === "bull" ? "Bullish read" : t.patterns[0].tone === "bear" ? "Bearish read" : "Indecision"}
                                 </div>
-                                <div className="text-[10px] text-slate-400 mt-0.5 max-w-[170px] leading-tight line-clamp-2">{t.patterns[0].meaning}</div>
+                                <div className="text-[10px] text-slate-400 mt-0.5 leading-tight line-clamp-1">{t.patterns[0].meaning}</div>
                               </>
                             ) : <span className="text-[12px] text-slate-300">no pattern</span>}
                           </td>
-                          <td className="px-2 py-2.5 text-center">
-                            <span className={`inline-block px-2.5 py-0.5 rounded-full text-[12.5px] font-black border ${ACTION[t.action] || ACTION.Hold}`}>{t.action}</span>
-                            {t.overall && <div className="text-[10px] text-slate-400 font-semibold mt-0.5 max-w-[130px] mx-auto leading-tight">{t.overall.label}</div>}
+                          <td className="px-3 py-3 text-center align-middle">
+                            <span className={`inline-block whitespace-nowrap px-3 py-1 rounded-full text-[12.5px] font-black border ${ACTION[t.action] || ACTION.Hold}`}>{t.action}</span>
+                            {t.overall && <div className="text-[10px] text-slate-400 font-semibold mt-1 max-w-[120px] mx-auto leading-tight line-clamp-1">{t.overall.label}</div>}
                           </td>
                         </>
                       )}

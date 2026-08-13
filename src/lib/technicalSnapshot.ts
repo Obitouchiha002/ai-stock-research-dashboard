@@ -99,20 +99,20 @@ function maStackRead(price: number | null, s10: number | null, s20: number | nul
   // Above both long-term averages (50 & 200).
   if (p > s50 && p > s200) {
     if (p > s10 && p > s20) return { label: "Strong uptrend", tone: "bull" };            // above all
-    if (p < s10 && p < s20) return { label: "Uptrend · pullback (below 20-DMA)", tone: "warn" };
+    if (p < s10 && p < s20) return { label: "Uptrend · pullback", tone: "warn" };
     return { label: "Uptrend intact", tone: "bull" };
   }
   // Below both long-term averages.
   if (p < s50 && p < s200) {
     if (p < s10 && p < s20) return { label: "Downtrend", tone: "bear" };                  // below all
-    return { label: "Downtrend · bounce (above 20-DMA)", tone: "warn" };                  // short-term bounce
+    return { label: "Downtrend · bounce", tone: "warn" };                                 // short-term bounce
   }
   // Between the 50 and 200 — early turns.
   if (p > s200 && p < s50) {
-    if (p > s10 && p > s20) return { label: "Recovering · below 50-DMA", tone: "warn" };  // reclaimed short MAs
-    return { label: "Below 50-DMA (weak)", tone: "warn" };
+    if (p > s10 && p > s20) return { label: "Recovering < 50-DMA", tone: "warn" };        // reclaimed short MAs
+    return { label: "Below 50-DMA", tone: "warn" };
   }
-  if (p < s200 && p > s50) return { label: "Above 50, below 200-DMA", tone: "info" };      // mixed / basing
+  if (p < s200 && p > s50) return { label: "Above 50 · below 200", tone: "info" };         // mixed / basing
   return { label: "Mixed / choppy", tone: "info" };
 }
 
