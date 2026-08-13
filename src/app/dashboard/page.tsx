@@ -619,9 +619,9 @@ export default function Dashboard() {
                       <Link
                         key={s.symbol}
                         href={`/analyze?symbol=${encodeURIComponent(s.symbol)}`}
-                        className="grid grid-cols-[2rem_1fr_auto_1rem] sm:grid-cols-[2.5rem_1.8fr_1.2fr_1.2fr_1fr_1.25rem] items-center gap-4 px-4 py-2.5 hover:bg-slate-50/70 transition group"
+                        className="grid grid-cols-[2rem_1fr_auto_1rem] sm:grid-cols-[2.5rem_1.8fr_1.2fr_1.2fr_1fr_1.25rem] items-center gap-4 px-4 py-2.5 even:bg-slate-50/40 hover:bg-indigo-50/40 transition group"
                       >
-                        <span className="text-[12px] font-black text-slate-300 tabular-nums">{i + 1}</span>
+                        <span className="w-6 h-6 rounded-lg bg-slate-100 text-slate-500 text-[12px] font-black tabular-nums flex items-center justify-center shrink-0">{i + 1}</span>
                         <div className="min-w-0">
                           <div className="text-[13.5px] font-black text-slate-900 truncate group-hover:text-indigo-600">
                             {s.label}
@@ -644,8 +644,10 @@ export default function Dashboard() {
                         <div className="hidden sm:block text-right text-[12.5px] font-bold text-slate-500 tabular-nums">
                           {q?.marketCap ? fmtCap(q.marketCap, cur) : "—"}
                         </div>
-                        <div className={`hidden sm:block text-right text-[13px] font-black tabular-nums ${up ? "text-emerald-600" : "text-rose-600"}`}>
-                          {q?.changePct != null ? `${up ? "+" : ""}${q.changePct.toFixed(2)}%` : "—"}
+                        <div className="hidden sm:flex justify-end">
+                          {q?.changePct != null ? (
+                            <span className={`text-[12px] font-black tabular-nums px-2 py-0.5 rounded-md ${up ? "bg-emerald-100 text-emerald-700" : "bg-rose-100 text-rose-700"}`}>{up ? "+" : ""}{q.changePct.toFixed(2)}%</span>
+                          ) : <span className="text-slate-300 text-[13px]">—</span>}
                         </div>
 
                         <ChevronRight className="w-4 h-4 text-slate-300 group-hover:text-indigo-500 shrink-0" />
