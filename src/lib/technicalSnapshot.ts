@@ -92,18 +92,27 @@ export type Signal = { key: string; label: string; tone: "bull" | "bear" | "warn
 export type MaStack = { label: string; tone: "bull" | "bear" | "warn" | "info" } | null;
 function maStackRead(price: number | null, s10: number | null, s20: number | null, s50: number | null, s200: number | null): MaStack {
   if (price == null || s10 == null || s20 == null || s50 == null || s200 == null) return null;
-  // Perfect bullish / bearish alignment.
-  if (price > s10 && s10 > s20 && s20 > s50 && s50 > s200) return { label: "Perfect uptrend", tone: "bull" };
-  if (price < s10 && s10 < s20 && s20 < s50 && s50 < s200) return { label: "Perfect downtrend", tone: "bear" };
-  // Above the long-term averages but short-term slipping.
-  if (price > s50 && price > s200) {
-    if (price < s10 && price < s20) return { label: "Uptrend · below 20-DMA", tone: "warn" };
+  const p = price;
+  // Perfect bullish / bearish alignment (CMP>10>20>50>200 / CMP<10<20<50<200).
+  if (p > s10 && s10 > s20 && s20 > s50 && s50 > s200) return { label: "Perfect uptrend", tone: "bull" };
+  if (p < s10 && s10 < s20 && s20 < s50 && s50 < s200) return { label: "Perfect downtrend", tone: "bear" };
+  // Above both long-term averages (50 & 200).
+  if (p > s50 && p > s200) {
+    if (p > s10 && p > s20) return { label: "Strong uptrend", tone: "bull" };            // above all
+    if (p < s10 && p < s20) return { label: "Uptrend · pullback (below 20-DMA)", tone: "warn" };
     return { label: "Uptrend intact", tone: "bull" };
   }
-  // Below the long-term averages.
-  if (price < s50 && price < s200) return { label: "Downtrend", tone: "bear" };
-  // Crossing the 50-DMA either way.
-  if (price < s50) return { label: "Below 50-DMA", tone: "warn" };
+  // Below both long-term averages.
+  if (p < s50 && p < s200) {
+    if (p < s10 && p < s20) return { label: "Downtrend", tone: "bear" };                  // below all
+    return { label: "Downtrend · bounce (above 20-DMA)", tone: "warn" };                  // short-term bounce
+  }
+  // Between the 50 and 200 — early turns.
+  if (p > s200 && p < s50) {
+    if (p > s10 && p > s20) return { label: "Recovering · below 50-DMA", tone: "warn" };  // reclaimed short MAs
+    return { label: "Below 50-DMA (weak)", tone: "warn" };
+  }
+  if (p < s200 && p > s50) return { label: "Above 50, below 200-DMA", tone: "info" };      // mixed / basing
   return { label: "Mixed / choppy", tone: "info" };
 }
 
@@ -208,6 +217,11 @@ export type TechSnapshot = {
   overall: { label: string; tone: "bull" | "bear" | "warn" | "info" } | null;
   // Candlestick-driven technical action (a chart signal, not personalised advice).
   action: "Buy" | "Sell" | "Hold";
+  // Key levels + a light chart-pattern read.
+  support: number | null;
+  resistance: number | null;
+  pivot: number | null;
+  chartPattern: { label: string; tone: "bull" | "bear" | "warn" | "info" } | null;
   signals: Signal[];
   patterns: CandlePattern[];
 };
@@ -218,7 +232,7 @@ const last = (a: (number | null)[]): number | null => {
 };
 const r2 = (v: number | null) => (v == null ? null : Math.round(v * 100) / 100);
 
-export type SnapshotOpts = { rsiOverbought?: number; rsiOversold?: number; adxTrend?: number };
+export type SnapshotOpts = { rsiOverbought?: number; rsiOversold?: number; adxTrend?: number; diSpread?: number; volSurge?: number };
 
 // Build the latest-bar technical snapshot + human-readable signals from OHLC.
 // Thresholds default to the classic 70 / 30 / 25 but the caller can override
@@ -227,11 +241,14 @@ export function buildSnapshot(candles: { open?: number; high: number; low: numbe
   const OB = opts.rsiOverbought ?? 70;
   const OS = opts.rsiOversold ?? 30;
   const ADX_TREND = opts.adxTrend ?? 25;
+  const DI_SPREAD = opts.diSpread ?? 5;
+  const VOL_SURGE = opts.volSurge ?? 50;
   const empty: TechSnapshot = {
     ok: false, price: null, rsi: null, rsiPrev: null, adx: null, plusDI: null, minusDI: null,
     sma10: null, sma20: null, sma50: null, sma200: null, trend: "—", vsSma50Pct: null, vsSma200Pct: null,
     maStack: null, diUp: null, volVs5Pct: null, volVs10Pct: null, volRising: null,
-    rsiTrend: "—", divergence: null, near52w: null, overall: null, action: "Hold", signals: [], patterns: [],
+    rsiTrend: "—", divergence: null, near52w: null, overall: null, action: "Hold",
+    support: null, resistance: null, pivot: null, chartPattern: null, signals: [], patterns: [],
   };
   if (!candles || candles.length < 30) return empty;
   const highs = candles.map((c) => c.high);
@@ -324,6 +341,27 @@ export function buildSnapshot(candles: { open?: number; high: number; low: numbe
   else if (overall?.tone === "bull") action = "Buy";
   else if (overall?.tone === "bear") action = "Sell";
 
+  // --- Support / Resistance (Donchian swing) + pivot + a light chart-pattern read ---
+  let support: number | null = null, resistance: number | null = null, pivot: number | null = null;
+  let chartPattern: TechSnapshot["chartPattern"] = null;
+  if (price != null && candles.length >= 25) {
+    const N = 20;
+    resistance = Math.max(...highs.slice(-N));
+    support = Math.min(...lows.slice(-N));
+    const lb = candles[candles.length - 1];
+    pivot = (lb.high + lb.low + lb.close) / 3;
+    const tr: number[] = [];
+    for (let i = 1; i < closes.length; i++) tr.push(Math.max(highs[i] - lows[i], Math.abs(highs[i] - closes[i - 1]), Math.abs(lows[i] - closes[i - 1])));
+    const mean = (a: number[]) => (a.length ? a.reduce((x, y) => x + y, 0) / a.length : 0);
+    const recentATR = mean(tr.slice(-7)), priorATR = mean(tr.slice(-28, -7));
+    const mv = closes[closes.length - 1] / closes[Math.max(0, closes.length - 15)] - 1;
+    if (price >= resistance * 0.998) chartPattern = { label: "Donchian breakout ↑", tone: "bull" };
+    else if (price <= support * 1.002) chartPattern = { label: "Donchian breakdown ↓", tone: "bear" };
+    else if (priorATR > 0 && recentATR < priorATR * 0.68) chartPattern = { label: "Symmetrical triangle · squeeze", tone: "warn" };
+    else if (priorATR > 0 && Math.abs(mv) > 0.08 && recentATR < priorATR * 0.85) chartPattern = { label: mv > 0 ? "Bull flag" : "Bear flag", tone: mv > 0 ? "bull" : "bear" };
+    else chartPattern = price > pivot ? { label: "Above pivot", tone: "bull" } : { label: "Below pivot", tone: "bear" };
+  }
+
   const signals: Signal[] = [];
   if (rsiNow != null) {
     if (rsiNow >= OB) signals.push({ key: "rsi-ob", label: `RSI ${Math.round(rsiNow)} · overbought`, tone: "warn" });
@@ -335,13 +373,15 @@ export function buildSnapshot(candles: { open?: number; high: number; low: numbe
     }
   }
   if (adxNow != null) {
-    if (adxNow >= ADX_TREND && pdi != null && mdi != null) {
+    if (adxNow >= ADX_TREND && pdi != null && mdi != null && Math.abs(pdi - mdi) >= DI_SPREAD) {
       if (pdi > mdi) signals.push({ key: "adx-bull", label: `Strong uptrend (ADX ${Math.round(adxNow)})`, tone: "bull" });
       else signals.push({ key: "adx-bear", label: `Strong downtrend (ADX ${Math.round(adxNow)})`, tone: "bear" });
     } else if (adxNow < 20) {
       signals.push({ key: "adx-weak", label: `Weak/no trend (ADX ${Math.round(adxNow)})`, tone: "info" });
     }
   }
+  // Volume surge vs the 5-bar average (user-tunable threshold).
+  if (volVs5 != null && volVs5 >= VOL_SURGE) signals.push({ key: "vol-surge", label: `Volume surge +${Math.round(volVs5)}%`, tone: volRising ? "bull" : "warn" });
   if (price != null && s50 != null) {
     if (price < s50) signals.push({ key: "below-50", label: "Price below 50-DMA", tone: "bear" });
     else signals.push({ key: "above-50", label: "Price above 50-DMA", tone: "bull" });
@@ -365,7 +405,9 @@ export function buildSnapshot(candles: { open?: number; high: number; low: numbe
     sma10: r2(s10), sma20: r2(s20), sma50: r2(s50), sma200: r2(s200), trend,
     vsSma50Pct: r2(vs50), vsSma200Pct: r2(vs200), maStack, diUp,
     volVs5Pct: r2(volVs5), volVs10Pct: r2(volVs10), volRising,
-    rsiTrend, divergence, near52w, overall, action, signals, patterns,
+    rsiTrend, divergence, near52w, overall, action,
+    support: r2(support), resistance: r2(resistance), pivot: r2(pivot), chartPattern,
+    signals, patterns,
   };
 }
 

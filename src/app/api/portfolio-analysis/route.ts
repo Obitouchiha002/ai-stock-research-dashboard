@@ -13,8 +13,8 @@ export const maxDuration = 60;
 
 type InHolding = { symbol: string; name?: string; shares?: number; buyPrice?: number; currentPrice?: number; market?: string };
 
-type Settings = { rsiOverbought: number; rsiOversold: number; adxTrend: number; style: string; risk: string; horizon: string; focus: string };
-const DEFAULTS: Settings = { rsiOverbought: 70, rsiOversold: 30, adxTrend: 25, style: "Long-term investor", risk: "Balanced", horizon: "Long (years)", focus: "" };
+type Settings = { rsiOverbought: number; rsiOversold: number; adxTrend: number; diSpread: number; volSurge: number; style: string; risk: string; horizon: string; focus: string };
+const DEFAULTS: Settings = { rsiOverbought: 70, rsiOversold: 30, adxTrend: 25, diSpread: 5, volSurge: 50, style: "Long-term investor", risk: "Balanced", horizon: "Long (years)", focus: "" };
 
 // Run an async mapper with limited concurrency (keeps Yahoo happy on ~74 symbols).
 async function mapLimit<T, R>(items: T[], limit: number, fn: (t: T, i: number) => Promise<R>): Promise<R[]> {
@@ -48,7 +48,7 @@ async function techFor(symbol: string, s: Settings, timeframe: "1d" | "1h", indi
         if (rows.length >= 30) {
           return buildSnapshot(
             rows.map((r: any) => ({ open: r.open, high: r.high, low: r.low, close: r.close, volume: r.volume })),
-            { rsiOverbought: s.rsiOverbought, rsiOversold: s.rsiOversold, adxTrend: s.adxTrend },
+            { rsiOverbought: s.rsiOverbought, rsiOversold: s.rsiOversold, adxTrend: s.adxTrend, diSpread: s.diSpread, volSurge: s.volSurge },
           );
         }
       } catch { /* try next candidate / round */ }
@@ -136,6 +136,10 @@ export async function POST(req: NextRequest) {
         volRising: r.tech?.volRising ?? null,
         near52w: r.tech?.near52w ?? null,
         overall: r.tech?.overall?.label ?? null,
+        action: r.tech?.action ?? null,
+        support: r.tech?.support ?? null,
+        resistance: r.tech?.resistance ?? null,
+        chartPattern: r.tech?.chartPattern?.label ?? null,
         signals: (r.tech?.signals || []).map((s) => s.label),
         candlePatterns: (r.tech?.patterns || []).map((p) => p.name),
       }));

@@ -223,6 +223,9 @@ export default function PortfolioAnalysis({ market, holdingsOverride, hideFundam
             <NumField label="RSI overbought ≥" value={settings.rsiOverbought} min={50} max={95} onChange={(v) => setF("rsiOverbought", v)} />
             <NumField label="RSI oversold ≤" value={settings.rsiOversold} min={5} max={50} onChange={(v) => setF("rsiOversold", v)} />
             <NumField label="Trend when ADX ≥" value={settings.adxTrend} min={10} max={50} onChange={(v) => setF("adxTrend", v)} />
+            <NumField label="+DI/−DI gap to confirm ≥" value={settings.diSpread} min={0} max={40} onChange={(v) => setF("diSpread", v)} />
+            <NumField label="Volume surge ≥ %" value={settings.volSurge} min={10} max={300} onChange={(v) => setF("volSurge", v)} />
+            <div />
             <SelField label="Investing style" value={settings.style} opts={STYLE_OPTS} onChange={(v) => setF("style", v)} />
             <SelField label="Risk tolerance" value={settings.risk} opts={RISK_OPTS} onChange={(v) => setF("risk", v)} />
             <SelField label="Time horizon" value={settings.horizon} opts={HORIZON_OPTS} onChange={(v) => setF("horizon", v)} />
@@ -300,7 +303,7 @@ export default function PortfolioAnalysis({ market, holdingsOverride, hideFundam
           <div className="px-4 py-2.5 bg-gradient-to-r from-indigo-50 to-slate-50 border-b border-slate-200 flex items-center gap-2">
             <span className="w-1.5 h-4 rounded-full bg-indigo-500" />
             <h3 className="text-[12px] font-black uppercase tracking-wide text-slate-600">Technical Watch · {timeframe === "1h" ? "Hourly" : "Daily"}</h3>
-            <span className="text-[11px] text-slate-400 font-semibold ml-auto hidden sm:block">RSI · ADX(±DI) · volume · MA stack · candle action</span>
+            <span className="text-[11px] text-slate-400 font-semibold ml-auto hidden sm:block">RSI · ADX · volume · MA · S/R · pattern · candle · action</span>
           </div>
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
@@ -311,6 +314,8 @@ export default function PortfolioAnalysis({ market, holdingsOverride, hideFundam
                   <th className="text-center px-2 py-2.5">ADX (±DI)</th>
                   <th className="text-right px-2 py-2.5">Volume</th>
                   <th className="text-left px-3 py-2.5">Moving average</th>
+                  <th className="text-right px-3 py-2.5">Support / Resist.</th>
+                  <th className="text-left px-3 py-2.5">Pattern</th>
                   <th className="text-left px-3 py-2.5">Candle</th>
                   <th className="text-center px-2 py-2.5">Action</th>
                 </tr>
@@ -334,7 +339,7 @@ export default function PortfolioAnalysis({ market, holdingsOverride, hideFundam
                         <div className="text-[11px] text-slate-500 font-medium truncate max-w-[160px]">{r.name}</div>
                       </td>
                       {!t?.ok ? (
-                        <td colSpan={6} className="px-3 py-2.5"><span className="text-[11px] font-bold text-slate-500 bg-slate-100 border border-slate-200 rounded-full px-2.5 py-0.5">Technical data unavailable</span></td>
+                        <td colSpan={8} className="px-3 py-2.5"><span className="text-[11px] font-bold text-slate-500 bg-slate-100 border border-slate-200 rounded-full px-2.5 py-0.5">Technical data unavailable</span></td>
                       ) : (
                         <>
                           <td className="px-2 py-2.5 text-right whitespace-nowrap">
@@ -369,12 +374,29 @@ export default function PortfolioAnalysis({ market, holdingsOverride, hideFundam
                               </>
                             ) : <span className="text-[12px] text-slate-400">—</span>}
                           </td>
+                          <td className="px-3 py-2.5 text-right whitespace-nowrap">
+                            {t.resistance != null ? (
+                              <>
+                                <div className="text-[12px] font-black text-rose-600 tabular-nums">R {t.resistance}</div>
+                                <div className="text-[12px] font-black text-emerald-600 tabular-nums">S {t.support}</div>
+                                {t.pivot != null && <div className="text-[10px] text-slate-400 tabular-nums">pivot {t.pivot}</div>}
+                              </>
+                            ) : <span className="text-[12px] text-slate-300">—</span>}
+                          </td>
+                          <td className="px-3 py-2.5">
+                            {t.chartPattern ? (
+                              <span className={`inline-block px-2.5 py-0.5 rounded-full text-[11.5px] font-bold border ${TONE[t.chartPattern.tone] || TONE.info}`}>{t.chartPattern.label}</span>
+                            ) : <span className="text-[12px] text-slate-300">—</span>}
+                          </td>
                           <td className="px-3 py-2.5">
                             {(t.patterns || []).length > 0 ? (
                               <>
                                 <span className={`inline-block px-2.5 py-0.5 rounded-full text-[11.5px] font-black border ${TONE[t.patterns[0].tone] || TONE.info}`}>
                                   {t.patterns[0].tone === "bull" ? "▲" : t.patterns[0].tone === "bear" ? "▼" : "◆"} {t.patterns[0].name}
                                 </span>
+                                <div className={`text-[10px] font-bold mt-0.5 ${t.patterns[0].tone === "bull" ? "text-emerald-600" : t.patterns[0].tone === "bear" ? "text-rose-600" : "text-slate-500"}`}>
+                                  {t.patterns[0].tone === "bull" ? "Bullish read" : t.patterns[0].tone === "bear" ? "Bearish read" : "Indecision"}
+                                </div>
                                 <div className="text-[10px] text-slate-400 mt-0.5 max-w-[170px] leading-tight line-clamp-2">{t.patterns[0].meaning}</div>
                               </>
                             ) : <span className="text-[12px] text-slate-300">no pattern</span>}
