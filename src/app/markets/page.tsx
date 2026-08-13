@@ -5,7 +5,8 @@ import Link from "next/link";
 import { Globe, RefreshCw, IndianRupee, Coins, Bitcoin, Plus, Trash2, Star, GripVertical, Search, Pencil } from "lucide-react";
 import StockEditor, { parseTriggers, type EditorValue } from "@/components/StockEditor";
 import RemarksEditor from "@/components/RemarksEditor";
-import PortfolioAnalysis from "@/components/PortfolioAnalysis";
+import dynamic from "next/dynamic";
+const PortfolioAnalysis = dynamic(() => import("@/components/PortfolioAnalysis"), { ssr: false });
 
 type RemarksEdit = { title: string; subtitle?: string; value: string; onSave: (t: string) => void };
 import {

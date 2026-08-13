@@ -21,7 +21,8 @@ import {
 import { ResponsiveContainer, AreaChart, Area } from "recharts";
 import { motion } from "motion/react";
 import { useGlobal } from "@/context/GlobalContext";
-import PortfolioAnalysis from "@/components/PortfolioAnalysis";
+import dynamic from "next/dynamic";
+const PortfolioAnalysis = dynamic(() => import("@/components/PortfolioAnalysis"), { ssr: false });
 
 // Market overview — live indices, split by market.
 // One live market board with an India / US tab switch, plus a crypto strip.

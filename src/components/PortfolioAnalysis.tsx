@@ -12,7 +12,8 @@ import {
   getPfAnalysisSettings, setPfAnalysisSettings, DEFAULT_PF_ANALYSIS_SETTINGS,
   type PortfolioMarket, type PfAnalysisSettings,
 } from "@/lib/storage";
-import PortfolioFundamentals from "@/components/PortfolioFundamentals";
+import dynamic from "next/dynamic";
+const PortfolioFundamentals = dynamic(() => import("@/components/PortfolioFundamentals"), { ssr: false });
 
 const STYLE_OPTS = ["Long-term investor", "Position trader", "Swing trader", "Day trader"];
 const RISK_OPTS = ["Conservative", "Balanced", "Aggressive"];

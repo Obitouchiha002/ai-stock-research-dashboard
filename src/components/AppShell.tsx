@@ -1,13 +1,15 @@
 "use client";
 
 import React, { useState, useEffect, Suspense } from "react";
+import dynamic from "next/dynamic";
 import Link from "next/link";
 import GlobalNotes from "@/components/GlobalNotes";
 import VoiceTyping from "@/components/VoiceTyping";
 import PriceAlertMonitor from "@/components/PriceAlertMonitor";
 import SyncManager from "@/components/SyncManager";
 import ComboMonitor from "@/components/ComboMonitor";
-import DevMarkup from "@/components/DevMarkup";
+// Dev-only markup tool — lazy-loaded so it never weighs down the initial load.
+const DevMarkup = dynamic(() => import("@/components/DevMarkup"), { ssr: false });
 import { usePathname, useRouter } from "next/navigation";
 import {
   LayoutDashboard,

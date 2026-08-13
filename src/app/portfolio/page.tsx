@@ -40,7 +40,8 @@ import {
 } from "@/lib/storage";
 import StockEditor, { parseTriggers, type EditorValue } from "@/components/StockEditor";
 import RemarksEditor from "@/components/RemarksEditor";
-import PortfolioAnalysis from "@/components/PortfolioAnalysis";
+import dynamic from "next/dynamic";
+const PortfolioAnalysis = dynamic(() => import("@/components/PortfolioAnalysis"), { ssr: false });
 import { GripVertical } from "lucide-react";
 
 type RemarksEdit = { title: string; subtitle?: string; value: string; onSave: (t: string) => void };
