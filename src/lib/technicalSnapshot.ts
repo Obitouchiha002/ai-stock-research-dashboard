@@ -222,6 +222,8 @@ export type TechSnapshot = {
   resistance: number | null;
   pivot: number | null;
   chartPattern: { label: string; tone: "bull" | "bear" | "warn" | "info" } | null;
+  // Basic read of the latest candle (fallback when no named formation).
+  lastCandle: { label: string; tone: "bull" | "bear" | "info" } | null;
   signals: Signal[];
   patterns: CandlePattern[];
 };
@@ -248,7 +250,7 @@ export function buildSnapshot(candles: { open?: number; high: number; low: numbe
     sma10: null, sma20: null, sma50: null, sma200: null, trend: "—", vsSma50Pct: null, vsSma200Pct: null,
     maStack: null, diUp: null, volVs5Pct: null, volVs10Pct: null, volRising: null,
     rsiTrend: "—", divergence: null, near52w: null, overall: null, action: "Hold",
-    support: null, resistance: null, pivot: null, chartPattern: null, signals: [], patterns: [],
+    support: null, resistance: null, pivot: null, chartPattern: null, lastCandle: null, signals: [], patterns: [],
   };
   if (!candles || candles.length < 30) return empty;
   const highs = candles.map((c) => c.high);
@@ -328,8 +330,17 @@ export function buildSnapshot(candles: { open?: number; high: number; low: numbe
     else trend = "Sideways";
   } else trend = "—";
 
-  // --- Candlesticks + weighted overall verdict ---
+  // --- Candlesticks + a basic latest-candle read + weighted overall verdict ---
   const patterns = detectCandles(candles, trend);
+  let lastCandle: TechSnapshot["lastCandle"] = null;
+  { const lc = candles[candles.length - 1];
+    if (lc && lc.open != null) {
+      const body = lc.close - lc.open, range = Math.max(lc.high - lc.low, 1e-9);
+      const upW = lc.high - Math.max(lc.open, lc.close), loW = Math.min(lc.open, lc.close) - lc.low;
+      if (Math.abs(body) / range < 0.12) lastCandle = { label: "Small body / flat", tone: "info" };
+      else if (body > 0) lastCandle = { label: loW > Math.abs(body) ? "Up · long lower wick" : "Up candle", tone: "bull" };
+      else lastCandle = { label: upW > Math.abs(body) ? "Down · long upper wick" : "Down candle", tone: "bear" };
+    } }
   const overall = overallRead({ rsi: rsiNow, rsiTrend, ob: OB, os: OS, adx: adxNow, adxTrend: ADX_TREND, diUp, maStack, volRising, divergence, pattern: patterns[0] || null });
   // Candlestick-led action → falls back to the overall verdict when no candle.
   let action: TechSnapshot["action"] = "Hold";
@@ -357,9 +368,16 @@ export function buildSnapshot(candles: { open?: number; high: number; low: numbe
     const mv = closes[closes.length - 1] / closes[Math.max(0, closes.length - 15)] - 1;
     if (price >= resistance * 0.998) chartPattern = { label: "Donchian breakout ↑", tone: "bull" };
     else if (price <= support * 1.002) chartPattern = { label: "Donchian breakdown ↓", tone: "bear" };
-    else if (priorATR > 0 && recentATR < priorATR * 0.68) chartPattern = { label: "Symmetrical triangle · squeeze", tone: "warn" };
-    else if (priorATR > 0 && Math.abs(mv) > 0.08 && recentATR < priorATR * 0.85) chartPattern = { label: mv > 0 ? "Bull flag" : "Bear flag", tone: mv > 0 ? "bull" : "bear" };
-    else chartPattern = price > pivot ? { label: "Above pivot", tone: "bull" } : { label: "Below pivot", tone: "bear" };
+    else if (priorATR > 0 && recentATR < priorATR * 0.6) chartPattern = { label: "Squeeze · coiling", tone: "warn" };  // strong volatility contraction (triangle)
+    else if (priorATR > 0 && Math.abs(mv) > 0.08 && recentATR < priorATR * 0.8) chartPattern = { label: mv > 0 ? "Bull flag" : "Bear flag", tone: mv > 0 ? "bull" : "bear" };
+    else {
+      // Honest range read — where price sits in the 20-bar channel (not a fake pattern).
+      const span = resistance - support;
+      const pos = span > 0 ? (price - support) / span : 0.5;
+      if (pos >= 0.66) chartPattern = { label: "Upper channel", tone: "bull" };
+      else if (pos <= 0.34) chartPattern = { label: "Lower channel", tone: "bear" };
+      else chartPattern = { label: "Range-bound (mid)", tone: "info" };
+    }
   }
 
   const signals: Signal[] = [];
@@ -406,7 +424,7 @@ export function buildSnapshot(candles: { open?: number; high: number; low: numbe
     vsSma50Pct: r2(vs50), vsSma200Pct: r2(vs200), maStack, diUp,
     volVs5Pct: r2(volVs5), volVs10Pct: r2(volVs10), volRising,
     rsiTrend, divergence, near52w, overall, action,
-    support: r2(support), resistance: r2(resistance), pivot: r2(pivot), chartPattern,
+    support: r2(support), resistance: r2(resistance), pivot: r2(pivot), chartPattern, lastCandle,
     signals, patterns,
   };
 }

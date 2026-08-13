@@ -413,7 +413,9 @@ export default function PortfolioAnalysis({ market, holdingsOverride, hideFundam
                                 </div>
                                 <div className="text-[10px] text-slate-400 mt-0.5 leading-tight line-clamp-1">{t.patterns[0].meaning}</div>
                               </>
-                            ) : <span className="text-[12px] text-slate-300">no pattern</span>}
+                            ) : t.lastCandle ? (
+                              <span className={`inline-block whitespace-nowrap px-2.5 py-1 rounded-full text-[11.5px] font-bold border ${TONE[t.lastCandle.tone] || TONE.info}`}>{t.lastCandle.label}</span>
+                            ) : <span className="text-[12px] text-slate-300">—</span>}
                           </td>
                           <td className="px-3 py-3 text-center align-middle">
                             <span className={`inline-block whitespace-nowrap px-3 py-1 rounded-full text-[12.5px] font-black border ${ACTION[t.action] || ACTION.Hold}`}>{t.action}</span>
