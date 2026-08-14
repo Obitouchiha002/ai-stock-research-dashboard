@@ -82,7 +82,8 @@ export async function POST(req: NextRequest) {
             time,
             currency: q?.currency || null,
             marketState: q?.marketState || null,
-            marketCap: num(q?.marketCap),
+            // Yahoo intermittently omits marketCap — fall back to shares × price.
+            marketCap: num(q?.marketCap) ?? (typeof q?.sharesOutstanding === "number" && typeof price === "number" ? Math.round(q.sharesOutstanding * price) : null),
             ok: price != null,
           };
           if (data.ok) CACHE.set(symbol, { data, exp: now + CACHE_TTL });
