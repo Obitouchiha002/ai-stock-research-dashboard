@@ -39,6 +39,11 @@ function buildEmail(rows: { name: string; symbol: string; state: string; events:
 }
 
 async function handle(req: NextRequest) {
+  // DISABLED — folded into the single twice-daily consolidated brief
+  // (/api/cron/consolidated). No-op so any external pinger can't send mail.
+  return NextResponse.json({ ok: true, disabled: true, note: "Use /api/cron/consolidated." });
+
+  // eslint-disable-next-line no-unreachable
   const secret = process.env.CRON_SECRET;
   if (secret) {
     const auth = req.headers.get("authorization") || "";

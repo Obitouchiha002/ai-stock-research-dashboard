@@ -137,6 +137,13 @@ function evaluate(bundle: any, quotes: Record<string, any>, rows: any[], prev: S
 }
 
 async function handle(req: NextRequest) {
+  // DISABLED — folded into the single twice-daily consolidated brief
+  // (/api/cron/consolidated). This endpoint used to drip ONE email per newly
+  // matched stock. It is now a harmless no-op so any lingering external pinger
+  // (cron-job.org / UptimeRobot / etc.) can no longer make it send mail.
+  return NextResponse.json({ ok: true, disabled: true, note: "Use /api/cron/consolidated (consolidated twice-daily brief)." });
+
+  // eslint-disable-next-line no-unreachable
   // Auth: accept ?key=<secret> or Vercel Cron's "Authorization: Bearer <secret>".
   const url = new URL(req.url);
   const provided = url.searchParams.get("key") || (req.headers.get("authorization") || "").replace(/^Bearer\s+/i, "");
