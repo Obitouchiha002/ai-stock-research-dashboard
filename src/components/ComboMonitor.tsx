@@ -92,7 +92,6 @@ export default function ComboMonitor() {
         const rowBySym = new Map(rows.map((r) => [String(r.symbol).toUpperCase(), r]));
         const notify = (title: string, msg: string, symbol: string, name: string, tone: "info" | "success") => {
           addNotification({ type: tone, message: msg, symbol });
-          emailCombo(title, msg);
           try {
             if (typeof document !== "undefined" && document.hidden && typeof Notification !== "undefined" && Notification.permission === "granted") {
               new Notification(title, { body: name || symbol });
@@ -140,6 +139,19 @@ export default function ComboMonitor() {
           notify(`${m.symbol} matches "${nm}"`, `${m.symbol} now matches your "${nm}" combination.`, m.symbol, m.name, "info");
         });
         setSeen(nowMatching); // a stock that stops matching can alert again later
+
+        // One consolidated email for all combo matches this scan (not one each).
+        const emailLines = [
+          ...freshA.slice(0, 8).map((m) => `🎯 ${m.symbol} matched your attached combo "${m.combo.label || m.combo.name}"`),
+          ...fresh.slice(0, 8).map((m) => `${m.symbol} now matches "${m.combo.label || m.combo.name}"`),
+        ];
+        if (emailLines.length) {
+          const subject = emailLines.length === 1 ? emailLines[0].slice(0, 100) : `StockAnalytix · ${emailLines.length} combinations matched`;
+          const text = `${emailLines.length} combination match${emailLines.length > 1 ? "es" : ""}:\n\n`
+            + emailLines.map((l, i) => `${i + 1}. ${l}`).join("\n")
+            + `\n\n— StockAnalytix (research support only, not buy/sell advice)`;
+          emailCombo(subject, text);
+        }
       } catch {
         /* transient — next tick retries */
       } finally {

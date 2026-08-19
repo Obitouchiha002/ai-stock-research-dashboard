@@ -151,6 +151,19 @@ function bumpDevTap() {
 export function AppShell({ children }: { children: React.ReactNode }) {
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false); // off-canvas drawer on phones
+
+  // Auto-collapse the rail on small laptops (768–1279px) so charts/tables get the
+  // full width; keep it expanded on large screens. Fixes the cramped small-screen layout.
+  useEffect(() => {
+    const apply = () => {
+      const w = window.innerWidth;
+      if (w >= 768 && w < 1440) setIsCollapsed(true);   // small laptops → give content room
+      else if (w >= 1440) setIsCollapsed(false);         // big monitors → expanded rail
+    };
+    apply();
+    window.addEventListener("resize", apply);
+    return () => window.removeEventListener("resize", apply);
+  }, []);
   const [searchQuery, setSearchQuery] = useState("");
   const { market, setMarket, timeframe, setTimeframe, triggerRefresh, theme, setTheme, profileName, profilePhoto, setProfile } = useGlobal();
   const [themeLocal, setThemeLocal] = useState(theme);

@@ -70,6 +70,9 @@ export default function PriceAlertMonitor() {
         const quotes: Record<string, any> = j.quotes || {};
         if (cancelled) return;
 
+        // Collect every trigger this cycle → ONE consolidated email at the end.
+        const emailBatch: string[] = [];
+
         for (const a of alerts) {
           const q = quotes[a.symbol];
           const price = q?.price;
@@ -91,7 +94,7 @@ export default function PriceAlertMonitor() {
               target,
             )}) — now ${cur}${fmt(price)}.`;
             addNotification({ type: lv.tone, message: msg, symbol: a.symbol });
-            emailAlert(`${a.symbol} · ${lv.label} reached`, msg);
+            emailBatch.push(msg);
 
             // OS notification only when the tab is backgrounded — otherwise the
             // in-app notification already covers it (no duplicate pop-up).
@@ -134,7 +137,7 @@ export default function PriceAlertMonitor() {
                 const target = isPct ? `${value}%` : `${cur}${fmt(value)}`;
                 const cmsg = `${a.symbol}: ${isPct ? "Day change" : "Price"} ${op} ${target} — now ${shown}.${a.name ? ` (${a.name})` : ""}`;
                 addNotification({ type: "info", message: cmsg, symbol: a.symbol });
-                emailAlert(`${a.symbol} · condition met`, cmsg);
+                emailBatch.push(cmsg);
                 try {
                   if (typeof document !== "undefined" && document.hidden && typeof Notification !== "undefined" && Notification.permission === "granted") {
                     new Notification(`${a.symbol} · condition met`, { body: `${isPct ? "Day change" : "Price"} ${op} ${target} — now ${shown}` });
@@ -144,6 +147,17 @@ export default function PriceAlertMonitor() {
               }
             }
           }
+        }
+
+        // One clean email for the whole cycle (not one per trigger).
+        if (emailBatch.length) {
+          const subject = emailBatch.length === 1
+            ? emailBatch[0].split("—")[0].trim().slice(0, 100)
+            : `StockAnalytix · ${emailBatch.length} price alerts triggered`;
+          const text = `${emailBatch.length} alert${emailBatch.length > 1 ? "s" : ""} triggered:\n\n`
+            + emailBatch.map((l, i) => `${i + 1}. ${l}`).join("\n")
+            + `\n\n— StockAnalytix (research support only, not buy/sell advice)`;
+          emailAlert(subject, text);
         }
       } catch {
         /* transient fetch failure — try again next tick */
