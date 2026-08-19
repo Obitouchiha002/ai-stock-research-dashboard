@@ -10,6 +10,7 @@ import SyncManager from "@/components/SyncManager";
 import ComboMonitor from "@/components/ComboMonitor";
 // Dev-only markup tool — lazy-loaded so it never weighs down the initial load.
 const DevMarkup = dynamic(() => import("@/components/DevMarkup"), { ssr: false });
+import PWARegister from "@/components/PWARegister";
 import { usePathname, useRouter } from "next/navigation";
 import {
   LayoutDashboard,
@@ -710,6 +711,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       {/* Developer markup tool (hidden — unlock with Ctrl/Cmd+Shift+D): content-
           anchored sticky notes + voice notes + pen marks, saved per page */}
       <DevMarkup />
+      <PWARegister />
+      {/* Extra breathing room when running as an installed PWA on notched devices */}
     </div>
   );
 }
