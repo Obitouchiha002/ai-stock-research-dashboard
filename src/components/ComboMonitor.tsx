@@ -9,15 +9,12 @@ import { evalConditions } from "@/lib/comboEval";
 
 // Send a real email when a combination matches (best-effort; needs the user's
 // email set in Settings and RESEND_API_KEY on the server).
-function emailCombo(subject: string, text: string) {
-  try {
-    const to = getSettings()?.alertEmail;
-    if (!to) return;
-    fetch("/api/alert-email", {
-      method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ to, subject, text }),
-    }).catch(() => {});
-  } catch { /* best-effort */ }
+// Per-match emails are intentionally disabled: combo matches are now folded into
+// the ONE twice-daily consolidated brief (/api/cron/consolidated) so the inbox
+// gets a single table email instead of many small ones. In-app toasts still fire
+// live while the app is open. Kept as a no-op so call sites need no change.
+function emailCombo(_subject: string, _text: string) {
+  /* consolidated cron handles all email now */
 }
 
 // Background watcher: periodically scans the user's watchlist + portfolio against

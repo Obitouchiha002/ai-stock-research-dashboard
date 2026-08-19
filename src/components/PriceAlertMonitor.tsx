@@ -12,16 +12,12 @@ import {
 
 // Send a real email for a triggered alert (best-effort; needs the user's email
 // set in Settings and RESEND_API_KEY on the server).
-function emailAlert(subject: string, text: string) {
-  try {
-    const to = getSettings()?.alertEmail;
-    if (!to) return;
-    fetch("/api/alert-email", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ to, subject, text }),
-    }).catch(() => {});
-  } catch { /* best-effort */ }
+// Per-trigger emails are intentionally disabled: every alert is now folded into
+// the ONE twice-daily consolidated brief (/api/cron/consolidated) so the inbox
+// gets a single table email instead of many small ones. In-app toasts still
+// fire live while the app is open. Kept as a no-op so call sites need no change.
+function emailAlert(_subject: string, _text: string) {
+  /* consolidated cron handles all email now */
 }
 
 // How each level fires. "up" = price rising through it, "down" = price falling to it.
