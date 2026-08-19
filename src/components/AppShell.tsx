@@ -674,7 +674,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         </header>
 
         {/* Main scrollable area */}
-        <main className="flex-1 overflow-y-auto p-4 sm:p-6 pb-24 md:pb-20 bg-slate-50 relative hide-scrollbar text-slate-800">
+        <main className="flex-1 overflow-y-auto overflow-x-hidden p-4 sm:p-6 pb-24 md:pb-20 bg-slate-50 relative hide-scrollbar text-slate-800">
           {children}
         </main>
       </div>

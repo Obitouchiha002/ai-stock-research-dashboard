@@ -333,7 +333,7 @@ export default function Dashboard() {
   }, []);
 
   return (
-    <div className="space-y-4 max-w-[1600px] mx-auto w-full pb-8 mt-3 lg:mt-0">
+    <div className="space-y-4 max-w-[1500px] mx-auto w-full pb-8 mt-3 lg:mt-0 overflow-x-hidden">
       {/* Header Area — compact */}
       <div className="flex flex-wrap justify-between items-center gap-3">
         <div>
