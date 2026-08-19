@@ -333,36 +333,27 @@ export default function Dashboard() {
   }, []);
 
   return (
-    <div className="space-y-6 max-w-7xl mx-auto w-full pb-10 mt-6 lg:mt-0">
-      {/* Header Area */}
-      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+    <div className="space-y-4 max-w-[1600px] mx-auto w-full pb-8 mt-3 lg:mt-0">
+      {/* Header Area — compact */}
+      <div className="flex flex-wrap justify-between items-center gap-3">
         <div>
-          <h1 className="text-2xl font-bold text-slate-900 tracking-tight">
+          <h1 className="text-xl font-black text-slate-900 tracking-tight leading-none">
             {firstName ? `Welcome back, ${firstName}` : "Welcome to StockAnalytix"}
           </h1>
-          <p className="text-slate-500 text-sm">
-            Here is what is happening in the markets today.
-          </p>
+          <p className="text-slate-500 text-[13px] mt-0.5">Here is what is happening in the markets today.</p>
         </div>
-
         <div className="flex gap-2">
-          <Link
-            href="/analyze"
-            className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white font-medium py-2 px-4 rounded-xl text-sm transition-colors shadow-sm shadow-indigo-200"
-          >
+          <Link href="/analyze" className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2 px-4 rounded-xl text-[13px] transition-colors shadow-sm shadow-indigo-200">
             <Plus className="w-4 h-4" /> Analyze Stock
           </Link>
-          <Link
-            href="/compare"
-            className="flex items-center gap-2 bg-white border border-slate-200 hover:border-indigo-300 hover:text-indigo-600 text-slate-700 font-medium py-2 px-4 rounded-xl text-sm transition-all shadow-sm"
-          >
+          <Link href="/compare" className="flex items-center gap-2 bg-white border border-slate-200 hover:border-indigo-300 hover:text-indigo-600 text-slate-700 font-bold py-2 px-4 rounded-xl text-[13px] transition-all shadow-sm">
             <GitCompare className="w-4 h-4" /> Compare
           </Link>
         </div>
       </div>
 
       {/* Market board — India / US tabs, then crypto */}
-      <div className="space-y-5">
+      <div className="space-y-4">
         {/* market switch */}
         <div className="flex items-center gap-2">
           <div className="flex rounded-xl bg-slate-100 p-1">
@@ -420,7 +411,7 @@ export default function Dashboard() {
             n == null ? "—" : Number(n).toLocaleString(undefined, { minimumFractionDigits: d, maximumFractionDigits: d });
 
           return (
-            <div key={mktTab} className="space-y-5">
+            <div key={mktTab} className="space-y-4">
               {/* Section heading above the snapshot */}
               <div className="flex items-center gap-3">
                 <div className="flex items-center gap-2.5">
