@@ -712,7 +712,6 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           anchored sticky notes + voice notes + pen marks, saved per page */}
       <DevMarkup />
       <PWARegister />
-      {/* Extra breathing room when running as an installed PWA on notched devices */}
     </div>
   );
 }

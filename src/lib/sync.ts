@@ -280,7 +280,28 @@ export type SyncResult = {
   dropped?: string[];
   error?: string;
   notConfigured?: boolean;
+  changed?: boolean; // true when this device's stored data actually changed
 };
+
+// Order-insensitive, content-sensitive fingerprint of a bundle: object keys
+// sorted, and each list sorted by item identity (so reordering is invisible but
+// a changed/added/removed item shows up). Used only to detect "did anything
+// actually change for this device" after a merge.
+function stableFingerprint(b: Record<string, any>): string {
+  const norm: Record<string, any> = {};
+  for (const k of Object.keys(b || {}).sort()) {
+    const v = b[k];
+    if (Array.isArray(v)) {
+      norm[k] = v
+        .map((it) => ({ __k: itemKey(it), it }))
+        .sort((a, z) => (a.__k < z.__k ? -1 : a.__k > z.__k ? 1 : 0))
+        .map((x) => x.it);
+    } else {
+      norm[k] = v;
+    }
+  }
+  return JSON.stringify(norm);
+}
 
 // Pull -> merge into local -> push the merged result. Safe to call repeatedly.
 export async function syncNow(): Promise<SyncResult> {
@@ -293,6 +314,15 @@ export async function syncNow(): Promise<SyncResult> {
     const localB = readBundle();
     const base = readShadow();
     const merged = mergeBundle(base, localB, cloudB);
+    // Did the merge actually bring in anything new for THIS device? Compared with
+    // an order-insensitive fingerprint (lists sorted by item identity) so a mere
+    // reordering never counts as a change — otherwise an auto-refresh could loop.
+    let changed = false;
+    try {
+      changed = stableFingerprint(localB) !== stableFingerprint(merged);
+    } catch {
+      changed = true; // if we can't tell, assume yes and let the UI re-read
+    }
     writeBundle(merged);
     // The merged state becomes the new base for the next 3-way merge on this
     // device — so a delete made after this point is detected against it.
@@ -302,11 +332,11 @@ export async function syncNow(): Promise<SyncResult> {
     await api("push", code, { bundle: up, updatedAt: Date.now() });
 
     setLastSyncAt(Date.now());
-    // Let open pages know their localStorage changed so they can re-read.
+    // Let open pages know their localStorage changed so they can re-read/refresh.
     try {
-      window.dispatchEvent(new Event("sa-synced"));
+      window.dispatchEvent(new CustomEvent("sa-synced", { detail: { changed } }));
     } catch {}
-    return { ok: true, dropped: dropped.length ? dropped : undefined };
+    return { ok: true, dropped: dropped.length ? dropped : undefined, changed };
   } catch (e: any) {
     return { ok: false, error: e?.message || String(e), notConfigured: e?.notConfigured };
   }
