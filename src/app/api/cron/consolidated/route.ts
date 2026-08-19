@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { evalConditions } from "@/lib/comboEval";
-import { evaluateTrends, STATE_LABEL, type TrendState } from "@/lib/trendService";
+import { evaluateTrends } from "@/lib/trendService";
 
 // ---------------------------------------------------------------------------
 // ONE consolidated brief — twice a day, everything in a single table email.
@@ -61,14 +61,6 @@ const pctCell = (p?: number | null) => {
   return `<td style="padding:8px 10px;text-align:right;font-weight:700;color:${up ? "#059669" : "#e11d48"}">${up ? "+" : ""}${fmt(p)}%</td>`;
 };
 
-const STATE_TONE: Record<TrendState, string> = {
-  strong_up: "#059669",
-  up: "#16a34a",
-  neutral: "#64748b",
-  down: "#e11d48",
-  strong_down: "#be123c",
-};
-
 function section(title: string, head: string, rows: string): string {
   if (!rows) return "";
   return `
@@ -87,15 +79,16 @@ const td = (t: string, align: "left" | "right" = "left", extra = "") =>
 type Bundle = any;
 
 function buildUserEmail(bundle: Bundle, quotes: Record<string, any>, comboRows: any[], trends: any[]) {
-  const trendBySym = new Map(trends.map((t) => [String(t.symbol).toUpperCase(), t]));
-  const rowBySym = new Map(comboRows.map((r) => [String(r.symbol).toUpperCase(), r]));
-
   const portfolio: any[] = Array.isArray(bundle.sa_portfolio) ? bundle.sa_portfolio : [];
   const watchlist: any[] = Array.isArray(bundle.sa_watchlist) ? bundle.sa_watchlist : [];
   const alerts: any[] = Array.isArray(bundle.sa_price_alerts) ? bundle.sa_price_alerts : [];
   const combos: any[] = Array.isArray(bundle.sa_combinations) ? bundle.sa_combinations : [];
 
   // ---- 1. Holdings + watchlist snapshot (sorted by day change) -----------
+  // Price + day% only — reliably filled for every stock. Per-stock MA trend is
+  // heavy (needs full history per symbol and Yahoo rate-limits bulk history
+  // from server IPs), so trend lives in its own "Trend changes" section below
+  // rather than a mostly-blank column here.
   const snapItems = [
     ...portfolio.map((h) => ({ symbol: String(h.symbol || "").toUpperCase(), name: h.name, tag: "Holding" })),
     ...watchlist.map((w) => ({ symbol: String(w.symbol || "").toUpperCase(), name: w.name, tag: "Watch" })),
@@ -104,19 +97,15 @@ function buildUserEmail(bundle: Bundle, quotes: Record<string, any>, comboRows: 
   const snapRows = snapItems
     .map((it) => {
       const q = quotes[it.symbol];
-      const t = trendBySym.get(it.symbol);
       const price = q?.price;
       const cur = sym$(q?.currency);
       const name = q?.name || it.name || it.symbol;
-      const trendLabel = t?.ok && t.state ? STATE_LABEL[t.state as TrendState] : "—";
-      const trendColor = t?.ok && t.state ? STATE_TONE[t.state as TrendState] : "#94a3b8";
       return {
         chg: q?.changePct ?? null,
         html: `<tr style="border-top:1px solid #e2e8f0">
           ${td(`<b style="color:#0f172a">${esc(name)}</b> <span style="color:#94a3b8">${esc(it.symbol)}</span> <span style="color:#c7cdd6">·</span> <span style="color:#64748b">${it.tag}</span>`)}
           ${td(price != null ? `${cur}${fmt(price)}` : "—", "right", "color:#334155")}
           ${pctCell(q?.changePct)}
-          ${td(esc(trendLabel), "left", `color:${trendColor};font-weight:600`)}
         </tr>`,
       };
     })
@@ -125,7 +114,7 @@ function buildUserEmail(bundle: Bundle, quotes: Record<string, any>, comboRows: 
     .join("");
   const snapshot = section(
     `📊 Portfolio &amp; Watchlist — ${snapItems.length} stocks`,
-    th("Stock") + th("Price", "right") + th("Day", "right") + th("Trend"),
+    th("Stock") + th("Price", "right") + th("Day", "right"),
     snapRows,
   );
 
@@ -215,6 +204,50 @@ function wrapEmail(sess: "am" | "pm", parts: NonNullable<ReturnType<typeof build
   </div>`;
 }
 
+// Quotes for many symbols, resilient to Yahoo throttling server IPs: request in
+// small batches (a big single call loses its tail chunks), retry each batch, and
+// do a final sweep for any symbol still missing a price. Keyed UPPERCASE so the
+// snapshot lookup always matches.
+async function fetchQuotes(origin: string, syms: string[]): Promise<Record<string, any>> {
+  const out: Record<string, any> = {};
+  if (!origin || !syms.length) return out;
+  const BATCH = 20;
+  const post = async (batch: string[]) => {
+    const r = await fetch(`${origin}/api/quotes`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ symbols: batch }),
+      cache: "no-store",
+    });
+    const j = await r.json();
+    return (j.quotes || {}) as Record<string, any>;
+  };
+  for (let i = 0; i < syms.length; i += BATCH) {
+    const batch = syms.slice(i, i + BATCH);
+    for (let attempt = 0; attempt < 2; attempt++) {
+      try {
+        const q = await post(batch);
+        let got = 0;
+        for (const [k, v] of Object.entries(q)) {
+          const key = k.toUpperCase();
+          if ((v as any)?.price != null || !(key in out)) out[key] = v;
+          if ((v as any)?.price != null) got++;
+        }
+        if (got >= batch.length * 0.6) break; // good coverage → next batch
+      } catch { /* retry once */ }
+    }
+  }
+  // Final sweep for anything still without a price.
+  const missing = syms.filter((s) => out[s]?.price == null);
+  if (missing.length) {
+    try {
+      const q = await post(missing.slice(0, 30));
+      for (const [k, v] of Object.entries(q)) if ((v as any)?.price != null) out[k.toUpperCase()] = v;
+    } catch { /* best effort */ }
+  }
+  return out;
+}
+
 async function sendResend(to: string, subject: string, html: string): Promise<boolean> {
   if (!RESEND_KEY) return false;
   try {
@@ -282,20 +315,8 @@ async function handle(req: NextRequest) {
         ),
       );
 
-      // Live quotes (chunked inside /api/quotes) for the snapshot + level checks.
-      const quotes: Record<string, any> = {};
-      if (allSyms.length && origin) {
-        try {
-          const r = await fetch(`${origin}/api/quotes`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ symbols: allSyms }),
-            cache: "no-store",
-          });
-          const j = await r.json();
-          Object.assign(quotes, j.quotes || {});
-        } catch { /* snapshot degrades gracefully */ }
-      }
+      // Live quotes (batched + retried) for the snapshot + level checks.
+      const quotes = await fetchQuotes(origin, allSyms);
 
       // Screen metrics only if the user has combinations to evaluate.
       let comboRows: any[] = [];
