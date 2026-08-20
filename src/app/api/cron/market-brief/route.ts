@@ -99,6 +99,7 @@ async function handle(req: NextRequest) {
   const [us, ind] = await Promise.all([fetchMarket("us"), fetchMarket("in")]);
 
   const blocks = [marketBlock("🇮🇳", "India (NSE)", ind), marketBlock("🇺🇸", "United States (S&P)", us)].filter(Boolean);
+  console.log("[market-brief]", JSON.stringify({ to, usData: !!us, inData: !!ind, blocks: blocks.length }));
   if (!blocks.length) {
     return NextResponse.json({ sent: false, reason: "No market data available this run." });
   }
@@ -124,11 +125,14 @@ async function handle(req: NextRequest) {
     });
     if (!res.ok) {
       const t = await res.text();
+      console.log("[market-brief] resend-fail", res.status, t.slice(0, 160));
       return NextResponse.json({ error: `Email failed: ${res.status} ${t.slice(0, 160)}` }, { status: 502 });
     }
   } catch (e: any) {
+    console.log("[market-brief] send-exception", e?.message);
     return NextResponse.json({ error: e?.message || "send failed" }, { status: 502 });
   }
+  console.log("[market-brief] sent ok to", to);
   return NextResponse.json({ sent: true, to, markets: { us: !!us, in: !!ind } });
 }
 

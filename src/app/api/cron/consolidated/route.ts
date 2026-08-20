@@ -367,7 +367,9 @@ async function handle(req: NextRequest) {
     }
   }
 
-  return NextResponse.json({ ok: true, session: sess, users: codes.length, checked, emailed });
+  const result = { ok: true, session: sess, users: codes.length, checked, emailed };
+  console.log("[consolidated]", JSON.stringify(result));
+  return NextResponse.json(result);
 }
 
 export async function GET(req: NextRequest) {
