@@ -280,7 +280,11 @@ async function handle(req: NextRequest) {
   const qSess = url.searchParams.get("session");
   const sess: "am" | "pm" = qSess === "am" || qSess === "pm" ? qSess : new Date().getUTCHours() < 8 ? "am" : "pm";
   const dateStr = new Date().toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" });
-  const origin = url.origin || (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : "");
+  // IMPORTANT: self-fetch the PUBLIC production alias, not url.origin. Vercel Cron
+  // invokes the deployment-specific URL (…-hash.vercel.app), which sits behind
+  // Deployment Protection — fetching /api/quotes there returns an auth page, not
+  // JSON, so every price came back blank. The production alias is public.
+  const origin = process.env.SELF_BASE_URL || "https://stockanalytix.vercel.app";
 
   const codesRes = await redis(["SMEMBERS", "sync:index"]);
   const codes: string[] = Array.isArray(codesRes?.result) ? codesRes.result : [];
