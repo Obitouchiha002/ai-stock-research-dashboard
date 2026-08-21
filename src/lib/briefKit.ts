@@ -144,22 +144,47 @@ export function h(title: string, sub = ""): string {
 const th = (t: string, a: "left" | "right" = "left") => `<th style="padding:7px 10px;font-weight:700;text-align:${a};color:#475569">${t}</th>`;
 const td = (t: string, a: "left" | "right" = "left", extra = "") => `<td style="padding:7px 10px;text-align:${a};${extra}">${t}</td>`;
 
-// A compact holdings/watchlist table (Stock · Price · Day%), sorted by day move.
-export function holdingsTable(rows: Row[]): string {
-  if (!rows.length) return "";
-  const body = [...rows]
-    .sort((a, b) => (b.changePct ?? -999) - (a.changePct ?? -999))
-    .map(
-      (r) => `<tr style="border-top:1px solid #e2e8f0">
-        ${td(`<b style="color:#0f172a">${esc(r.name).slice(0, 34)}</b> <span style="color:#94a3b8;font-size:12px">${esc(r.symbol)}</span>`)}
-        ${td(r.price != null ? `${cur$(r.currency)}${fmt(r.price)}` : "—", "right", "color:#334155")}
-        ${td(pctHtml(r.changePct), "right")}
-      </tr>`,
-    )
-    .join("");
+function rowLine(r: Row): string {
+  return `<tr style="border-top:1px solid #e2e8f0">
+    ${td(`<b style="color:#0f172a">${esc(r.name).slice(0, 30)}</b> <span style="color:#94a3b8;font-size:12px">${esc(r.symbol)}</span>`)}
+    ${td(r.price != null ? `${cur$(r.currency)}${fmt(r.price)}` : "—", "right", "color:#334155")}
+    ${td(pctHtml(r.changePct), "right")}
+  </tr>`;
+}
+
+// The IMPORTANT view of a region's holdings: only the top few gainers and the
+// top few losers — never the whole list (nobody reads 140 rows). The rest is a
+// one-line "+N more, X up / Y down" so the full picture stays in the app.
+export function moversTable(rows: Row[], upN = 5, downN = 5): string {
+  const withPct = rows.filter((r) => r.changePct != null);
+  if (!withPct.length) return "";
+  const sorted = [...withPct].sort((a, b) => (b.changePct ?? 0) - (a.changePct ?? 0));
+  const up = sorted.filter((r) => (r.changePct ?? 0) > 0).slice(0, upN);
+  const down = sorted.filter((r) => (r.changePct ?? 0) < 0).reverse().slice(0, downN);
+  const shownKeys = new Set([...up, ...down].map((r) => r.symbol));
+  const restUp = withPct.filter((r) => (r.changePct ?? 0) > 0 && !shownKeys.has(r.symbol)).length;
+  const restDown = withPct.filter((r) => (r.changePct ?? 0) < 0 && !shownKeys.has(r.symbol)).length;
+  const flatCount = withPct.filter((r) => r.changePct === 0).length;
+
+  const secUp = up.length ? `<tr style="background:#f0fdf4"><td colspan="3" style="padding:5px 10px;font-size:11px;font-weight:700;color:#059669">▲ GAINERS</td></tr>${up.map(rowLine).join("")}` : "";
+  const secDown = down.length ? `<tr style="background:#fef2f2"><td colspan="3" style="padding:5px 10px;font-size:11px;font-weight:700;color:#e11d48">▼ LOSERS</td></tr>${down.map(rowLine).join("")}` : "";
+  const more = restUp + restDown + flatCount;
+  const foot = more
+    ? `<tr><td colspan="3" style="padding:6px 10px;font-size:11px;color:#94a3b8;border-top:1px solid #e2e8f0">+ ${more} more holdings (${restUp} up · ${restDown} down${flatCount ? ` · ${flatCount} flat` : ""}) — full list in the app</td></tr>`
+    : "";
   return `<table style="width:100%;border-collapse:collapse;border:1px solid #e2e8f0;border-radius:8px;overflow:hidden;font-size:13px">
-    <thead><tr style="background:#f1f5f9">${th("Stock")}${th("Price", "right")}${th("Day", "right")}</tr></thead>
-    <tbody>${body}</tbody></table>`;
+    <thead><tr style="background:#f1f5f9">${th("Your movers")}${th("Price", "right")}${th("Day", "right")}</tr></thead>
+    <tbody>${secUp}${secDown}${foot}</tbody></table>`;
+}
+
+// Combinations that matched now, if the user has saved combos.
+export function combosSection(matched: { symbol: string; label: string }[]): string {
+  if (!matched.length) return "";
+  const rows = matched
+    .slice(0, 20)
+    .map((m) => `<tr style="border-top:1px solid #e2e8f0">${td(`<b>${esc(m.symbol)}</b>`)}${td(`<span style="color:#4f46e5;font-weight:600">${esc(m.label)}</span>`)}</tr>`)
+    .join("");
+  return `${h("🧩 Combinations matched")}<table style="width:100%;border-collapse:collapse;border:1px solid #e2e8f0;border-radius:8px;overflow:hidden;font-size:13px"><tbody>${rows}</tbody></table>`;
 }
 
 // Market-overview bucket as a tiny "Symbol · price · change%" table.
@@ -218,11 +243,11 @@ export function newsList(symbols: string[], news: Record<string, NewsItem[]>): s
 
 // ---- slot config ------------------------------------------------------------
 export type Slot = "morning" | "midday" | "evening" | "emergency";
-export const SLOT_META: Record<Slot, { emoji: string; name: string; sub: string; market: boolean }> = {
-  morning: { emoji: "☀️", name: "Morning Brief", sub: "Before the open — overnight & setup", market: true },
-  midday: { emoji: "🕛", name: "Midday Brief", sub: "Movers & news so far", market: false },
-  evening: { emoji: "🌆", name: "Evening Brief", sub: "Post-close wrap", market: true },
-  emergency: { emoji: "🚨", name: "Emergency Alert", sub: "A holding just moved sharply", market: false },
+export const SLOT_META: Record<Slot, { emoji: string; name: string; sub: string; market: boolean; combos: boolean }> = {
+  morning: { emoji: "☀️", name: "Morning Brief", sub: "Before the open — overnight movers & market setup", market: true, combos: false },
+  midday: { emoji: "🕛", name: "Midday Brief", sub: "Your movers, combos & news so far", market: false, combos: true },
+  evening: { emoji: "🌆", name: "Evening Brief", sub: "Full-day wrap — market, your movers & combos", market: true, combos: true },
+  emergency: { emoji: "🚨", name: "Emergency Alert", sub: "A holding just moved sharply", market: false, combos: false },
 };
 
 export type BriefData = {
@@ -232,6 +257,7 @@ export type BriefData = {
   news: Record<string, NewsItem[]>;
   marketIN: any | null;
   marketUS: any | null;
+  combos: { symbol: string; label: string }[];
 };
 
 const wrap = (inner: string) =>
@@ -240,9 +266,9 @@ const wrap = (inner: string) =>
 function regionSection(flag: string, label: string, holdings: Row[], market: any | null, showMarket: boolean): string {
   if (!holdings.length && !(showMarket && market)) return "";
   const mkt = showMarket && market
-    ? bucketTable("🚀 Top gainers", market.gainers) + bucketTable("🔻 Top losers", market.losers) + bucketTable("🔥 Most active", market.mostActive)
+    ? bucketTable("🚀 Market — top gainers", market.gainers, 5) + bucketTable("🔻 Market — top losers", market.losers, 5)
     : "";
-  const hold = holdings.length ? `${h("Your holdings & watchlist")}${holdingsTable(holdings)}` : "";
+  const hold = holdings.length ? moversTable(holdings) : "";
   return `<div style="margin-top:16px"><div style="font-size:16px;font-weight:800;color:#4f46e5">${flag} ${label}</div>${hold}${mkt}</div>`;
 }
 
@@ -256,8 +282,11 @@ export function buildBrief(slot: Slot, data: BriefData, dateStr: string): { subj
     <span style="color:#94a3b8;font-size:12px">${esc(meta.sub)} · ${esc(dateStr)}</span>
   </div>`;
 
-  const totalIN = data.india.length, totalUS = data.us.length;
-  const counts = `<p style="color:#64748b;font-size:12px;margin:4px 0 0">Tracking ${totalIN + totalUS} stocks · 🇮🇳 ${totalIN} · 🇺🇸 ${totalUS}. Everything you need without opening the app.</p>`;
+  // One-line at-a-glance: how the book is leaning + how many big moves.
+  const all = [...data.india, ...data.us].filter((r) => r.changePct != null);
+  const upN = all.filter((r) => (r.changePct ?? 0) > 0).length;
+  const downN = all.filter((r) => (r.changePct ?? 0) < 0).length;
+  const counts = `<p style="color:#64748b;font-size:12px;margin:4px 0 0">🇮🇳 ${data.india.length} · 🇺🇸 ${data.us.length} tracked · <b style="color:#059669">${upN} up</b> / <b style="color:#e11d48">${downN} down</b>${data.movers.length ? ` · <b style="color:#b45309">${data.movers.length} big (≥${MOVE_THRESHOLD}%)</b>` : ""}. Only what matters — full detail in the app.</p>`;
 
   const parts = [
     header,
@@ -265,6 +294,7 @@ export function buildBrief(slot: Slot, data: BriefData, dateStr: string): { subj
     moversBox(data.movers, data.news),
     regionSection("🇮🇳", "India (NSE / BSE)", data.india, data.marketIN, showMarket),
     regionSection("🇺🇸", "United States", data.us, data.marketUS, showMarket),
+    meta.combos ? combosSection(data.combos) : "",
     newsList(moverSyms, data.news),
     `<p style="color:#94a3b8;font-size:11px;margin-top:18px;line-height:1.5">Prices &amp; day-change are live. Research support only — not buy/sell advice. A ≥${MOVE_THRESHOLD}% move often signals fresh news; headlines are auto-pulled, verify independently.</p>`,
   ].filter(Boolean);

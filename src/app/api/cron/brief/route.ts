@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import {
   buildBrief, fetchQuotes, fetchMarket, fetchNews, rowsFrom,
-  MOVE_THRESHOLD, type Slot, type BriefData,
+  MOVE_THRESHOLD, SLOT_META, type Slot, type BriefData,
 } from "@/lib/briefKit";
+import { evalConditions } from "@/lib/comboEval";
 
 // The three scheduled daily briefs (morning / midday / evening) — one rich,
 // well-formatted email per cloud-synced user: big (>=7%) movers with the news
@@ -101,7 +102,39 @@ async function handle(req: NextRequest) {
       const movers = rows.filter((r) => r.changePct != null && Math.abs(r.changePct) >= MOVE_THRESHOLD);
       const news = await fetchNews(movers.map((m) => m.symbol), 2, 6);
 
-      const data: BriefData = { india, us, movers, news, marketIN, marketUS };
+      // Combinations that match now (midday/evening only). Metrics from /api/screen.
+      let matched: { symbol: string; label: string }[] = [];
+      const combos: any[] = Array.isArray(bundle.sa_combinations) ? bundle.sa_combinations : [];
+      if (SLOT_META[slot].combos && combos.length) {
+        try {
+          const syms = Array.from(new Set(items.map((i) => i.symbol)));
+          const trigger = {
+            earningsUp: combos.some((c) => c.conditions?.earningsUp),
+            atAth: combos.some((c) => c.conditions?.atAth),
+            atAtl: combos.some((c) => c.conditions?.atAtl),
+          };
+          const sr = await fetch(`${SELF_BASE}/api/screen`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ symbols: syms, conditions: trigger }),
+            cache: "no-store",
+          });
+          const sj = await sr.json();
+          const comboRows = (sj.results || []).filter((x: any) => x.ok);
+          const seenPair = new Set<string>();
+          for (const combo of combos) {
+            for (const cr of comboRows) {
+              if (!evalConditions(cr, combo.conditions || {}).match) continue;
+              const key = `${combo.id}:${String(cr.symbol).toUpperCase()}`;
+              if (seenPair.has(key)) continue;
+              seenPair.add(key);
+              matched.push({ symbol: String(cr.symbol).toUpperCase(), label: combo.label || combo.name || "combination" });
+            }
+          }
+        } catch { /* combos optional */ }
+      }
+
+      const data: BriefData = { india, us, movers, news, marketIN, marketUS, combos: matched };
       const { subject, html } = buildBrief(slot, data, dateStr);
       if (await sendResend(email, subject, html)) emailed++;
     } catch { /* one bad bundle shouldn't stop the rest */ }
