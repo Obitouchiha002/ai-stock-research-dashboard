@@ -58,6 +58,11 @@ async function handle(req: NextRequest) {
   const codesRes = await redis(["SMEMBERS", "sync:index"]);
   const codes: string[] = Array.isArray(codesRes?.result) ? codesRes.result : [];
 
+  // One email per address per run: several sync codes (old test codes, multiple
+  // devices) can share the same alertEmail — without this the same alert goes
+  // out once per code, which reads as "the same stock again and again".
+  const handledEmails = new Set<string>();
+
   let checked = 0, emailed = 0, fired = 0;
   for (const code of codes) {
     try {
@@ -65,8 +70,9 @@ async function handle(req: NextRequest) {
       const raw = bRes?.result;
       if (!raw) continue;
       const bundle = (typeof raw === "string" ? JSON.parse(raw) : raw)?.bundle || {};
-      const email = bundle?.sa_settings?.alertEmail;
-      if (!email) continue;
+      const email = String(bundle?.sa_settings?.alertEmail || "").trim().toLowerCase();
+      if (!email || handledEmails.has(email)) continue;
+      handledEmails.add(email);
 
       const portfolio: any[] = Array.isArray(bundle.sa_portfolio) ? bundle.sa_portfolio : [];
       const watchlist: any[] = Array.isArray(bundle.sa_watchlist) ? bundle.sa_watchlist : [];
@@ -82,8 +88,9 @@ async function handle(req: NextRequest) {
       const movers = rows.filter((r) => r.changePct != null && Math.abs(r.changePct) >= MOVE_THRESHOLD);
       if (!movers.length) continue;
 
-      // Dedup: only alert on stocks not already alerted today for this user.
-      const seenKey = `emerg:${code}:${day}`;
+      // Dedup: only alert on stocks not already alerted today for this address
+      // (keyed by email, not code, so multiple codes never re-alert the same stock).
+      const seenKey = `emerg:${email.replace(/[^a-z0-9@._-]/g, "")}:${day}`;
       let seen: string[] = [];
       if (!reset) {
         try {

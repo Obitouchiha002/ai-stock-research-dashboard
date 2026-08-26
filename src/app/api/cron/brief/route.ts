@@ -76,6 +76,10 @@ async function handle(req: NextRequest) {
   const codesRes = await redis(["SMEMBERS", "sync:index"]);
   const codes: string[] = Array.isArray(codesRes?.result) ? codesRes.result : [];
 
+  // One email per address per run — several sync codes can share the same
+  // alertEmail; without this the same brief goes out once per code.
+  const handledEmails = new Set<string>();
+
   let checked = 0, emailed = 0;
   for (const code of codes) {
     try {
@@ -83,8 +87,9 @@ async function handle(req: NextRequest) {
       const raw = bRes?.result;
       if (!raw) continue;
       const bundle = (typeof raw === "string" ? JSON.parse(raw) : raw)?.bundle || {};
-      const email = bundle?.sa_settings?.alertEmail;
-      if (!email) continue;
+      const email = String(bundle?.sa_settings?.alertEmail || "").trim().toLowerCase();
+      if (!email || handledEmails.has(email)) continue;
+      handledEmails.add(email);
 
       const portfolio: any[] = Array.isArray(bundle.sa_portfolio) ? bundle.sa_portfolio : [];
       const watchlist: any[] = Array.isArray(bundle.sa_watchlist) ? bundle.sa_watchlist : [];
