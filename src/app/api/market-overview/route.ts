@@ -94,6 +94,12 @@ export async function POST(req: NextRequest) {
     });
     const nearAth = subset.map((s) => bySymRow[s]).filter((r) => r && r.nearAthPct != null && r.nearAthPct >= -3).sort((a, b) => (b.nearAthPct || 0) - (a.nearAthPct || 0)).slice(0, 15);
 
+    // If Yahoo throttled this sweep and almost nothing came back, don't return a
+    // near-empty scan — serve the last good one so the page never blanks out.
+    if (rows.length < 25 && cache[market]?.data) {
+      return NextResponse.json({ ...cache[market].data, cached: true, stale: true });
+    }
+
     const data = {
       market, currency: cur, scanned: rows.length,
       buckets: { newHighs, newLows, mostActive, gainers, losers, nearAth },
