@@ -61,7 +61,7 @@ export default function SettingsPage() {
     setSyncBusy(false);
     setLastSync(getLastSyncAt());
     if (r.ok) {
-      let text = "Synced. Ab is code se linked har device par yahi data milega.";
+      let text = "Synced ✓ Ab is ID se linked har device par yahi data (combined) milega.";
       if (r.dropped?.length) text += ` (Kuch bahut bade items skip hue: ${r.dropped.join(", ")}.)`;
       setSyncMsg({ kind: "ok", text });
     } else {
@@ -289,10 +289,11 @@ export default function SettingsPage() {
             <Cloud className="w-5 h-5 text-indigo-600" />
           </div>
           <div>
-            <h3 className="text-lg font-bold text-slate-900">Cloud Sync — multi-device</h3>
+            <h3 className="text-lg font-bold text-slate-900">Login ID — sync across all devices</h3>
             <p className="text-sm text-slate-500 font-medium mt-0.5">
-              Ek code banao. Wahi code dusre computer/phone par daalo — aapka portfolio,
-              watchlist, alerts aur notes wahan bhi aa jaayenge, aur aage apne aap sync rahenge.
+              Ek <b>ID</b> banao. Wahi ID har computer/phone par daalo — aapka portfolio, watchlist,
+              Markets, alerts aur notes har device par same rahenge aur apne aap sync hote rahenge.
+              Koi password nahi — bas ek ID yaad rakhni hai.
             </p>
           </div>
         </div>
@@ -300,14 +301,14 @@ export default function SettingsPage() {
         {!linked ? (
           <div className="mt-5 space-y-3">
             <label className="block text-xs font-bold text-slate-500 uppercase tracking-widest">
-              Sync code
+              Your Login ID
             </label>
             <div className="flex flex-col sm:flex-row gap-2">
               <input
                 type="text"
                 value={codeInput}
                 onChange={(e) => setCodeInput(e.target.value.toUpperCase())}
-                placeholder="e.g. SA-4KQ7-9WPM"
+                placeholder="e.g. VANSH-KASHYAP (min 6 characters)"
                 className="flex-1 px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-lg focus:ring-2 focus:ring-indigo-500 font-mono font-semibold tracking-wide outline-none"
               />
               <button
@@ -315,13 +316,14 @@ export default function SettingsPage() {
                 onClick={() => setCodeInput(generateCode())}
                 className="px-4 py-2.5 border border-slate-200 rounded-lg font-bold text-slate-700 hover:bg-slate-50 flex items-center justify-center gap-2 transition"
               >
-                <Wand2 className="w-4 h-4" /> Generate
+                <Wand2 className="w-4 h-4" /> Suggest one
               </button>
             </div>
-            <p className="text-xs text-slate-500 font-medium">
-              Naya device? Pehle wale computer wala <b>same code</b> yahan daalo. Naya sync
-              shuru kar rahe ho? <b>Generate</b> dabao aur code note kar lo.
-            </p>
+            <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs text-amber-900 font-medium leading-relaxed">
+              <b>Important — do this on the PC that already has your data FIRST.</b> Set your ID here and
+              turn on sync so that data uploads first. Then enter the <b>same ID</b> on your other devices.
+              Everything <b>combines</b> — nothing already saved is ever deleted or overwritten.
+            </div>
             <button
               type="button"
               onClick={turnOnSync}
@@ -354,8 +356,9 @@ export default function SettingsPage() {
               </button>
             </div>
             <p className="text-xs text-slate-500 font-medium">
-              Ye code apne dusre devices par Settings → Cloud Sync mein daalo. Data apne aap
-              merge hota hai — kisi bhi device ka data delete/lose nahi hoga.
+              Ye <b>ID</b> apne dusre devices par Settings → Login ID mein daalo (bilkul same). Data har
+              device par apne aap merge hota rehta hai — har device ka data <b>combine</b> hota hai,
+              kisi ka data delete/lose nahi hoga.
             </p>
             <div className="flex flex-wrap gap-2">
               <button
