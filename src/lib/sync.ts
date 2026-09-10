@@ -179,6 +179,16 @@ function mergeList(baseKeys: string[], ours: any[], theirs: any[]): any[] {
 
 // 2-way object/scalar merge (objects rarely need delete semantics).
 function mergeValue(local: any, cloud: any): any {
+  // Arrays nested inside an object (e.g. custom markets / order / hidden grouped
+  // by tab) must be UNIONED, not overwritten — otherwise two devices each keep
+  // their own list and never converge. Union by item identity, local wins ties,
+  // so nothing a user added on either device is ever lost.
+  if (Array.isArray(local) && Array.isArray(cloud)) {
+    const map = new Map<string, any>();
+    for (const it of cloud) map.set(itemKey(it), it);
+    for (const it of local) map.set(itemKey(it), it);
+    return Array.from(map.values());
+  }
   if (isObj(local) && isObj(cloud)) {
     const out: Record<string, any> = { ...cloud };
     for (const k of Object.keys(local)) {
