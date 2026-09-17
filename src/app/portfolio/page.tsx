@@ -42,6 +42,7 @@ import StockEditor, { parseTriggers, type EditorValue } from "@/components/Stock
 import RemarksEditor from "@/components/RemarksEditor";
 import dynamic from "next/dynamic";
 const PortfolioAnalysis = dynamic(() => import("@/components/PortfolioAnalysis"), { ssr: false });
+const PortfolioPerformance = dynamic(() => import("@/components/PortfolioPerformance"), { ssr: false });
 import { GripVertical } from "lucide-react";
 
 type RemarksEdit = { title: string; subtitle?: string; value: string; onSave: (t: string) => void };
@@ -614,6 +615,9 @@ export default function PortfolioPage() {
           </button>
         </div>
       </div>
+
+      {/* Performance — live P&L (India/US) + trend from daily snapshots */}
+      <PortfolioPerformance />
 
       {importError && (
         <div className="flex items-start gap-2 text-sm text-rose-700 bg-rose-50 border border-rose-200 rounded-xl p-3 mb-6">

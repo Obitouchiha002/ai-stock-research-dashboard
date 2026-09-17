@@ -55,5 +55,10 @@ select cron.schedule('sa-health-daily', '0 3 * * *', $$
   select net.http_get(url := 'https://stockanalytix.vercel.app/api/cron/health?heartbeat=1&key=207ea32e0eec3729f6a113ce514b2e5b71000ff8f30a5d3f', timeout_milliseconds := 55000);
 $$);
 
+-- Daily portfolio snapshot (after US close ~20:30 UTC) — powers performance / P&L over time.
+select cron.schedule('sa-snapshot', '30 20 * * 1-5', $$
+  select net.http_get(url := 'https://stockanalytix.vercel.app/api/cron/snapshot?key=207ea32e0eec3729f6a113ce514b2e5b71000ff8f30a5d3f', timeout_milliseconds := 55000);
+$$);
+
 -- Check the scheduled jobs:
 --   select jobname, schedule, active from cron.job where jobname like 'sa-%';
