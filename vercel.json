@@ -6,6 +6,5 @@
       "source": "/api/(.*)",
       "headers": [{ "key": "Cache-Control", "value": "no-store, max-age=0" }]
     }
-  ],
-  "_comment_crons": "Scheduling moved OFF Vercel Hobby cron (unreliable) to Supabase pg_cron — see supabase/scheduler.sql. pg_cron calls these endpoints reliably with SCHEDULER_TOKEN."
+  ]
 }
