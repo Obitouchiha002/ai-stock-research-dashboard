@@ -45,15 +45,15 @@ async function handle(req: NextRequest) {
       let inV = 0, inI = 0, usV = 0, usI = 0;
       for (const h of holdings) {
         const sym = String(h.symbol || "").toUpperCase();
-        const qty = num(h.qty);
-        const buy = num(h.price);
+        const shares = num(h.shares);
+        const buy = num(h.buyPrice);
         const q = quotes[sym];
-        const ltp = q?.price;
-        if (!isNum(qty) || !isNum(ltp)) continue;
-        const cur = q?.currency || (sym.endsWith(".NS") || sym.endsWith(".BO") ? "INR" : "USD");
-        const value = qty * ltp;
-        const invested = isNum(buy) ? qty * buy : 0;
-        if (cur === "INR") { inV += value; inI += invested; }
+        const ltp = isNum(num(h.currentPrice)) ? num(h.currentPrice) : q?.price;
+        if (!isNum(shares) || !isNum(ltp)) continue;
+        const india = h.market === "Indian Stocks" || sym.endsWith(".NS") || sym.endsWith(".BO") || q?.currency === "INR";
+        const value = shares * ltp;
+        const invested = isNum(buy) ? shares * buy : 0;
+        if (india) { inV += value; inI += invested; }
         else { usV += value; usI += invested; }
       }
 

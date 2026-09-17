@@ -24,21 +24,20 @@ function readHoldings(): any[] {
   }
 }
 
-// Current value per market. Uses the price already on each holding (ltp / market
-// value) and, for anything missing, a live quote from `quotes` — so it always has
-// numbers to show. India vs US by ticker suffix / stored market.
+// Current value per market — mirrors the portfolio page exactly: holdings carry
+// `shares`, `buyPrice` and (after a price read) `currentPrice`; anything missing a
+// current price is filled from a live quote. India vs US by the holding's market.
 function computeLive(holdings: any[], quotes: Record<string, any>): Live {
   const l: Live = { inV: 0, inI: 0, usV: 0, usI: 0, holdings: holdings.length };
   for (const h of holdings) {
     const sym = String(h.symbol || h.stockName || "").toUpperCase();
-    const q = quotes[sym];
-    const qty = N(h.qty), buy = N(h.price);
-    const ltp = isFinite(N(h.ltp)) ? N(h.ltp) : N(q?.price);
-    const mv = N(h.marketValue);
-    const value = isFinite(mv) && mv > 0 ? mv : (isFinite(qty) && isFinite(ltp) ? qty * ltp : NaN);
-    const invested = isFinite(qty) && isFinite(buy) ? qty * buy : NaN;
+    const shares = N(h.shares), buy = N(h.buyPrice);
+    const cp = isFinite(N(h.currentPrice)) ? N(h.currentPrice) : N(quotes[sym]?.price);
+    const price = isFinite(cp) ? cp : buy; // fall back to cost if no live price yet
+    const value = isFinite(shares) && isFinite(price) ? shares * price : NaN;
+    const invested = isFinite(shares) && isFinite(buy) ? shares * buy : NaN;
     if (!isFinite(value) && !isFinite(invested)) continue;
-    const india = sym.endsWith(".NS") || sym.endsWith(".BO") || h.market === "Indian Stocks" || h.currency === "INR" || q?.currency === "INR";
+    const india = h.market === "Indian Stocks" || sym.endsWith(".NS") || sym.endsWith(".BO");
     if (india) { if (isFinite(value)) l.inV += value; if (isFinite(invested)) l.inI += invested; }
     else { if (isFinite(value)) l.usV += value; if (isFinite(invested)) l.usI += invested; }
   }
