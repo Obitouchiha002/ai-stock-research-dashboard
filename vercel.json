@@ -7,12 +7,5 @@
       "headers": [{ "key": "Cache-Control", "value": "no-store, max-age=0" }]
     }
   ],
-  "crons": [
-    { "path": "/api/cron/brief?slot=morning", "schedule": "30 2 * * 1-5" },
-    { "path": "/api/cron/brief?slot=midday", "schedule": "0 7 * * 1-5" },
-    { "path": "/api/cron/brief?slot=evening", "schedule": "45 10 * * 1-5" },
-    { "path": "/api/cron/emergency?w=in1", "schedule": "0 5 * * 1-5" },
-    { "path": "/api/cron/emergency?w=in2", "schedule": "0 8 * * 1-5" },
-    { "path": "/api/cron/emergency?w=us", "schedule": "0 15 * * 1-5" }
-  ]
+  "_comment_crons": "Scheduling moved OFF Vercel Hobby cron (unreliable) to Supabase pg_cron — see supabase/scheduler.sql. pg_cron calls these endpoints reliably with SCHEDULER_TOKEN."
 }

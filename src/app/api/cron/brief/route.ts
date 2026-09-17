@@ -4,6 +4,7 @@ import {
   MOVE_THRESHOLD, SLOT_META, type Slot, type BriefData,
 } from "@/lib/briefKit";
 import { evalConditions } from "@/lib/comboEval";
+import { getAllCronUsers } from "@/lib/cronUsers";
 
 // The three scheduled daily briefs (morning / midday / evening) — one rich,
 // well-formatted email per cloud-synced user: big (>=7%) movers with the news
@@ -21,6 +22,7 @@ export const maxDuration = 60;
 const STORE_URL = process.env.KV_REST_API_URL || process.env.UPSTASH_REDIS_REST_URL || "";
 const STORE_TOKEN = process.env.KV_REST_API_TOKEN || process.env.UPSTASH_REDIS_REST_TOKEN || "";
 const CRON_SECRET = process.env.CRON_SECRET || "";
+const SCHEDULER_TOKEN = process.env.SCHEDULER_TOKEN || "";
 const RESEND_KEY = process.env.RESEND_API_KEY || "";
 const RESEND_FROM = process.env.RESEND_FROM || "StockAnalytix <onboarding@resend.dev>";
 const SELF_BASE = process.env.SELF_BASE_URL || "https://stockanalytix.vercel.app";
@@ -60,8 +62,8 @@ function slotFrom(url: URL): Slot {
 async function handle(req: NextRequest) {
   const url = new URL(req.url);
   const provided = url.searchParams.get("key") || (req.headers.get("authorization") || "").replace(/^Bearer\s+/i, "");
-  if (!CRON_SECRET || provided !== CRON_SECRET) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  if (!STORE_URL || !STORE_TOKEN) return NextResponse.json({ error: "Cloud store not configured" }, { status: 503 });
+  const authOk = Boolean(provided) && (provided === CRON_SECRET || (SCHEDULER_TOKEN && provided === SCHEDULER_TOKEN));
+  if (!authOk) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   if (!RESEND_KEY) return NextResponse.json({ skipped: true, reason: "RESEND_API_KEY not set" });
 
   const slot = slotFrom(url);
@@ -73,24 +75,12 @@ async function handle(req: NextRequest) {
     ? await Promise.all([fetchMarket(SELF_BASE, "in"), fetchMarket(SELF_BASE, "us")])
     : [null, null];
 
-  const codesRes = await redis(["SMEMBERS", "sync:index"]);
-  const codes: string[] = Array.isArray(codesRes?.result) ? codesRes.result : [];
-
-  // One email per address per run — several sync codes can share the same
-  // alertEmail; without this the same brief goes out once per code.
-  const handledEmails = new Set<string>();
+  // Every user, from Supabase accounts + legacy sync codes, deduped by email.
+  const users = await getAllCronUsers();
 
   let checked = 0, emailed = 0;
-  for (const code of codes) {
+  for (const { email, bundle } of users) {
     try {
-      const bRes = await redis(["GET", `sync:${code}`]);
-      const raw = bRes?.result;
-      if (!raw) continue;
-      const bundle = (typeof raw === "string" ? JSON.parse(raw) : raw)?.bundle || {};
-      const email = String(bundle?.sa_settings?.alertEmail || "").trim().toLowerCase();
-      if (!email || handledEmails.has(email)) continue;
-      handledEmails.add(email);
-
       const portfolio: any[] = Array.isArray(bundle.sa_portfolio) ? bundle.sa_portfolio : [];
       const watchlist: any[] = Array.isArray(bundle.sa_watchlist) ? bundle.sa_watchlist : [];
       const items = [
@@ -145,7 +135,7 @@ async function handle(req: NextRequest) {
     } catch { /* one bad bundle shouldn't stop the rest */ }
   }
 
-  const result = { ok: true, slot, users: codes.length, checked, emailed, market: showMarket };
+  const result = { ok: true, slot, users: users.length, checked, emailed, market: showMarket };
   console.log("[brief]", JSON.stringify(result));
   return NextResponse.json(result);
 }

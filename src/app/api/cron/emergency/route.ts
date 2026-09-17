@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { buildEmergency, fetchQuotes, fetchNews, rowsFrom, MOVE_THRESHOLD } from "@/lib/briefKit";
+import { getAllCronUsers } from "@/lib/cronUsers";
 
 // Emergency auto-alert — the 4th, event-driven email. Runs a few times during
 // market hours; for each cloud-synced user it checks their holdings + watchlist
@@ -14,6 +15,7 @@ export const maxDuration = 60;
 const STORE_URL = process.env.KV_REST_API_URL || process.env.UPSTASH_REDIS_REST_URL || "";
 const STORE_TOKEN = process.env.KV_REST_API_TOKEN || process.env.UPSTASH_REDIS_REST_TOKEN || "";
 const CRON_SECRET = process.env.CRON_SECRET || "";
+const SCHEDULER_TOKEN = process.env.SCHEDULER_TOKEN || "";
 const RESEND_KEY = process.env.RESEND_API_KEY || "";
 const RESEND_FROM = process.env.RESEND_FROM || "StockAnalytix <onboarding@resend.dev>";
 const SELF_BASE = process.env.SELF_BASE_URL || "https://stockanalytix.vercel.app";
@@ -46,34 +48,22 @@ async function sendResend(to: string, subject: string, html: string): Promise<bo
 async function handle(req: NextRequest) {
   const url = new URL(req.url);
   const provided = url.searchParams.get("key") || (req.headers.get("authorization") || "").replace(/^Bearer\s+/i, "");
-  if (!CRON_SECRET || provided !== CRON_SECRET) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  if (!STORE_URL || !STORE_TOKEN) return NextResponse.json({ error: "Cloud store not configured" }, { status: 503 });
+  const authOk = Boolean(provided) && (provided === CRON_SECRET || (SCHEDULER_TOKEN && provided === SCHEDULER_TOKEN));
+  if (!authOk) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   if (!RESEND_KEY) return NextResponse.json({ skipped: true, reason: "RESEND_API_KEY not set" });
 
   const now = new Date();
   const day = `${now.getUTCFullYear()}${String(now.getUTCMonth() + 1).padStart(2, "0")}${String(now.getUTCDate()).padStart(2, "0")}`;
   const dateStr = now.toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" });
   const reset = url.searchParams.get("reset") === "1"; // clear today's seen (testing)
+  const hasStore = Boolean(STORE_URL && STORE_TOKEN); // seen-state dedup lives in Upstash
 
-  const codesRes = await redis(["SMEMBERS", "sync:index"]);
-  const codes: string[] = Array.isArray(codesRes?.result) ? codesRes.result : [];
-
-  // One email per address per run: several sync codes (old test codes, multiple
-  // devices) can share the same alertEmail — without this the same alert goes
-  // out once per code, which reads as "the same stock again and again".
-  const handledEmails = new Set<string>();
+  // Every user, from Supabase accounts + legacy sync codes, deduped by email.
+  const users = await getAllCronUsers();
 
   let checked = 0, emailed = 0, fired = 0;
-  for (const code of codes) {
+  for (const { email, bundle } of users) {
     try {
-      const bRes = await redis(["GET", `sync:${code}`]);
-      const raw = bRes?.result;
-      if (!raw) continue;
-      const bundle = (typeof raw === "string" ? JSON.parse(raw) : raw)?.bundle || {};
-      const email = String(bundle?.sa_settings?.alertEmail || "").trim().toLowerCase();
-      if (!email || handledEmails.has(email)) continue;
-      handledEmails.add(email);
-
       const portfolio: any[] = Array.isArray(bundle.sa_portfolio) ? bundle.sa_portfolio : [];
       const watchlist: any[] = Array.isArray(bundle.sa_watchlist) ? bundle.sa_watchlist : [];
       const items = [
@@ -89,10 +79,11 @@ async function handle(req: NextRequest) {
       if (!movers.length) continue;
 
       // Dedup: only alert on stocks not already alerted today for this address
-      // (keyed by email, not code, so multiple codes never re-alert the same stock).
+      // (keyed by email so the same stock never re-alerts). Seen-state lives in
+      // Upstash when available; without it we still alert (just less deduped).
       const seenKey = `emerg:${email.replace(/[^a-z0-9@._-]/g, "")}:${day}`;
       let seen: string[] = [];
-      if (!reset) {
+      if (hasStore && !reset) {
         try {
           const sRes = await redis(["GET", seenKey]);
           if (sRes?.result) seen = typeof sRes.result === "string" ? JSON.parse(sRes.result) : sRes.result;
@@ -103,7 +94,11 @@ async function handle(req: NextRequest) {
       if (!fresh.length) continue;
 
       fresh.forEach((m) => seenSet.add(m.symbol));
-      await redis(["SET", seenKey, JSON.stringify(Array.from(seenSet)), "EX", String(36 * 60 * 60)]);
+      if (hasStore) {
+        try {
+          await redis(["SET", seenKey, JSON.stringify(Array.from(seenSet)), "EX", String(36 * 60 * 60)]);
+        } catch { /* best effort */ }
+      }
 
       const news = await fetchNews(fresh.map((m) => m.symbol), 2, 6);
       const { subject, html } = buildEmergency(fresh, news, dateStr);
@@ -112,7 +107,7 @@ async function handle(req: NextRequest) {
     } catch { /* one bad bundle shouldn't stop the rest */ }
   }
 
-  const result = { ok: true, users: codes.length, checked, emailed, fired };
+  const result = { ok: true, users: users.length, checked, emailed, fired };
   console.log("[emergency]", JSON.stringify(result));
   return NextResponse.json(result);
 }
