@@ -87,6 +87,7 @@ function Card({ flag, label, cur, value, invested }: { flag: string; label: stri
 export default function PortfolioPerformance() {
   const [live, setLive] = useState<Live | null>(null);
   const [snaps, setSnaps] = useState<Snap[]>([]);
+  const [fx, setFx] = useState(0); // 1 USD = fx INR (for the combined total)
 
   useEffect(() => {
     let cancelled = false;
@@ -96,15 +97,16 @@ export default function PortfolioPerformance() {
     window.addEventListener("sa-synced", compute);
     const iv = setInterval(compute, 8000);
 
-    // Fill any missing current prices from a live quote fetch, then recompute.
+    // Fill any missing current prices + the USD→INR rate from a live quote fetch.
     (async () => {
       try {
         const holdings = readHoldings();
         const syms = Array.from(new Set(holdings.map((h) => String(h.symbol || "").toUpperCase()).filter(Boolean)));
-        if (!syms.length) return;
-        const r = await fetch("/api/quotes", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ symbols: syms.slice(0, 200) }) });
+        const r = await fetch("/api/quotes", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ symbols: [...syms.slice(0, 199), "USDINR=X"] }) });
         const j = await r.json();
         quotes = j.quotes || {};
+        const rate = Number(quotes["USDINR=X"]?.price);
+        if (!cancelled && isFinite(rate) && rate > 0) setFx(rate);
         compute();
       } catch { /* stored values remain */ }
     })();
@@ -142,6 +144,20 @@ export default function PortfolioPerformance() {
           {snaps.length >= 2 ? `${snaps.length}d tracked` : "trend builds daily"}
         </span>
       </div>
+      {fx > 0 && live.usV > 0 && live.inV > 0 && (() => {
+        const tv = live.inV + live.usV * fx;
+        const ti = live.inI + live.usI * fx;
+        const p = tv - ti, pct = ti > 0 ? (p / ti) * 100 : 0, up = p >= 0;
+        return (
+          <div className="mb-3 flex flex-wrap items-center justify-between gap-2 rounded-xl bg-slate-900 px-4 py-2.5 text-white">
+            <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-widest text-slate-300">💰 Total (₹) <span className="text-[10px] font-medium text-slate-400 normal-case tracking-normal">US converted @ ₹{fmt(fx, 2)}</span></div>
+            <div className="flex items-center gap-3">
+              <span className="text-xl font-black tabular-nums">₹{fmt(tv)}</span>
+              <span className={`rounded-full px-2.5 py-0.5 text-xs font-black ${up ? "bg-emerald-500" : "bg-rose-500"}`}>{up ? "▲" : "▼"} {up ? "+" : "−"}{fmt(Math.abs(pct), 2)}%</span>
+            </div>
+          </div>
+        );
+      })()}
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
         <Card flag="🇮🇳" label="India" cur="₹" value={live.inV} invested={live.inI} hist={inHist} />
         <Card flag="🇺🇸" label="US" cur="$" value={live.usV} invested={live.usI} hist={usHist} />
