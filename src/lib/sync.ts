@@ -85,7 +85,7 @@ function setLastSyncAt(t: number) {
 
 // ---- bundle read/write ----------------------------------------------------
 
-function readBundle(): Record<string, any> {
+export function readBundle(): Record<string, any> {
   const out: Record<string, any> = {};
   if (!isBrowser) return out;
   for (let i = 0; i < window.localStorage.length; i++) {
@@ -102,7 +102,7 @@ function readBundle(): Record<string, any> {
   return out;
 }
 
-function writeBundle(bundle: Record<string, any>) {
+export function writeBundle(bundle: Record<string, any>) {
   if (!isBrowser) return;
   for (const [k, v] of Object.entries(bundle || {})) {
     if (!k.startsWith("sa_") || EXCLUDE.has(k)) continue;
@@ -225,7 +225,7 @@ function computeShadow(bundle: Record<string, any>): Record<string, string[]> {
   }
   return out;
 }
-function readShadow(): Record<string, string[]> {
+export function readShadow(): Record<string, string[]> {
   if (!isBrowser) return {};
   try {
     return JSON.parse(window.localStorage.getItem(SHADOW_KEY) || "{}") || {};
@@ -233,7 +233,7 @@ function readShadow(): Record<string, string[]> {
     return {};
   }
 }
-function writeShadow(bundle: Record<string, any>) {
+export function writeShadow(bundle: Record<string, any>) {
   if (!isBrowser) return;
   try {
     window.localStorage.setItem(SHADOW_KEY, JSON.stringify(computeShadow(bundle)));
@@ -297,7 +297,7 @@ export type SyncResult = {
 // sorted, and each list sorted by item identity (so reordering is invisible but
 // a changed/added/removed item shows up). Used only to detect "did anything
 // actually change for this device" after a merge.
-function stableFingerprint(b: Record<string, any>): string {
+export function stableFingerprint(b: Record<string, any>): string {
   const norm: Record<string, any> = {};
   for (const k of Object.keys(b || {}).sort()) {
     const v = b[k];

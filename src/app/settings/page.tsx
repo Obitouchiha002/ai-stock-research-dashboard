@@ -10,8 +10,16 @@ import {
   Check,
   Power,
   Wand2,
+  User,
+  LogOut,
+  Download,
+  Upload,
+  Mail,
 } from "lucide-react";
+import Link from "next/link";
 import { getSettings, saveSettings, addNotification } from "@/lib/storage";
+import { getSupabase, supabaseConfigured } from "@/lib/supabase";
+import { downloadBackup, emailBackup, importBackup } from "@/lib/backup";
 import {
   getSyncCode,
   setSyncCode as persistSyncCode,
@@ -45,6 +53,11 @@ export default function SettingsPage() {
   const [copied, setCopied] = useState(false);
   const [syncMsg, setSyncMsg] = useState<{ kind: "ok" | "err" | "info"; text: string } | null>(null);
 
+  // --- Account (Supabase login) + backup ---
+  const [userEmail, setUserEmail] = useState<string | null>(null);
+  const [backupMsg, setBackupMsg] = useState<{ kind: "ok" | "err" | "info"; text: string } | null>(null);
+  const [backupBusy, setBackupBusy] = useState(false);
+
   useEffect(() => {
     const s = getSettings();
     setLocalSettings(s);
@@ -52,7 +65,41 @@ export default function SettingsPage() {
     setLinked(Boolean(code));
     setCodeInput(code);
     setLastSync(getLastSyncAt());
+    const sb = getSupabase();
+    if (sb) sb.auth.getUser().then(({ data }) => setUserEmail(data.user?.email ?? null));
   }, []);
+
+  const logout = async () => {
+    const sb = getSupabase();
+    if (sb) await sb.auth.signOut();
+    setUserEmail(null);
+    setBackupMsg({ kind: "info", text: "Logged out. Data is still safe on this device." });
+  };
+
+  const doDownload = () => {
+    const n = downloadBackup();
+    setBackupMsg({ kind: "ok", text: `Backup downloaded (${n} sections). Keep the file safe.` });
+  };
+  const doEmailBackup = async () => {
+    setBackupBusy(true);
+    setBackupMsg(null);
+    const r = await emailBackup();
+    setBackupBusy(false);
+    setBackupMsg(r.ok
+      ? { kind: "ok", text: `Backup emailed to ${r.to}. Check your inbox (JSON attached).` }
+      : { kind: "err", text: r.error || "Could not email the backup." });
+  };
+  const doImport = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    try {
+      const n = await importBackup(file);
+      setBackupMsg({ kind: "ok", text: `Restored ${n} sections. Reloading…` });
+      setTimeout(() => window.location.reload(), 900);
+    } catch (err: any) {
+      setBackupMsg({ kind: "err", text: err?.message || "Could not read that backup file." });
+    }
+  };
 
   const runSync = async () => {
     setSyncBusy(true);
@@ -392,6 +439,81 @@ export default function SettingsPage() {
             }`}
           >
             {syncMsg.text}
+          </div>
+        )}
+      </div>
+
+      {/* Account (real login) */}
+      <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-6 sm:p-8 mt-6">
+        <div className="flex items-start gap-3 mb-1">
+          <div className="w-10 h-10 rounded-xl bg-indigo-50 flex items-center justify-center shrink-0">
+            <User className="w-5 h-5 text-indigo-600" />
+          </div>
+          <div>
+            <h3 className="text-lg font-bold text-slate-900">Account — log in</h3>
+            <p className="text-sm text-slate-500 font-medium mt-0.5">
+              Real login (email + password). Ek account, har device par same data — apne aap sync.
+            </p>
+          </div>
+        </div>
+        {!supabaseConfigured() ? (
+          <div className="mt-4 text-sm rounded-lg bg-amber-50 border border-amber-200 text-amber-800 px-4 py-3">
+            Login abhi is deployment par configure nahi hai.
+          </div>
+        ) : userEmail ? (
+          <div className="mt-4 flex items-center justify-between gap-3 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3">
+            <div className="min-w-0">
+              <p className="text-[11px] font-bold text-emerald-700 uppercase tracking-widest">Logged in</p>
+              <p className="font-semibold text-slate-900 truncate">{userEmail}</p>
+              <p className="text-xs text-slate-500 mt-0.5">Data is syncing to your account automatically.</p>
+            </div>
+            <button onClick={logout} className="px-4 py-2 bg-white border border-slate-200 rounded-lg font-bold text-slate-700 hover:bg-slate-50 flex items-center gap-2 transition shrink-0">
+              <LogOut className="w-4 h-4" /> Log out
+            </button>
+          </div>
+        ) : (
+          <div className="mt-4">
+            <Link href="/login" className="inline-flex px-6 py-2.5 bg-indigo-600 text-white rounded-lg font-bold hover:bg-indigo-700 items-center gap-2 transition">
+              <User className="w-4 h-4" /> Log in / Sign up
+            </Link>
+            <p className="text-xs text-slate-500 font-medium mt-2">
+              Log in karte hi is device ka saara data apne aap tumhare account mein upload ho jayega — kuch nahi khoyega.
+            </p>
+          </div>
+        )}
+      </div>
+
+      {/* Backup & restore */}
+      <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-6 sm:p-8 mt-6">
+        <div className="flex items-start gap-3 mb-1">
+          <div className="w-10 h-10 rounded-xl bg-amber-50 flex items-center justify-center shrink-0">
+            <Download className="w-5 h-5 text-amber-600" />
+          </div>
+          <div>
+            <h3 className="text-lg font-bold text-slate-900">Backup &amp; restore</h3>
+            <p className="text-sm text-slate-500 font-medium mt-0.5">
+              Apne poore data ka backup lo (download ya email par). Zaroorat pade to file se wapas restore karo.
+            </p>
+          </div>
+        </div>
+        <div className="mt-4 flex flex-wrap gap-2">
+          <button onClick={doDownload} className="px-5 py-2.5 bg-slate-900 text-white rounded-lg font-bold hover:bg-slate-800 flex items-center gap-2 transition">
+            <Download className="w-4 h-4" /> Download backup
+          </button>
+          <button onClick={doEmailBackup} disabled={backupBusy} className="px-5 py-2.5 border border-slate-200 rounded-lg font-bold text-slate-700 hover:bg-slate-50 disabled:opacity-60 flex items-center gap-2 transition">
+            <Mail className={`w-4 h-4 ${backupBusy ? "animate-pulse" : ""}`} /> Email backup to me
+          </button>
+          <label className="px-5 py-2.5 border border-slate-200 rounded-lg font-bold text-slate-700 hover:bg-slate-50 flex items-center gap-2 transition cursor-pointer">
+            <Upload className="w-4 h-4" /> Restore from file
+            <input type="file" accept="application/json,.json" onChange={doImport} className="hidden" />
+          </label>
+        </div>
+        {backupMsg && (
+          <div className={`mt-4 rounded-lg px-4 py-3 text-sm font-medium ${
+            backupMsg.kind === "ok" ? "bg-emerald-50 text-emerald-700 border border-emerald-200"
+            : backupMsg.kind === "err" ? "bg-rose-50 text-rose-700 border border-rose-200"
+            : "bg-slate-50 text-slate-600 border border-slate-200"}`}>
+            {backupMsg.text}
           </div>
         )}
       </div>

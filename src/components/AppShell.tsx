@@ -11,6 +11,7 @@ import ComboMonitor from "@/components/ComboMonitor";
 // Dev-only markup tool — lazy-loaded so it never weighs down the initial load.
 const DevMarkup = dynamic(() => import("@/components/DevMarkup"), { ssr: false });
 import PWARegister from "@/components/PWARegister";
+import SupabaseSyncManager from "@/components/SupabaseSyncManager";
 import { usePathname, useRouter } from "next/navigation";
 import {
   LayoutDashboard,
@@ -707,6 +708,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       {/* Background watcher — fires notifications when price hits a set level */}
       <PriceAlertMonitor />
       <SyncManager />
+      <SupabaseSyncManager />
       <ComboMonitor />
       {/* Developer markup tool (hidden — unlock with Ctrl/Cmd+Shift+D): content-
           anchored sticky notes + voice notes + pen marks, saved per page */}
