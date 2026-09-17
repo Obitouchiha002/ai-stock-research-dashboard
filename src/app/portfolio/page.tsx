@@ -999,31 +999,31 @@ export default function PortfolioPage() {
       )}
 
       {/* View toggle: Holdings ↔ Trade Plan */}
-      <div className="flex flex-wrap items-center gap-3 mb-3">
-        <div className="flex rounded-lg bg-slate-100 p-1">
+      <div className="flex flex-wrap items-center gap-3 mb-4">
+        <div className="flex gap-1 rounded-2xl bg-white border border-slate-200 p-1.5 shadow-sm">
           {(["holdings", "plan", "earnings", "analysis"] as const).map((v) => (
             <button key={v} onClick={() => setView(v)}
-              className={`px-3.5 py-1.5 rounded-md text-xs font-black transition ${view === v ? "bg-white text-indigo-700 shadow-sm" : "text-slate-500 hover:text-slate-700"}`}>
+              className={`px-4 py-2 rounded-xl text-xs font-black transition-all duration-200 active:scale-95 ${view === v ? "bg-gradient-to-r from-indigo-600 to-violet-600 text-white shadow-md shadow-indigo-500/30 scale-[1.03]" : "text-slate-500 hover:text-indigo-600 hover:bg-indigo-50"}`}>
               {v === "holdings" ? "Holdings" : v === "plan" ? "Trade Plan" : v === "earnings" ? "📊 Earnings Tracker" : "🤖 AI Analysis"}
             </button>
           ))}
         </div>
-        {view !== "analysis" && <div className="relative">
-          <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+        {view !== "analysis" && <div className="relative group">
+          <Search className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-indigo-500 transition-colors" />
           <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search holdings…"
-            className="pl-9 pr-3 py-2 w-48 bg-white border border-slate-200 rounded-lg text-sm font-medium focus:ring-2 focus:ring-indigo-200 outline-none" />
+            className="pl-10 pr-3 py-2.5 w-52 focus:w-64 bg-white border border-slate-200 rounded-xl text-sm font-medium shadow-sm transition-all duration-300 focus:ring-4 focus:ring-indigo-100 focus:border-indigo-400 focus:shadow-lg outline-none" />
         </div>}
         {view !== "analysis" && <div className="flex items-center gap-1.5">
           <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wide">Trend</span>
-          <button onClick={() => setTrendFilter("all")} className={`px-2.5 py-1 rounded-lg text-xs font-bold transition ${trendFilter === "all" ? "bg-slate-900 text-white" : "bg-white text-slate-600 border border-slate-200 hover:bg-slate-50"}`}>All</button>
+          <button onClick={() => setTrendFilter("all")} className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all duration-200 hover:scale-105 active:scale-95 ${trendFilter === "all" ? "bg-slate-900 text-white shadow-md" : "bg-white text-slate-600 border border-slate-200 hover:border-slate-300 hover:shadow-sm"}`}>All</button>
           {PF_TREND.filter((t) => t.v).map((t) => (
             <button key={t.v} onClick={() => setTrendFilter(trendFilter === t.v ? "all" : t.v)}
-              className={`px-2.5 py-1 rounded-lg text-xs font-bold transition ${trendFilter === t.v ? "bg-slate-900 text-white" : "bg-white text-slate-600 border border-slate-200 hover:bg-slate-50"}`}>
+              className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all duration-200 hover:scale-105 active:scale-95 ${trendFilter === t.v ? "bg-slate-900 text-white shadow-md" : "bg-white text-slate-600 border border-slate-200 hover:border-slate-300 hover:shadow-sm"}`}>
               {t.label}
             </button>
           ))}
           <button onClick={() => setRecentSort((v) => !v)}
-            className={`px-2.5 py-1 rounded-lg text-xs font-bold transition border ml-1 ${recentSort ? "bg-indigo-600 text-white border-indigo-600" : "bg-white text-slate-600 border-slate-200 hover:bg-slate-50"}`}>🕐 Recently changed</button>
+            className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all duration-200 hover:scale-105 active:scale-95 border ml-1 ${recentSort ? "bg-indigo-600 text-white border-indigo-600 shadow-md" : "bg-white text-slate-600 border-slate-200 hover:border-slate-300 hover:shadow-sm"}`}>🕐 Recently changed</button>
         </div>}
         {view === "plan" && (
           <>
