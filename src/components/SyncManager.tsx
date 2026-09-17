@@ -3,6 +3,7 @@
 import { useEffect, useRef } from "react";
 import { getSyncCode, syncNow } from "@/lib/sync";
 import { addNotification } from "@/lib/storage";
+import { getSupabase } from "@/lib/supabase";
 
 const DROP_LABELS: Record<string, string> = {
   sa_excel_sheets: "imported Excel sheets",
@@ -24,6 +25,13 @@ export default function SyncManager() {
 
     const run = async () => {
       if (busy.current || !getSyncCode()) return;
+      // If the user is logged into Supabase, the account-based sync owns the data
+      // — don't also run the legacy code-based sync (they'd share one local shadow
+      // and could confuse the 3-way merge). One sync engine at a time.
+      try {
+        const sb = getSupabase();
+        if (sb && (await sb.auth.getSession()).data.session) return;
+      } catch { /* ignore — fall through to legacy sync */ }
       busy.current = true;
       try {
         const r = await syncNow();
