@@ -140,7 +140,24 @@ export default function ChartsPage() {
       grid: { vertLines: { color: "#f1f5f9" }, horzLines: { color: "#f1f5f9" } },
       crosshair: { mode: CrosshairMode.Normal },
       rightPriceScale: { borderColor: "#e5e9ef" },
-      timeScale: { borderColor: "#e5e9ef", timeVisible: interval === "1h", secondsVisible: false },
+      timeScale: {
+        borderColor: "#e5e9ef",
+        timeVisible: interval === "1h",
+        secondsVisible: false,
+        // Consistent axis labels: year at year ticks, short month name at month
+        // ticks (fixes November showing as "11"), day number, and HH:MM for hourly.
+        tickMarkFormatter: (time: any, tickMarkType: number) => {
+          const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+          const d =
+            typeof time === "number"
+              ? new Date(time * 1000)
+              : new Date(Date.UTC(time.year, (time.month || 1) - 1, time.day || 1));
+          if (tickMarkType === 0) return String(d.getUTCFullYear()); // Year
+          if (tickMarkType === 1) return MONTHS[d.getUTCMonth()]; // Month
+          if (tickMarkType === 2) return String(d.getUTCDate()); // Day of month
+          return d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }); // intraday
+        },
+      },
     };
 
     const chart = createChart(el, { width: el.clientWidth, height: el.clientHeight, ...baseOpts });
