@@ -22,25 +22,14 @@ export default function SupabaseSyncManager() {
       if (busy.current || !loggedIn) return;
       busy.current = true;
       try {
-        const r = await supabaseSyncNow();
-        if (r.ok && r.changed) maybeRefresh();
+        // Sync in the background only — never force a page reload. A hard reload
+        // interrupted the user mid-edit; synced data still lands in localStorage
+        // and shows on the next natural navigation. (supabaseSyncNow already
+        // dispatches "sa-synced" for any component that wants to re-read live.)
+        await supabaseSyncNow();
       } finally {
         if (!cancelled) busy.current = false;
       }
-    };
-
-    const maybeRefresh = () => {
-      if (cancelled || document.visibilityState !== "visible") return;
-      const el = document.activeElement as HTMLElement | null;
-      if (el && (el.tagName === "INPUT" || el.tagName === "TEXTAREA" || el.isContentEditable)) return;
-      if (document.querySelector('[role="dialog"],[aria-modal="true"]')) return;
-      try {
-        const now = Date.now();
-        const last = Number(window.sessionStorage.getItem("sa_last_autoreload") || 0);
-        if (now - last < 45_000) return;
-        window.sessionStorage.setItem("sa_last_autoreload", String(now));
-      } catch { /* still refresh */ }
-      window.location.reload();
     };
 
     // Track auth state; sync right after login.
