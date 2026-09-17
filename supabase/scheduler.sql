@@ -43,5 +43,17 @@ select cron.schedule('sa-emergency-us', '0 15 * * 1-5', $$
   select net.http_get(url := 'https://stockanalytix.vercel.app/api/cron/emergency?key=207ea32e0eec3729f6a113ce514b2e5b71000ff8f30a5d3f', timeout_milliseconds := 55000);
 $$);
 
+-- Self-monitor: emails an alert if anything is broken. Runs a few times a day.
+select cron.schedule('sa-health-1', '0 6 * * *', $$
+  select net.http_get(url := 'https://stockanalytix.vercel.app/api/cron/health?key=207ea32e0eec3729f6a113ce514b2e5b71000ff8f30a5d3f', timeout_milliseconds := 55000);
+$$);
+select cron.schedule('sa-health-2', '0 12 * * *', $$
+  select net.http_get(url := 'https://stockanalytix.vercel.app/api/cron/health?key=207ea32e0eec3729f6a113ce514b2e5b71000ff8f30a5d3f', timeout_milliseconds := 55000);
+$$);
+-- Once a day, send an "all good" confirmation even when nothing is wrong (08:30 IST).
+select cron.schedule('sa-health-daily', '0 3 * * *', $$
+  select net.http_get(url := 'https://stockanalytix.vercel.app/api/cron/health?heartbeat=1&key=207ea32e0eec3729f6a113ce514b2e5b71000ff8f30a5d3f', timeout_milliseconds := 55000);
+$$);
+
 -- Check the scheduled jobs:
 --   select jobname, schedule, active from cron.job where jobname like 'sa-%';
