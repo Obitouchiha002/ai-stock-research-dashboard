@@ -44,48 +44,41 @@ function computeLive(holdings: any[], quotes: Record<string, any>): Live {
   return l;
 }
 
-function Spark({ pts, up }: { pts: number[]; up: boolean }) {
-  if (pts.length < 2) return null;
-  const min = Math.min(...pts), max = Math.max(...pts), span = max - min || 1;
-  const w = 150, h = 44;
-  const d = pts.map((v, i) => `${(i / (pts.length - 1)) * w},${h - ((v - min) / span) * h}`).join(" ");
-  const area = `0,${h} ${d} ${w},${h}`;
+function Ring({ pct, up }: { pct: number; up: boolean }) {
+  const R = 30, C = 2 * Math.PI * R;
+  const frac = Math.min(Math.abs(pct) / 50, 1); // ±50% fills the ring
   const color = up ? "#059669" : "#e11d48";
   return (
-    <svg width={w} height={h} className="overflow-visible">
-      <polygon points={area} fill={color} opacity="0.08" />
-      <polyline points={d} fill="none" stroke={color} strokeWidth="2.5" strokeLinejoin="round" strokeLinecap="round" />
+    <svg width="72" height="72" viewBox="0 0 72 72" className="shrink-0">
+      <circle cx="36" cy="36" r={R} fill="none" stroke="#eef2f7" strokeWidth="7" />
+      <circle cx="36" cy="36" r={R} fill="none" stroke={color} strokeWidth="7" strokeLinecap="round"
+        strokeDasharray={C} strokeDashoffset={C * (1 - frac)} transform="rotate(-90 36 36)"
+        style={{ transition: "stroke-dashoffset 700ms ease" }} />
+      <text x="36" y="40" textAnchor="middle" fontSize="14" fontWeight="900" fill={color}>{up ? "+" : "−"}{fmt(Math.abs(pct), 1)}%</text>
     </svg>
   );
 }
 
-function Card({ flag, label, cur, value, invested, hist }: { flag: string; label: string; cur: string; value: number; invested: number; hist: number[] }) {
+function Card({ flag, label, cur, value, invested }: { flag: string; label: string; cur: string; value: number; invested: number; hist: number[] }) {
   if (value <= 0 && invested <= 0) return null;
   const pl = value - invested;
   const plPct = invested > 0 ? (pl / invested) * 100 : 0;
   const up = pl >= 0;
-  const grad = up ? "from-emerald-50 via-white to-white" : "from-rose-50 via-white to-white";
+  const grad = up ? "from-emerald-50/70 to-white" : "from-rose-50/70 to-white";
   const ring = up ? "border-emerald-200 hover:border-emerald-400" : "border-rose-200 hover:border-rose-400";
   const accent = up ? "bg-emerald-500" : "bg-rose-500";
   return (
-    <div className={`group relative overflow-hidden rounded-3xl border-2 ${ring} bg-gradient-to-br ${grad} p-6 shadow-sm transition-all duration-300 hover:shadow-2xl hover:-translate-y-1`}>
-      <span className={`absolute left-0 top-0 h-full w-1.5 ${accent}`} />
-      <div className="flex items-start justify-between gap-3 pl-2">
-        <div>
-          <div className="text-sm font-extrabold uppercase tracking-widest text-slate-500">{flag} {label}</div>
-          <div className="mt-2 text-4xl font-black text-slate-900 tabular-nums transition-transform duration-300 group-hover:scale-[1.03] origin-left">
-            {cur}{fmt(value)}
+    <div className={`group relative overflow-hidden rounded-2xl border ${ring} bg-gradient-to-br ${grad} pl-4 pr-3 py-3.5 shadow-sm transition-all duration-200 hover:shadow-lg hover:-translate-y-0.5`}>
+      <span className={`absolute left-0 top-0 h-full w-1 ${accent}`} />
+      <div className="flex items-center justify-between gap-3">
+        <div className="min-w-0">
+          <div className="text-[11px] font-extrabold uppercase tracking-widest text-slate-500">{flag} {label}</div>
+          <div className="mt-0.5 text-2xl font-black text-slate-900 tabular-nums leading-tight">{cur}{fmt(value)}</div>
+          <div className={`mt-1 text-xs font-bold ${up ? "text-emerald-600" : "text-rose-600"}`}>
+            {up ? "▲" : "▼"} {cur}{fmt(Math.abs(pl))} · Invested {cur}{fmt(invested)}
           </div>
-          <div className="mt-2 inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-sm font-black text-white shadow-sm"
-            style={{ background: up ? "linear-gradient(90deg,#10b981,#059669)" : "linear-gradient(90deg,#f43f5e,#e11d48)" }}>
-            {up ? "▲" : "▼"} {cur}{fmt(Math.abs(pl))} · {up ? "+" : "−"}{fmt(Math.abs(plPct), 2)}%
-          </div>
-          <div className="mt-2 text-xs font-semibold text-slate-400">Invested {cur}{fmt(invested)}</div>
         </div>
-        <div className="shrink-0 pt-1">
-          {hist.length >= 2 ? <Spark pts={hist} up={up} />
-            : <span className="text-[10px] font-semibold text-slate-300">trend builds<br />daily 📈</span>}
-        </div>
+        <Ring pct={plPct} up={up} />
       </div>
     </div>
   );
@@ -140,17 +133,16 @@ export default function PortfolioPerformance() {
   const usHist = snaps.map((s) => Number(s.us_value)).filter((v) => v > 0);
 
   return (
-    <div className="mb-8 rounded-[28px] border border-slate-200 bg-gradient-to-br from-slate-50 via-white to-indigo-50/40 p-5 sm:p-6 shadow-sm">
-      <div className="flex flex-wrap items-center justify-between gap-2 mb-4">
-        <h2 className="text-xl sm:text-2xl font-black text-slate-900 flex items-center gap-2">
-          <span className="grid place-items-center w-9 h-9 rounded-xl bg-indigo-600 text-white text-lg shadow-md">📈</span>
-          Performance over time
+    <div className="mb-5 rounded-2xl border border-slate-200 bg-gradient-to-br from-slate-50 to-white p-3.5 shadow-sm">
+      <div className="flex flex-wrap items-center justify-between gap-2 mb-2.5 px-1">
+        <h2 className="text-base font-black text-slate-900 flex items-center gap-1.5">
+          <span className="text-lg">📈</span> Performance over time
         </h2>
-        <span className="text-xs font-bold uppercase tracking-widest text-indigo-500 bg-indigo-50 border border-indigo-100 rounded-full px-3 py-1">
-          {snaps.length >= 2 ? `${snaps.length} days tracked` : "tracking started · trend builds daily"}
+        <span className="text-[10px] font-bold uppercase tracking-wide text-indigo-500 bg-indigo-50 rounded-full px-2.5 py-0.5">
+          {snaps.length >= 2 ? `${snaps.length}d tracked` : "trend builds daily"}
         </span>
       </div>
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-5">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
         <Card flag="🇮🇳" label="India" cur="₹" value={live.inV} invested={live.inI} hist={inHist} />
         <Card flag="🇺🇸" label="US" cur="$" value={live.usV} invested={live.usI} hist={usHist} />
       </div>
