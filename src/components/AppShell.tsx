@@ -12,6 +12,7 @@ import ComboMonitor from "@/components/ComboMonitor";
 const DevMarkup = dynamic(() => import("@/components/DevMarkup"), { ssr: false });
 import PWARegister from "@/components/PWARegister";
 import SupabaseSyncManager from "@/components/SupabaseSyncManager";
+import { getSupabase, supabaseConfigured } from "@/lib/supabase";
 import { usePathname, useRouter } from "next/navigation";
 import {
   LayoutDashboard,
@@ -200,6 +201,22 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
 
+  // One-time login gate: if Supabase login is set up, the app requires an account.
+  // The session persists, so this asks only once (until logout) — not every time.
+  const [authState, setAuthState] = useState<"checking" | "in" | "out">(
+    supabaseConfigured() ? "checking" : "in",
+  );
+  useEffect(() => {
+    const sb = getSupabase();
+    if (!sb) { setAuthState("in"); return; }
+    sb.auth.getSession().then(({ data }) => setAuthState(data.session ? "in" : "out"));
+    const { data: sub } = sb.auth.onAuthStateChange((_e, session) => setAuthState(session ? "in" : "out"));
+    return () => sub?.subscription?.unsubscribe();
+  }, []);
+  useEffect(() => {
+    if (authState === "out" && pathname !== "/login") router.replace("/login");
+  }, [authState, pathname, router]);
+
   const isItemActive = (href: string) =>
     pathname === href ||
     (pathname === "/" && href === "/dashboard") ||
@@ -306,6 +323,19 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       if (typeof window !== "undefined") window.location.reload();
     }, 350);
   };
+
+  // The login page renders on its own — no sidebar, no gate (avoids a redirect loop).
+  if (pathname === "/login") return <>{children}</>;
+
+  // Gate: while checking or when logged out, show a minimal screen instead of the
+  // app (the effect above redirects logged-out users to /login).
+  if (authState !== "in") {
+    return (
+      <div className="min-h-screen grid place-items-center bg-slate-50 text-slate-500 text-sm">
+        {authState === "checking" ? "Loading…" : "Redirecting to login…"}
+      </div>
+    );
+  }
 
   return (
     <div
