@@ -306,60 +306,65 @@ export function buildBrief(slot: Slot, data: BriefData, dateStr: string): { subj
   };
 }
 
-// A row of dashboard stat tiles (number + label).
-function statTiles(tiles: { label: string; value: string; color?: string }[]): string {
-  return `<table style="width:100%;border-collapse:separate;border-spacing:7px 0;margin:6px 0 12px"><tr>${tiles
-    .map((t) => `<td style="width:25%;background:#f8fafc;border:1px solid #e6eaf1;border-radius:11px;padding:11px 6px;text-align:center">
-      <div style="font-size:21px;font-weight:900;color:${t.color || "#0f172a"};line-height:1.1">${t.value}</div>
-      <div style="margin-top:3px;font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:#94a3b8">${esc(t.label)}</div></td>`)
-    .join("")}</tr></table>`;
+// Compact top gainers + losers for one market cell (≤6 rows).
+function miniRows(rows: Row[]): string {
+  const withPct = rows.filter((r) => r.changePct != null).sort((a, b) => (b.changePct ?? 0) - (a.changePct ?? 0));
+  const pick = [...withPct.filter((r) => (r.changePct ?? 0) > 0).slice(0, 3), ...withPct.filter((r) => (r.changePct ?? 0) < 0).slice(-3).reverse()];
+  if (!pick.length) return `<div style="color:#94a3b8;font-size:11px;padding:3px 0">No holdings</div>`;
+  return `<table style="width:100%;border-collapse:collapse">${pick
+    .map((r) => `<tr><td style="padding:2.5px 0;font-size:12px"><b>${esc(r.symbol)}</b></td><td style="padding:2.5px 0;text-align:right;font-size:12px">${pctHtml(r.changePct)}</td></tr>`)
+    .join("")}</table>`;
 }
 
-// One market only (India OR US) as a proper dashboard: stat tiles on top, then the
-// big movers + news, your holdings movers, the market overview, combos and news —
-// all as tables. India and US are sent as separate emails at the same time.
-export function buildRegionBrief(region: Region, slot: Slot, data: BriefData, dateStr: string): { subject: string; html: string } {
-  const meta = SLOT_META[slot];
-  const flag = region === "in" ? "🇮🇳" : "🇺🇸";
-  const label = region === "in" ? "India" : "US";
-  const fullLabel = region === "in" ? "India · NSE / BSE" : "United States";
-  const holdings = region === "in" ? data.india : data.us;
-  const market = region === "in" ? data.marketIN : data.marketUS;
-  const movers = data.movers.filter((m) => m.region === region);
-  const combos = (data.combos || []).filter((c) => regionOf(c.symbol) === region);
-  const up = holdings.filter((r) => (r.changePct ?? 0) > 0).length;
-  const down = holdings.filter((r) => (r.changePct ?? 0) < 0).length;
-  const moverSyms = movers.map((m) => m.symbol);
+// One quadrant box of the 2×2 dashboard.
+function quad(title: string, sub: string, inner: string): string {
+  return `<td width="50%" valign="top" style="padding:5px"><div style="border:1px solid #e2e8f0;border-radius:12px;padding:11px 13px;background:#fff">
+    <div style="font-weight:800;font-size:13px;color:#0f172a">${title}${sub ? ` <span style="font-size:10px;font-weight:600;color:#94a3b8">${sub}</span>` : ""}</div>
+    <div style="margin-top:7px">${inner}</div></div></td>`;
+}
 
-  const header = `<div style="background:linear-gradient(135deg,#0a1029,#1e2a5a);border-radius:14px;padding:16px 18px;margin-bottom:12px">
-    <div style="font-size:19px;font-weight:900;color:#fff">${flag} ${esc(fullLabel)}</div>
-    <div style="font-size:12px;color:#c7d2fe;margin-top:2px">${esc(meta.name)} · ${esc(dateStr)}</div>
+// The whole brief as ONE compact dashboard in a 2×2 grid — no long scrolling:
+//   [🇮🇳 India movers] [🇺🇸 US movers]
+//   [⚡ Big moves ≥7%] [📰 Headlines]
+export function buildDashboard(slot: Slot, data: BriefData, dateStr: string): { subject: string; html: string } {
+  const meta = SLOT_META[slot];
+  const cnt = (rows: Row[], up: boolean) => rows.filter((r) => up ? (r.changePct ?? 0) > 0 : (r.changePct ?? 0) < 0).length;
+
+  const bigRows = [...data.movers].sort((a, b) => Math.abs(b.changePct ?? 0) - Math.abs(a.changePct ?? 0)).slice(0, 6);
+  const big = bigRows.length
+    ? `<table style="width:100%;border-collapse:collapse">${bigRows.map((m) => {
+        const n = (data.news[m.symbol] || [])[0];
+        return `<tr><td style="padding:3px 0;font-size:12px">${m.region === "in" ? "🇮🇳" : "🇺🇸"} <b>${esc(m.symbol)}</b>${n ? `<div style="font-size:9.5px;color:#94a3b8">${esc(n.title).slice(0, 38)}</div>` : ""}</td><td style="padding:3px 0;text-align:right;font-size:12px;vertical-align:top">${pctHtml(m.changePct)}</td></tr>`;
+      }).join("")}</table>`
+    : `<div style="color:#94a3b8;font-size:11px">No ≥${MOVE_THRESHOLD}% moves today</div>`;
+
+  const news: string[] = [];
+  for (const m of data.movers) for (const nw of (data.news[m.symbol] || [])) news.push(`<li style="margin:3px 0;font-size:11.5px"><a href="${esc(nw.url)}" style="color:#4f46e5;text-decoration:none">${esc(nw.title).slice(0, 52)}</a></li>`);
+  let q4 = news.length ? `<ul style="margin:0;padding-left:15px">${news.slice(0, 6).join("")}</ul>` : "";
+  if (!q4) {
+    const g = ((data.marketIN?.gainers || data.marketUS?.gainers || []) as any[]).slice(0, 5);
+    q4 = g.length
+      ? `<table style="width:100%;border-collapse:collapse">${g.map((r) => `<tr><td style="padding:2.5px 0;font-size:12px"><b>${esc(r.symbol)}</b></td><td style="padding:2.5px 0;text-align:right;font-size:12px">${pctHtml(r.changePct)}</td></tr>`).join("")}</table>`
+      : `<div style="color:#94a3b8;font-size:11px">No fresh headlines</div>`;
+  }
+
+  const header = `<div style="background:linear-gradient(135deg,#0a1029,#1e2a5a);border-radius:14px;padding:14px 18px;margin-bottom:8px">
+    <div style="font-size:18px;font-weight:900;color:#fff">${meta.emoji} ${esc(meta.name)}</div>
+    <div style="font-size:11.5px;color:#c7d2fe;margin-top:2px">${esc(dateStr)} · 🇮🇳 ${data.india.length} · 🇺🇸 ${data.us.length} · ${data.movers.length} big move${data.movers.length === 1 ? "" : "s"}</div>
   </div>`;
 
-  const tiles = statTiles([
-    { label: "Holdings", value: String(holdings.length) },
-    { label: "Up", value: String(up), color: "#059669" },
-    { label: "Down", value: String(down), color: "#e11d48" },
-    { label: `≥${MOVE_THRESHOLD}% moves`, value: String(movers.length), color: "#b45309" },
-  ]);
+  const grid = `<table style="width:100%;border-collapse:collapse;table-layout:fixed"><tr>
+    ${quad("🇮🇳 India", `${cnt(data.india, true)}▲ ${cnt(data.india, false)}▼`, miniRows(data.india))}
+    ${quad("🇺🇸 US", `${cnt(data.us, true)}▲ ${cnt(data.us, false)}▼`, miniRows(data.us))}
+  </tr><tr>
+    ${quad(`⚡ Big moves ≥${MOVE_THRESHOLD}%`, "", big)}
+    ${quad("📰 Headlines", "", q4)}
+  </tr></table>`;
 
-  const marketTables = meta.market && market
-    ? bucketTable("🚀 Market — top gainers", market.gainers, 6) + bucketTable("🔻 Market — top losers", market.losers, 6) + bucketTable("🔥 Most active", market.mostActive, 6)
-    : "";
-
-  const parts = [
-    header,
-    tiles,
-    movers.length ? moversBox(movers, data.news) : "",
-    holdings.length ? h("📋 Your holdings — movers") + moversTable(holdings) : "",
-    marketTables,
-    meta.combos ? combosSection(combos) : "",
-    newsList(moverSyms, data.news),
-    `<p style="color:#94a3b8;font-size:11px;margin-top:16px;line-height:1.5">${flag} ${esc(fullLabel)} · live prices &amp; day-change. Research support only — not buy/sell advice. A ≥${MOVE_THRESHOLD}% move often signals fresh news; verify independently.</p>`,
-  ].filter(Boolean);
-
-  const moverTag = movers.length ? ` · ${movers.length} big` : "";
-  return { subject: `${flag} ${meta.name} — ${label} · ${dateStr}${moverTag}`, html: wrap(parts.join("")) };
+  return {
+    subject: `${meta.emoji} ${meta.name} — StockAnalytix · ${dateStr}`,
+    html: wrap(header + grid + `<p style="color:#94a3b8;font-size:10.5px;margin-top:10px">Live day-change · research support only, not advice. A ≥${MOVE_THRESHOLD}% move often signals fresh news.</p>`),
+  };
 }
 
 // Emergency email: focused on the stocks that just crossed the threshold.
