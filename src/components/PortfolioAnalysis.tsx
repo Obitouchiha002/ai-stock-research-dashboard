@@ -354,7 +354,13 @@ export default function PortfolioAnalysis({ market, holdingsOverride, hideFundam
                         <div className="text-[11px] text-slate-500 font-medium truncate max-w-[150px]">{r.name}</div>
                       </td>
                       {!t?.ok ? (
-                        <td colSpan={8} className="px-3 py-3"><span className="text-[11px] font-bold text-slate-500 bg-slate-100 border border-slate-200 rounded-full px-2.5 py-0.5">Technical data unavailable</span></td>
+                        <td colSpan={8} className="px-3 py-3">
+                          {/^\^|NIFTY_/.test(r.symbol) ? (
+                            <span className="text-[11px] font-bold text-slate-500 bg-slate-50 border border-slate-200 rounded-full px-2.5 py-0.5" title="Free data (Yahoo) carries only the live value for this NSE index — no historical candles — so chart-based signals (RSI/ADX/MA/candle) can't be computed. A paid feed (e.g. a broker API) would be needed.">📊 Index · live value only — no free chart history</span>
+                          ) : (
+                            <span className="text-[11px] font-bold text-slate-500 bg-slate-100 border border-slate-200 rounded-full px-2.5 py-0.5">Technical data unavailable — try refresh</span>
+                          )}
+                        </td>
                       ) : (
                         <>
                           <td className="px-3 py-3 text-right whitespace-nowrap align-middle">
