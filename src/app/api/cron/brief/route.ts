@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import {
-  buildBrief, fetchQuotes, fetchMarket, fetchNews, rowsFrom,
+  buildRegionBrief, fetchQuotes, fetchMarket, fetchNews, rowsFrom,
   MOVE_THRESHOLD, SLOT_META, type Slot, type BriefData,
 } from "@/lib/briefKit";
 import { evalConditions } from "@/lib/comboEval";
@@ -130,8 +130,15 @@ async function handle(req: NextRequest) {
       }
 
       const data: BriefData = { india, us, movers, news, marketIN, marketUS, combos: matched };
-      const { subject, html } = buildBrief(slot, data, dateStr);
-      if (await sendResend(email, subject, html)) emailed++;
+      // Separate India and US dashboards, sent at the same time.
+      if (india.length) {
+        const r = buildRegionBrief("in", slot, data, dateStr);
+        if (await sendResend(email, r.subject, r.html)) emailed++;
+      }
+      if (us.length) {
+        const r = buildRegionBrief("us", slot, data, dateStr);
+        if (await sendResend(email, r.subject, r.html)) emailed++;
+      }
     } catch { /* one bad bundle shouldn't stop the rest */ }
   }
 

@@ -306,6 +306,62 @@ export function buildBrief(slot: Slot, data: BriefData, dateStr: string): { subj
   };
 }
 
+// A row of dashboard stat tiles (number + label).
+function statTiles(tiles: { label: string; value: string; color?: string }[]): string {
+  return `<table style="width:100%;border-collapse:separate;border-spacing:7px 0;margin:6px 0 12px"><tr>${tiles
+    .map((t) => `<td style="width:25%;background:#f8fafc;border:1px solid #e6eaf1;border-radius:11px;padding:11px 6px;text-align:center">
+      <div style="font-size:21px;font-weight:900;color:${t.color || "#0f172a"};line-height:1.1">${t.value}</div>
+      <div style="margin-top:3px;font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:#94a3b8">${esc(t.label)}</div></td>`)
+    .join("")}</tr></table>`;
+}
+
+// One market only (India OR US) as a proper dashboard: stat tiles on top, then the
+// big movers + news, your holdings movers, the market overview, combos and news —
+// all as tables. India and US are sent as separate emails at the same time.
+export function buildRegionBrief(region: Region, slot: Slot, data: BriefData, dateStr: string): { subject: string; html: string } {
+  const meta = SLOT_META[slot];
+  const flag = region === "in" ? "🇮🇳" : "🇺🇸";
+  const label = region === "in" ? "India" : "US";
+  const fullLabel = region === "in" ? "India · NSE / BSE" : "United States";
+  const holdings = region === "in" ? data.india : data.us;
+  const market = region === "in" ? data.marketIN : data.marketUS;
+  const movers = data.movers.filter((m) => m.region === region);
+  const combos = (data.combos || []).filter((c) => regionOf(c.symbol) === region);
+  const up = holdings.filter((r) => (r.changePct ?? 0) > 0).length;
+  const down = holdings.filter((r) => (r.changePct ?? 0) < 0).length;
+  const moverSyms = movers.map((m) => m.symbol);
+
+  const header = `<div style="background:linear-gradient(135deg,#0a1029,#1e2a5a);border-radius:14px;padding:16px 18px;margin-bottom:12px">
+    <div style="font-size:19px;font-weight:900;color:#fff">${flag} ${esc(fullLabel)}</div>
+    <div style="font-size:12px;color:#c7d2fe;margin-top:2px">${esc(meta.name)} · ${esc(dateStr)}</div>
+  </div>`;
+
+  const tiles = statTiles([
+    { label: "Holdings", value: String(holdings.length) },
+    { label: "Up", value: String(up), color: "#059669" },
+    { label: "Down", value: String(down), color: "#e11d48" },
+    { label: `≥${MOVE_THRESHOLD}% moves`, value: String(movers.length), color: "#b45309" },
+  ]);
+
+  const marketTables = meta.market && market
+    ? bucketTable("🚀 Market — top gainers", market.gainers, 6) + bucketTable("🔻 Market — top losers", market.losers, 6) + bucketTable("🔥 Most active", market.mostActive, 6)
+    : "";
+
+  const parts = [
+    header,
+    tiles,
+    movers.length ? moversBox(movers, data.news) : "",
+    holdings.length ? h("📋 Your holdings — movers") + moversTable(holdings) : "",
+    marketTables,
+    meta.combos ? combosSection(combos) : "",
+    newsList(moverSyms, data.news),
+    `<p style="color:#94a3b8;font-size:11px;margin-top:16px;line-height:1.5">${flag} ${esc(fullLabel)} · live prices &amp; day-change. Research support only — not buy/sell advice. A ≥${MOVE_THRESHOLD}% move often signals fresh news; verify independently.</p>`,
+  ].filter(Boolean);
+
+  const moverTag = movers.length ? ` · ${movers.length} big` : "";
+  return { subject: `${flag} ${meta.name} — ${label} · ${dateStr}${moverTag}`, html: wrap(parts.join("")) };
+}
+
 // Emergency email: focused on the stocks that just crossed the threshold.
 export function buildEmergency(movers: Row[], news: Record<string, NewsItem[]>, dateStr: string): { subject: string; html: string } {
   const meta = SLOT_META.emergency;
