@@ -250,6 +250,31 @@ export const SLOT_META: Record<Slot, { emoji: string; name: string; sub: string;
   emergency: { emoji: "🚨", name: "Emergency Alert", sub: "A holding just moved sharply", market: false, combos: false },
 };
 
+// Per-region portfolio totals, computed from holdings' shares × live price.
+export type RegionTotal = { val: number; cost: number; dayPL: number };
+export type PortfolioSummary = { in: RegionTotal; us: RegionTotal };
+
+// Σ shares × live price per region, plus today's gain and cost basis.
+export function portfolioSummary(
+  holdings: { symbol: string; shares: number; buyPrice?: number }[],
+  quotes: Record<string, any>,
+): PortfolioSummary {
+  const acc: PortfolioSummary = { in: { val: 0, cost: 0, dayPL: 0 }, us: { val: 0, cost: 0, dayPL: 0 } };
+  for (const h of holdings) {
+    const sym = String(h.symbol || "").toUpperCase();
+    const q = quotes[sym];
+    const shares = Number(h.shares) || 0;
+    if (!q || q.price == null || !shares) continue;
+    const r = acc[regionOf(sym)];
+    const val = shares * q.price;
+    const pct = q.changePct ?? 0;
+    r.val += val;
+    r.cost += shares * (Number(h.buyPrice) || 0);
+    r.dayPL += val - val / (1 + pct / 100); // today's gain = value − yesterday's value
+  }
+  return acc;
+}
+
 export type BriefData = {
   india: Row[];
   us: Row[];
@@ -258,6 +283,7 @@ export type BriefData = {
   marketIN: any | null;
   marketUS: any | null;
   combos: { symbol: string; label: string }[];
+  portfolio?: PortfolioSummary;
 };
 
 const wrap = (inner: string) =>
@@ -306,24 +332,49 @@ export function buildBrief(slot: Slot, data: BriefData, dateStr: string): { subj
   };
 }
 
-// Compact top gainers + losers for one market cell (≤6 rows).
+// Compact top gainers + losers for one market cell (≤6 rows): symbol · price · day%.
 function miniRows(rows: Row[]): string {
   const withPct = rows.filter((r) => r.changePct != null).sort((a, b) => (b.changePct ?? 0) - (a.changePct ?? 0));
   const pick = [...withPct.filter((r) => (r.changePct ?? 0) > 0).slice(0, 3), ...withPct.filter((r) => (r.changePct ?? 0) < 0).slice(-3).reverse()];
-  if (!pick.length) return `<div style="color:#94a3b8;font-size:11px;padding:3px 0">No holdings</div>`;
+  if (!pick.length) return `<div style="color:#94a3b8;font-size:11px;padding:3px 0">No holdings tracked</div>`;
   return `<table style="width:100%;border-collapse:collapse">${pick
-    .map((r) => `<tr><td style="padding:2.5px 0;font-size:12px"><b>${esc(r.symbol)}</b></td><td style="padding:2.5px 0;text-align:right;font-size:12px">${pctHtml(r.changePct)}</td></tr>`)
+    .map((r) => `<tr>
+      <td style="padding:3px 0;font-size:12px"><b style="color:#0f172a">${esc(r.symbol)}</b></td>
+      <td style="padding:3px 6px;text-align:right;font-size:11px;color:#64748b;white-space:nowrap">${r.price != null ? `${cur$(r.currency)}${fmt(r.price)}` : ""}</td>
+      <td style="padding:3px 0;text-align:right;font-size:12px;white-space:nowrap">${pctHtml(r.changePct)}</td>
+    </tr>`)
     .join("")}</table>`;
 }
 
-// One quadrant box of the 2×2 dashboard.
-function quad(title: string, sub: string, inner: string): string {
-  return `<td width="50%" valign="top" style="padding:5px"><div style="border:1px solid #e2e8f0;border-radius:12px;padding:11px 13px;background:#fff">
+// One quadrant box of the 2×2 dashboard, with a coloured top accent per section.
+function quad(title: string, sub: string, inner: string, accent = "#4f46e5"): string {
+  return `<td width="50%" valign="top" style="padding:5px"><div style="border:1px solid #e2e8f0;border-top:3px solid ${accent};border-radius:12px;padding:11px 13px;background:#fff">
     <div style="font-weight:800;font-size:13px;color:#0f172a">${title}${sub ? ` <span style="font-size:10px;font-weight:600;color:#94a3b8">${sub}</span>` : ""}</div>
     <div style="margin-top:7px">${inner}</div></div></td>`;
 }
 
+// The headline number a holder actually wants: what the book is worth right now
+// and how much it made/lost today — one cell per region (₹ India, $ US).
+function portfolioBar(p?: PortfolioSummary): string {
+  if (!p) return "";
+  const cell = (flag: string, cur: string, t: RegionTotal) => {
+    if (t.val <= 0) return "";
+    const prev = t.val - t.dayPL;
+    const pct = prev > 0 ? (t.dayPL / prev) * 100 : 0;
+    const up = t.dayPL >= 0, c = up ? "#059669" : "#e11d48";
+    return `<td width="50%" valign="top" style="padding:10px 14px">
+      <div style="font-size:9px;color:#94a3b8;font-weight:700;letter-spacing:.5px">${flag} PORTFOLIO</div>
+      <div style="font-size:18px;font-weight:900;color:#0f172a;margin-top:1px">${cur}${fmt(t.val, 0)}</div>
+      <div style="font-size:11.5px;color:${c};font-weight:700;margin-top:1px">${up ? "▲" : "▼"} ${cur}${fmt(Math.abs(t.dayPL), 0)} today (${up ? "+" : ""}${fmt(pct)}%)</div>
+    </td>`;
+  };
+  const inC = cell("🇮🇳", "₹", p.in), usC = cell("🇺🇸", "$", p.us);
+  if (!inC && !usC) return "";
+  return `<table style="width:100%;border-collapse:collapse;table-layout:fixed;background:#fff;border:1px solid #e2e8f0;border-radius:12px;margin-bottom:8px"><tr>${inC || `<td width="50%"></td>`}${usC || `<td width="50%"></td>`}</tr></table>`;
+}
+
 // The whole brief as ONE compact dashboard in a 2×2 grid — no long scrolling:
+//   [portfolio value bar]
 //   [🇮🇳 India movers] [🇺🇸 US movers]
 //   [⚡ Big moves ≥7%] [📰 Headlines]
 export function buildDashboard(slot: Slot, data: BriefData, dateStr: string): { subject: string; html: string } {
@@ -354,16 +405,40 @@ export function buildDashboard(slot: Slot, data: BriefData, dateStr: string): { 
   </div>`;
 
   const grid = `<table style="width:100%;border-collapse:collapse;table-layout:fixed"><tr>
-    ${quad("🇮🇳 India", `${cnt(data.india, true)}▲ ${cnt(data.india, false)}▼`, miniRows(data.india))}
-    ${quad("🇺🇸 US", `${cnt(data.us, true)}▲ ${cnt(data.us, false)}▼`, miniRows(data.us))}
+    ${quad("🇮🇳 India", `${cnt(data.india, true)}▲ ${cnt(data.india, false)}▼`, miniRows(data.india), "#059669")}
+    ${quad("🇺🇸 US", `${cnt(data.us, true)}▲ ${cnt(data.us, false)}▼`, miniRows(data.us), "#2563eb")}
   </tr><tr>
-    ${quad(`⚡ Big moves ≥${MOVE_THRESHOLD}%`, "", big)}
-    ${quad("📰 Headlines", "", q4)}
+    ${quad(`⚡ Big moves ≥${MOVE_THRESHOLD}%`, "", big, "#d97706")}
+    ${quad("📰 Headlines", "", q4, "#4f46e5")}
   </tr></table>`;
+
+  // Important lines below the grid: today's standout gainer/loser + overall mood.
+  const all = [...data.india, ...data.us].filter((r) => r.changePct != null);
+  let highlights = "";
+  if (all.length) {
+    const srt = [...all].sort((a, b) => (b.changePct ?? 0) - (a.changePct ?? 0));
+    const top = srt[0], bot = srt[srt.length - 1];
+    const upN = all.filter((r) => (r.changePct ?? 0) > 0).length;
+    const downN = all.filter((r) => (r.changePct ?? 0) < 0).length;
+    const mood = upN > downN ? ["Leaning up", "#059669"] : downN > upN ? ["Leaning down", "#e11d48"] : ["Mixed", "#64748b"];
+    const cell = (cap: string, body: string) => `<td width="33%" valign="top" style="padding:9px 11px;font-size:12px;color:#334155">
+      <div style="font-size:9px;color:#94a3b8;font-weight:700;letter-spacing:.5px;margin-bottom:2px">${cap}</div>${body}</td>`;
+    highlights = `<table style="width:100%;border-collapse:collapse;table-layout:fixed;background:#f8fafc;border:1px solid #e2e8f0;border-radius:12px;margin-top:4px"><tr>
+      ${cell("TOP GAINER", `🏆 <b>${esc(top.symbol)}</b> ${pctHtml(top.changePct)}`)}
+      ${cell("TOP LOSER", `🧊 <b>${esc(bot.symbol)}</b> ${pctHtml(bot.changePct)}`)}
+      ${cell("SENTIMENT", `<b style="color:${mood[1]}">${mood[0]}</b> · ${upN}▲ ${downN}▼`)}
+    </tr></table>`;
+  }
+
+  const comboLine = data.combos.length
+    ? `<div style="margin-top:6px;font-size:11.5px;color:#4338ca;background:#eef2ff;border-radius:10px;padding:8px 12px">🧩 <b>${data.combos.length} combo${data.combos.length > 1 ? "s" : ""} matched</b> — ${esc(data.combos.slice(0, 4).map((c) => c.symbol).join(", "))}${data.combos.length > 4 ? ` +${data.combos.length - 4} more` : ""}</div>`
+    : "";
+
+  const cta = `<div style="text-align:center;margin-top:12px"><a href="https://stockanalytix.vercel.app" style="display:inline-block;background:#4f46e5;color:#fff;text-decoration:none;font-weight:700;font-size:12px;padding:9px 22px;border-radius:9px">Open StockAnalytix →</a></div>`;
 
   return {
     subject: `${meta.emoji} ${meta.name} — StockAnalytix · ${dateStr}`,
-    html: wrap(header + grid + `<p style="color:#94a3b8;font-size:10.5px;margin-top:10px">Live day-change · research support only, not advice. A ≥${MOVE_THRESHOLD}% move often signals fresh news.</p>`),
+    html: wrap(header + portfolioBar(data.portfolio) + grid + highlights + comboLine + cta + `<p style="color:#94a3b8;font-size:10.5px;margin-top:12px;text-align:center">Live day-change · research support only, not advice. A ≥${MOVE_THRESHOLD}% move often signals fresh news.</p>`),
   };
 }
 

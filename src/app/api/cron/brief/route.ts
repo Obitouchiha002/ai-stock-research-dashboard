@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import {
-  buildDashboard, fetchQuotes, fetchMarket, fetchNews, rowsFrom,
+  buildDashboard, fetchQuotes, fetchMarket, fetchNews, rowsFrom, portfolioSummary,
   MOVE_THRESHOLD, SLOT_META, type Slot, type BriefData,
 } from "@/lib/briefKit";
 import { evalConditions } from "@/lib/comboEval";
@@ -63,8 +63,13 @@ async function handle(req: NextRequest) {
   const url = new URL(req.url);
   const provided = url.searchParams.get("key") || (req.headers.get("authorization") || "").replace(/^Bearer\s+/i, "");
   const authOk = Boolean(provided) && (provided === CRON_SECRET || (SCHEDULER_TOKEN && provided === SCHEDULER_TOKEN));
-  if (!authOk) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  if (!RESEND_KEY) return NextResponse.json({ skipped: true, reason: "RESEND_API_KEY not set" });
+  // Preview mode: render the real brief as a web page (no email sent) so the
+  // design can be checked on localhost without the daily send limit. Allowed
+  // without a key only in local dev — production still requires auth.
+  const isPreview = url.searchParams.get("preview") === "1";
+  const devPreview = isPreview && process.env.NODE_ENV !== "production";
+  if (!authOk && !devPreview) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (!RESEND_KEY && !isPreview) return NextResponse.json({ skipped: true, reason: "RESEND_API_KEY not set" });
 
   const slot = slotFrom(url);
   const dateStr = new Date().toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" });
@@ -129,8 +134,16 @@ async function handle(req: NextRequest) {
         } catch { /* combos optional */ }
       }
 
-      const data: BriefData = { india, us, movers, news, marketIN, marketUS, combos: matched };
+      // Portfolio value + today's P&L, from holdings' shares × live price.
+      const holdings = portfolio
+        .map((h) => ({ symbol: String(h.symbol || "").toUpperCase(), shares: Number(h.shares) || 0, buyPrice: Number(h.buyPrice) || 0 }))
+        .filter((h) => h.symbol && h.shares);
+      const pSummary = holdings.length ? portfolioSummary(holdings, quotes) : undefined;
+
+      const data: BriefData = { india, us, movers, news, marketIN, marketUS, combos: matched, portfolio: pSummary };
       const r = buildDashboard(slot, data, dateStr);
+      // Preview: show the first user's brief as a page and stop (no send).
+      if (isPreview) return new NextResponse(r.html, { headers: { "content-type": "text/html; charset=utf-8" } });
       if (await sendResend(email, r.subject, r.html)) emailed++;
     } catch { /* one bad bundle shouldn't stop the rest */ }
   }
