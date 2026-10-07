@@ -146,10 +146,14 @@ export default function PortfolioAnalysis({ market, holdingsOverride, hideFundam
 
   const totals = data?.totals;
   const rows = (data?.holdings || []) as any[];
-  // Every holding/symbol stays VISIBLE in the table — a real holding must never
-  // disappear just because its technical fetch soft-failed (Yahoo throttle); the
-  // no-data ones show a clear badge (index → "live value only", stock → "try
-  // refresh") instead of being hidden.
+  // A real holding/stock must NEVER disappear if its technical fetch soft-failed
+  // (Yahoo throttle) — it shows a "try refresh" badge and stays in the table.
+  // But a tracked INDEX (^… or NIFTY…) genuinely has no free chart history, so it
+  // can never produce a technical signal; group those into one compact line
+  // instead of a row of permanent "no chart history" badges cluttering the table.
+  const isIndexSym = (s: string) => /^\^/.test(s) || /NIFTY/i.test(s);
+  const naIndexRows = rows.filter((r) => !r.tech?.ok && isIndexSym(String(r.symbol)));
+  const shownRows = rows.filter((r) => !(!r.tech?.ok && isIndexSym(String(r.symbol))));
   const ai = data?.ai;
   const changedSymbols = Object.keys(newBySymbol);
   // Extra snapshot detail computed from the rows.
@@ -340,7 +344,7 @@ export default function PortfolioAnalysis({ market, holdingsOverride, hideFundam
                 </tr>
               </thead>
               <tbody>
-                {rows.map((r) => {
+                {shownRows.map((r) => {
                   const t = r.tech;
                   const fresh = newBySymbol[r.symbol] || [];
                   const ob = settings.rsiOverbought, os = settings.rsiOversold;
@@ -440,6 +444,13 @@ export default function PortfolioAnalysis({ market, holdingsOverride, hideFundam
               </tbody>
             </table>
           </div>
+          {naIndexRows.length > 0 && (
+            <div className="px-4 py-2.5 text-[11px] text-slate-500 border-t border-slate-100 bg-slate-50/40 leading-relaxed">
+              <span className="font-bold text-slate-600">📊 {naIndexRows.length} index{naIndexRows.length > 1 ? "es" : ""} · live value only</span>
+              <span className="text-slate-400"> — no free chart history, so no technical signal (tracked for value on Markets): </span>
+              <span className="text-slate-500">{naIndexRows.slice(0, 40).map((r) => r.symbol).join(", ")}{naIndexRows.length > 40 ? ` +${naIndexRows.length - 40} more` : ""}</span>
+            </div>
+          )}
           <div className="px-4 py-2 text-[11px] text-slate-500 border-t border-slate-100 bg-slate-50/60">
             Action is a candlestick + trend technical signal on the {timeframe === "1h" ? "hourly" : "daily"} timeframe — a chart read, not personalised buy/sell advice. Always confirm before acting.
           </div>
