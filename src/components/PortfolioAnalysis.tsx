@@ -146,6 +146,11 @@ export default function PortfolioAnalysis({ market, holdingsOverride, hideFundam
 
   const totals = data?.totals;
   const rows = (data?.holdings || []) as any[];
+  // Symbols with no chart history (indices, delisted, bad tickers) can never
+  // show a technical signal — keep them OUT of the table and list them in one
+  // compact line below, so the table stays all-signal, no permanent "—" noise.
+  const techRows = rows.filter((r) => r.tech?.ok);
+  const naRows = rows.filter((r) => !r.tech?.ok);
   const ai = data?.ai;
   const changedSymbols = Object.keys(newBySymbol);
   // Extra snapshot detail computed from the rows.
@@ -336,7 +341,7 @@ export default function PortfolioAnalysis({ market, holdingsOverride, hideFundam
                 </tr>
               </thead>
               <tbody>
-                {rows.map((r) => {
+                {techRows.map((r) => {
                   const t = r.tech;
                   const fresh = newBySymbol[r.symbol] || [];
                   const ob = settings.rsiOverbought, os = settings.rsiOversold;
@@ -436,6 +441,13 @@ export default function PortfolioAnalysis({ market, holdingsOverride, hideFundam
               </tbody>
             </table>
           </div>
+          {naRows.length > 0 && (
+            <div className="px-4 py-2.5 text-[11px] text-slate-500 border-t border-slate-100 bg-slate-50/40 leading-relaxed">
+              <span className="font-bold text-slate-600">📊 {naRows.length} symbol{naRows.length > 1 ? "s" : ""} without chart history</span>
+              <span className="text-slate-400"> — indices / delisted; live value only, no technical signal on free data: </span>
+              <span className="text-slate-500">{naRows.slice(0, 40).map((r) => r.symbol).join(", ")}{naRows.length > 40 ? ` +${naRows.length - 40} more` : ""}</span>
+            </div>
+          )}
           <div className="px-4 py-2 text-[11px] text-slate-500 border-t border-slate-100 bg-slate-50/60">
             Action is a candlestick + trend technical signal on the {timeframe === "1h" ? "hourly" : "daily"} timeframe — a chart read, not personalised buy/sell advice. Always confirm before acting.
           </div>
