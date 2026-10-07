@@ -151,7 +151,7 @@ export default function PortfolioAnalysis({ market, holdingsOverride, hideFundam
   // But a tracked INDEX (^… or NIFTY…) genuinely has no free chart history, so it
   // can never produce a technical signal; group those into one compact line
   // instead of a row of permanent "no chart history" badges cluttering the table.
-  const isIndexSym = (s: string) => /^\^/.test(s) || /NIFTY/i.test(s);
+  const isIndexSym = (s: string) => /^\^/.test(s) || /NIFTY|CNX|SP500|SP600|SPLR|SPSV|S&P|VIX|RUT/i.test(s);
   const naIndexRows = rows.filter((r) => !r.tech?.ok && isIndexSym(String(r.symbol)));
   const shownRows = rows.filter((r) => !(!r.tech?.ok && isIndexSym(String(r.symbol))));
   const ai = data?.ai;
