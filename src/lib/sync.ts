@@ -177,13 +177,15 @@ function mergeList(baseKeys: string[], ours: any[], theirs: any[]): any[] {
   return out;
 }
 
-// 2-way object/scalar merge (objects rarely need delete semantics).
-function mergeValue(local: any, cloud: any): any {
+// 2-way object/scalar merge, with delete-aware lists when a base shadow is given.
+function mergeValue(local: any, cloud: any, shadow?: any): any {
   // Arrays nested inside an object (e.g. custom markets / order / hidden grouped
-  // by tab) must be UNIONED, not overwritten — otherwise two devices each keep
-  // their own list and never converge. Union by item identity, local wins ties,
-  // so nothing a user added on either device is ever lost.
+  // by tab). With the base keys (shadow) we do a 3-way merge so deletes stick;
+  // without them we UNION (local wins ties) so a brand-new device never loses a
+  // list it added. The shadow is populated once this device syncs with the
+  // nested-shadow code, after which removals inside the object are honoured.
   if (Array.isArray(local) && Array.isArray(cloud)) {
+    if (Array.isArray(shadow)) return mergeList(shadow, local, cloud);
     const map = new Map<string, any>();
     for (const it of cloud) map.set(itemKey(it), it);
     for (const it of local) map.set(itemKey(it), it);
@@ -192,7 +194,7 @@ function mergeValue(local: any, cloud: any): any {
   if (isObj(local) && isObj(cloud)) {
     const out: Record<string, any> = { ...cloud };
     for (const k of Object.keys(local)) {
-      out[k] = k in cloud ? mergeValue(local[k], cloud[k]) : local[k];
+      out[k] = k in cloud ? mergeValue(local[k], cloud[k], shadow?.[k]) : local[k];
     }
     return out;
   }
@@ -201,7 +203,7 @@ function mergeValue(local: any, cloud: any): any {
 
 // Merge the whole bundle against the last-synced base snapshot.
 export function mergeBundle(
-  shadow: Record<string, string[]>,
+  shadow: Record<string, any>,
   localB: Record<string, any>,
   cloudB: Record<string, any>,
 ): Record<string, any> {
@@ -212,20 +214,28 @@ export function mergeBundle(
     else if (!(k in cloudB)) out[k] = localB[k];
     else if (Array.isArray(localB[k]) && Array.isArray(cloudB[k]))
       out[k] = mergeList(shadow?.[k] || [], localB[k], cloudB[k]);
-    else out[k] = mergeValue(localB[k], cloudB[k]);
+    else out[k] = mergeValue(localB[k], cloudB[k], shadow?.[k]);
   }
   return out;
 }
 
 // The base snapshot we persist: for each list key, just the item keys (tiny).
-function computeShadow(bundle: Record<string, any>): Record<string, string[]> {
-  const out: Record<string, string[]> = {};
+// For an object whose values are lists (e.g. custom markets grouped by tab) we
+// record each nested list's keys too, so a delete INSIDE such an object sticks
+// instead of being resurrected by the union merge.
+function computeShadow(bundle: Record<string, any>): Record<string, any> {
+  const out: Record<string, any> = {};
   for (const [k, v] of Object.entries(bundle || {})) {
     if (Array.isArray(v)) out[k] = v.map(itemKey);
+    else if (isObj(v)) {
+      const sub: Record<string, string[]> = {};
+      for (const [g, gv] of Object.entries(v)) if (Array.isArray(gv)) sub[g] = (gv as any[]).map(itemKey);
+      if (Object.keys(sub).length) out[k] = sub;
+    }
   }
   return out;
 }
-export function readShadow(): Record<string, string[]> {
+export function readShadow(): Record<string, any> {
   if (!isBrowser) return {};
   try {
     return JSON.parse(window.localStorage.getItem(SHADOW_KEY) || "{}") || {};
