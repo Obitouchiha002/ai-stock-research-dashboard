@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import YahooFinance from "yahoo-finance2";
+import { loadDurableQuotes, saveDurableQuotes } from "@/lib/quoteCache";
 
 const yahooFinance = new YahooFinance();
 
@@ -100,6 +101,7 @@ export async function POST(req: NextRequest) {
     }
 
     const now = Date.now();
+    const freshFetched: { symbol: string; data: QuoteLite }[] = [];
     const results = await Promise.all(
       clean.map(async (symbol): Promise<QuoteLite> => {
         // Serve a fresh cached value without touching the network.
@@ -110,6 +112,7 @@ export async function POST(req: NextRequest) {
         if (fresh) {
           CACHE.set(symbol, { data: fresh, exp: now + CACHE_TTL });
           LAST.set(symbol, fresh);
+          freshFetched.push({ symbol, data: fresh });
           return fresh;
         }
         // Fetch failed (soft null-price or thrown). Show the last-known-good
@@ -123,6 +126,25 @@ export async function POST(req: NextRequest) {
         };
       }),
     );
+
+    // Backfill symbols that are STILL blank (Yahoo soft-failed and the in-memory
+    // last-good was empty — e.g. right after a serverless cold start) from the
+    // durable Supabase cache, so a value shows instead of "—".
+    const blanks = results.filter((r) => r.price == null).map((r) => r.symbol);
+    if (blanks.length) {
+      const durable = await loadDurableQuotes(blanks);
+      for (let i = 0; i < results.length; i++) {
+        if (results[i].price != null) continue;
+        const d = durable[results[i].symbol];
+        if (d && d.price != null) {
+          LAST.set(results[i].symbol, d as QuoteLite); // re-warm in-memory
+          results[i] = d as QuoteLite;
+        }
+      }
+    }
+
+    // Persist freshly-fetched quotes so the NEXT cold start can serve them.
+    await saveDurableQuotes(freshFetched);
     // Keep the caches from growing unbounded on a long-lived instance.
     if (LAST.size > 800) { let i = 0; for (const k of LAST.keys()) { if (i++ > 400) LAST.delete(k); } }
     if (CACHE.size > 600) {
