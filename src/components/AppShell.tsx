@@ -168,7 +168,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     return () => window.removeEventListener("resize", apply);
   }, []);
   const [searchQuery, setSearchQuery] = useState("");
-  const { market, setMarket, timeframe, setTimeframe, triggerRefresh, theme, setTheme, profileName, profilePhoto, setProfile } = useGlobal();
+  const { market, setMarket, timeframe, setTimeframe, triggerRefresh, shouldRefresh, theme, setTheme, profileName, profilePhoto, setProfile } = useGlobal();
   const [themeLocal, setThemeLocal] = useState(theme);
   const [profileOpen, setProfileOpen] = useState(false);
   const [notifsOpen, setNotifsOpen] = useState(false);
@@ -318,11 +318,9 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const handleRefresh = () => {
     if (refreshing) return;
     setRefreshing(true);
-    triggerRefresh(); // notify any listeners
-    // Re-fetch the current page's data (client pages fetch on mount).
-    setTimeout(() => {
-      if (typeof window !== "undefined") window.location.reload();
-    }, 350);
+    triggerRefresh(); // bumps shouldRefresh → page content remounts → mount fetches re-run
+    window.dispatchEvent(new Event("sa-synced")); // nudge live components (perf card etc.)
+    setTimeout(() => setRefreshing(false), 800);
   };
 
   // The login page renders on its own — no sidebar, no gate (avoids a redirect loop).
@@ -708,7 +706,10 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
         {/* Main scrollable area */}
         <main className="flex-1 overflow-y-auto overflow-x-hidden p-4 sm:p-6 pb-24 md:pb-20 bg-slate-50 relative hide-scrollbar text-slate-800">
-          {children}
+          {/* Keyed on shouldRefresh: the Refresh button bumps it, which remounts
+              just the page content (its mount fetches re-run) — a fast soft
+              refresh, no full-browser reload / bundle re-download. */}
+          <div key={shouldRefresh} style={{ display: "contents" }}>{children}</div>
         </main>
       </div>
 
