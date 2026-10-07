@@ -3,6 +3,7 @@ import YahooFinance from "yahoo-finance2";
 import { subDays } from "date-fns";
 import { buildSnapshot, type TechSnapshot } from "@/lib/technicalSnapshot";
 import { generateJson, runWithUsage, currentUsage } from "@/lib/aiClient";
+import { appToEodhd, eodhdCandles, eodhdConfigured } from "@/lib/eodhd";
 
 const yahooFinance = new YahooFinance();
 
@@ -36,6 +37,27 @@ async function techFor(symbol: string, s: Settings, timeframe: "1d" | "1h", indi
   const days = timeframe === "1h" ? 180 : 400;
   const interval = timeframe === "1h" ? "1h" : "1d";
   const period1 = subDays(new Date(), days).toISOString().split("T")[0];
+  const snap = (rows: any[]) =>
+    buildSnapshot(
+      rows.map((r: any) => ({ open: r.open, high: r.high, low: r.low, close: r.close, volume: r.volume })),
+      { rsiOverbought: s.rsiOverbought, rsiOversold: s.rsiOversold, adxTrend: s.adxTrend, diSpread: s.diSpread, volSurge: s.volSurge },
+    );
+
+  // EODHD first for what it serves: INDICES (NSE sectoral + US — Yahoo has no
+  // history for these, so this is the one source that gives them a signal) and
+  // US stocks (reliable + offloads Yahoo). NSE/BSE stocks aren't in the plan →
+  // appToEodhd returns null and we fall through to Yahoo. Any EODHD miss also
+  // falls through, so nothing regresses.
+  if (eodhdConfigured()) {
+    const e = appToEodhd(symbol);
+    if (e && (e.kind === "index" || (e.kind === "us" && !india))) {
+      try {
+        const candles = await eodhdCandles(e.sym, { interval, from: period1 });
+        if (candles.length >= 30) return snap(candles);
+      } catch { /* fall through to Yahoo */ }
+    }
+  }
+
   // For a bare Indian ticker (RELIANCE / TCS), try the NSE then BSE listing.
   const cands = symbol.includes(".") ? [symbol] : india ? [`${symbol}.NS`, `${symbol}.BO`, symbol] : [symbol];
   // Two rounds so a single US symbol still gets one retry on a transient hiccup.
@@ -45,12 +67,7 @@ async function techFor(symbol: string, s: Settings, timeframe: "1d" | "1h", indi
         const chartRes = await yahooFinance.chart(sym, { period1, interval: interval as any }).catch(() => null);
         const quotes = (chartRes as any)?.quotes || [];
         const rows = quotes.filter((q: any) => q && q.close != null && q.high != null && q.low != null);
-        if (rows.length >= 30) {
-          return buildSnapshot(
-            rows.map((r: any) => ({ open: r.open, high: r.high, low: r.low, close: r.close, volume: r.volume })),
-            { rsiOverbought: s.rsiOverbought, rsiOversold: s.rsiOversold, adxTrend: s.adxTrend, diSpread: s.diSpread, volSurge: s.volSurge },
-          );
-        }
+        if (rows.length >= 30) return snap(rows);
       } catch { /* try next candidate / round */ }
     }
   }
