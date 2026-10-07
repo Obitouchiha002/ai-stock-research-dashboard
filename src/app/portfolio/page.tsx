@@ -22,6 +22,7 @@ import {
 import {
   getPortfolio,
   savePortfolioHolding,
+  updateHoldingPrices,
   deletePortfolioHolding,
   bulkAddHoldings,
   replaceHoldingsForMarkets,
@@ -181,6 +182,8 @@ export default function PortfolioPage() {
   useEffect(() => {
     setHoldings(getPortfolio());
     setPriceAlerts(getPriceAlerts());
+    refreshPrices(); // converge header totals with live prices on load (no stale flash)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Read the chart for each holding — a factual technical snapshot (trend,
@@ -418,8 +421,7 @@ export default function PortfolioPage() {
   // Batch-refresh live prices for all holdings in one call.
   const refreshPrices = async () => {
     setRefreshing(true);
-    const current = getPortfolio();
-    const symbols = Array.from(new Set(current.map((h) => h.symbol)));
+    const symbols = Array.from(new Set(getPortfolio().map((h) => h.symbol)));
     try {
       const res = await fetch("/api/quotes", {
         method: "POST",
@@ -428,12 +430,9 @@ export default function PortfolioPage() {
       });
       const j = await res.json();
       const quotes = j.quotes || {};
-      current.forEach((h) => {
-        const q = quotes[h.symbol];
-        if (q && q.price != null) {
-          savePortfolioHolding({ ...h, currentPrice: q.price });
-        }
-      });
+      const priceBySymbol: Record<string, number> = {};
+      for (const [sym, q] of Object.entries<any>(quotes)) if (q?.price != null) priceBySymbol[sym.toUpperCase()] = q.price;
+      updateHoldingPrices(priceBySymbol); // one write, not N
     } catch {
       /* keep last known prices */
     }

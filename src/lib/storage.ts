@@ -376,6 +376,20 @@ export const replaceHoldingsForMarkets = (holdings: any[]) => {
   setContext("sa_portfolio", [...others, ...fresh]);
 };
 
+// Patch currentPrice for many holdings in ONE localStorage write, keeping ids.
+// (Replaces a per-symbol save loop that re-serialised the whole array N times.)
+export const updateHoldingPrices = (priceBySymbol: Record<string, number>) => {
+  const list = getParsedContext<any[]>("sa_portfolio", []);
+  let changed = false;
+  const next = list.map((h: any) => {
+    const p = priceBySymbol[String(h.symbol || "").toUpperCase()];
+    if (p != null && p !== h.currentPrice) { changed = true; return { ...h, currentPrice: p }; }
+    return h;
+  });
+  if (changed) setContext("sa_portfolio", next);
+  return changed;
+};
+
 // EXCEL SHEETS
 // An imported workbook. Each imported Excel/CSV sheet is stored as one "sheet"
 // (like a tab). A workbook file can contain several sheets at once.

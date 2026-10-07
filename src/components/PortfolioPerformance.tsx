@@ -94,8 +94,9 @@ export default function PortfolioPerformance() {
     let quotes: Record<string, any> = {};
     const compute = () => { if (!cancelled) setLive(computeLive(readHoldings(), quotes)); };
     compute(); // instant from stored values
+    // Recompute only when data actually changes (sync / this component's own
+    // fetch below) — no blind 8s polling re-render of unchanged numbers.
     window.addEventListener("sa-synced", compute);
-    const iv = setInterval(compute, 8000);
 
     // Fill any missing current prices + the USD→INR rate from a live quote fetch.
     (async () => {
@@ -124,7 +125,7 @@ export default function PortfolioPerformance() {
       } catch { /* none yet */ }
     })();
 
-    return () => { cancelled = true; clearInterval(iv); window.removeEventListener("sa-synced", compute); };
+    return () => { cancelled = true; window.removeEventListener("sa-synced", compute); };
   }, []);
 
   if (!live || (live.holdings === 0)) return null;

@@ -254,10 +254,11 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     setNotifications(getNotifications());
-    // Refresh notifications occasionally
+    // Notifications are added locally (price-alert watcher) — a 30s poll is
+    // plenty; 5s re-rendered the whole shell twelve times a minute for nothing.
     const interval = setInterval(
       () => setNotifications(getNotifications()),
-      5000,
+      30000,
     );
     return () => clearInterval(interval);
   }, []);
