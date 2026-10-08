@@ -99,6 +99,7 @@ const PRIMARY_NAV = [
   { name: "Analyze Stock", href: "/analyze", icon: Activity },
   { name: "Chart Analytics", href: "/charts", icon: CandlestickChart },
   { name: "Markets", href: "/markets", icon: Globe },
+  { name: "Sector Pulse", href: "/sectors", icon: Gauge },
   { name: "Daily Overview", href: "/market-overview", icon: Sunrise },
   { name: "Watchlist", href: "/watchlist", icon: Star },
   { name: "Portfolio", href: "/portfolio", icon: Briefcase },
