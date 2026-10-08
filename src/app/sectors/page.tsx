@@ -2,7 +2,21 @@
 
 import { useEffect, useState, useCallback } from "react";
 import Link from "next/link";
-import { RefreshCw, TrendingUp, TrendingDown } from "lucide-react";
+import { RefreshCw, TrendingUp, TrendingDown, Zap } from "lucide-react";
+import { addNotification } from "@/lib/storage";
+
+// Notify once per sector+condition per day (so opening the page doesn't re-spam).
+function notifyOnce(key: string) {
+  try {
+    const k = "sa_sector_alert_seen";
+    const today = new Date().toISOString().slice(0, 10);
+    const seen = JSON.parse(localStorage.getItem(k) || "{}");
+    if (seen[key] === today) return false;
+    seen[key] = today;
+    localStorage.setItem(k, JSON.stringify(seen));
+    return true;
+  } catch { return false; }
+}
 
 // Sector Pulse — which sectors are hot / cold today, at a glance. Powered by the
 // EODHD index history (sectoral indices have no free chart data anywhere else),
@@ -102,6 +116,7 @@ function SectorList({ title, flag, rows }: { title: string; flag: string; rows: 
 export default function SectorsPage() {
   const [ind, setInd] = useState<Row[]>([]);
   const [us, setUs] = useState<Row[]>([]);
+  const [watch, setWatch] = useState<{ row: Row; why: string }[]>([]);
   const [loading, setLoading] = useState(true);
   const [at, setAt] = useState<number | null>(null);
 
@@ -109,6 +124,19 @@ export default function SectorsPage() {
     setLoading(true);
     const [a, b] = await Promise.all([loadSectors(IN_SECTORS, "Indian"), loadSectors(US_SECTORS, "US")]);
     setInd(a); setUs(b); setAt(Date.now()); setLoading(false);
+
+    // Sectors at an actionable extreme — the "to watch" signal. Notify once/day.
+    const flagged: { row: Row; why: string }[] = [];
+    for (const r of [...a, ...b]) {
+      if (r.rsi == null) continue;
+      const why = r.rsi >= 70 ? "RSI overbought" : r.rsi <= 30 ? "RSI oversold" : "";
+      if (!why) continue;
+      flagged.push({ row: r, why });
+      if (notifyOnce(`${r.symbol}:${why}`)) {
+        addNotification({ type: "info", message: `${r.name}: ${why} (RSI ${r.rsi}) — ${r.action || ""}`.trim() });
+      }
+    }
+    setWatch(flagged);
   }, []);
 
   useEffect(() => { load(); }, [load]);
@@ -122,6 +150,21 @@ export default function SectorsPage() {
           <RefreshCw className={`w-3.5 h-3.5 ${loading ? "animate-spin" : ""}`} /> Refresh
         </button>
       </div>
+      {watch.length > 0 && (
+        <div className="bg-amber-50 border border-amber-200 rounded-xl px-4 py-3 flex items-start gap-2">
+          <Zap className="w-4 h-4 text-amber-600 mt-0.5 shrink-0" />
+          <div className="text-[12.5px] text-amber-900 leading-relaxed">
+            <span className="font-black">⚡ Sectors to watch:</span>{" "}
+            {watch.map((w, i) => (
+              <span key={w.row.symbol}>
+                {i > 0 && " · "}
+                <Link href={`/charts?symbol=${encodeURIComponent(w.row.symbol)}`} className="font-bold underline decoration-amber-400 hover:text-amber-700">{w.row.name}</Link>
+                <span className="text-amber-700"> ({w.why.replace("RSI ", "")}, RSI {w.row.rsi})</span>
+              </span>
+            ))}
+          </div>
+        </div>
+      )}
       {loading && !ind.length ? (
         <div className="text-sm text-slate-500 px-1 py-10 text-center">Reading sector trends…</div>
       ) : (
