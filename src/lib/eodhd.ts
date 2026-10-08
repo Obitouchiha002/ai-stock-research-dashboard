@@ -40,6 +40,10 @@ export const eodhdEod = (sym: string, from?: string) => getJson(`/eod/${sym}${fr
 export const eodhdExchangeSymbols = (exchange: string) => getJson(`/exchange-symbol-list/${exchange}`);
 // Bulk end-of-day for a whole exchange in ONE call (the fast scan).
 export const eodhdBulkEod = (exchange: string) => getJson(`/eod-bulk-last-day/${exchange}`);
+// Extended bulk adds, per symbol: name, type, MarketCapitalization, Beta,
+// ema_50d/200d, hi_250d/lo_250d (52-week high/low), avgvol_14d/50d/200d — the
+// basis of a real full-market screener (breakouts, 52w highs, volume surges).
+export const eodhdBulkEodExtended = (exchange: string) => getJson(`/eod-bulk-last-day/${exchange}?filter=extended`);
 
 // ---- app-symbol → EODHD mapping (for the candle/history pipe) ---------------
 // What this plan serves: global INDICES (incl. NSE sectoral — the big win, since

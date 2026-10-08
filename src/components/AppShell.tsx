@@ -110,6 +110,7 @@ const MORE_GROUPS = [
   {
     label: "Research tools",
     items: [
+      { name: "Market Screener", href: "/screener", icon: Search },
       { name: "Combinations", href: "/combos", icon: SlidersHorizontal },
       { name: "Compare Stocks", href: "/compare", icon: ArrowLeftRight },
       { name: "AI Research", href: "/ai-chat", icon: MessageSquare },
