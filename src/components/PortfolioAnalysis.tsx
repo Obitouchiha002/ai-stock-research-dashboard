@@ -68,6 +68,7 @@ export default function PortfolioAnalysis({ market, holdingsOverride, hideFundam
   const [showSettings, setShowSettings] = useState(false);
   const [timeframe, setTimeframe] = useState<"1d" | "1h">("1d");
   const [mode, setMode] = useState<"technical" | "fundamental">("technical");
+  const [actFilter, setActFilter] = useState<"all" | "Buy" | "Sell" | "Hold">("all");
   const [ready, setReady] = useState(false);
   // Cache results per {timeframe|symbol-set} so toggling Daily↔Hourly or
   // switching markets/tabs and back is instant (5-minute freshness).
@@ -154,6 +155,7 @@ export default function PortfolioAnalysis({ market, holdingsOverride, hideFundam
   const isIndexSym = (s: string) => /^\^/.test(s) || /NIFTY|CNX|SP500|SP600|SPLR|SPSV|S&P|VIX|RUT/i.test(s);
   const naIndexRows = rows.filter((r) => !r.tech?.ok && isIndexSym(String(r.symbol)));
   const shownRows = rows.filter((r) => !(!r.tech?.ok && isIndexSym(String(r.symbol))));
+  const filteredRows = actFilter === "all" ? shownRows : shownRows.filter((r) => r.tech?.action === actFilter);
   const ai = data?.ai;
   const changedSymbols = Object.keys(newBySymbol);
   // Extra snapshot detail computed from the rows.
@@ -328,6 +330,17 @@ export default function PortfolioAnalysis({ market, holdingsOverride, hideFundam
             <h3 className="text-[12px] font-black uppercase tracking-wide text-slate-600">Technical Watch · {timeframe === "1h" ? "Hourly" : "Daily"}</h3>
             <span className="text-[11px] text-slate-400 font-semibold ml-auto hidden sm:block">RSI · ADX · volume · MA · S/R · pattern · candle · action</span>
           </div>
+          {/* Filter by Action */}
+          <div className="px-4 py-2 border-b border-slate-100 flex items-center gap-1.5 flex-wrap bg-white">
+            {(["all", "Buy", "Sell", "Hold"] as const).map((a) => {
+              const n = a === "all" ? shownRows.length : shownRows.filter((r) => r.tech?.action === a).length;
+              return (
+                <button key={a} onClick={() => setActFilter(a)} className={`text-[11px] font-bold px-2.5 py-1 rounded-lg border transition ${actFilter === a ? (a === "Buy" ? "bg-emerald-600 text-white border-emerald-600" : a === "Sell" ? "bg-rose-600 text-white border-rose-600" : "bg-slate-900 text-white border-slate-900") : "bg-white text-slate-500 border-slate-200 hover:bg-slate-50"}`}>
+                  {a === "all" ? "All" : a} <span className="opacity-60">{n}</span>
+                </button>
+              );
+            })}
+          </div>
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
@@ -344,7 +357,7 @@ export default function PortfolioAnalysis({ market, holdingsOverride, hideFundam
                 </tr>
               </thead>
               <tbody>
-                {shownRows.map((r) => {
+                {filteredRows.map((r) => {
                   const t = r.tech;
                   const fresh = newBySymbol[r.symbol] || [];
                   const ob = settings.rsiOverbought, os = settings.rsiOversold;

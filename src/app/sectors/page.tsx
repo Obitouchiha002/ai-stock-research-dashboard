@@ -119,6 +119,14 @@ export default function SectorsPage() {
   const [watch, setWatch] = useState<{ row: Row; why: string }[]>([]);
   const [loading, setLoading] = useState(true);
   const [at, setAt] = useState<number | null>(null);
+  const [filter, setFilter] = useState<"all" | "Buy" | "Sell" | "Hold" | "ob" | "os">("all");
+
+  // Filter rows by the chosen chip (action, or RSI overbought/oversold).
+  const apply = (rows: Row[]) =>
+    filter === "all" ? rows
+    : filter === "ob" ? rows.filter((r) => r.rsi != null && r.rsi >= 70)
+    : filter === "os" ? rows.filter((r) => r.rsi != null && r.rsi <= 30)
+    : rows.filter((r) => r.action === filter);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -165,12 +173,24 @@ export default function SectorsPage() {
           </div>
         </div>
       )}
+      <div className="flex gap-2 flex-wrap">
+        {([
+          { k: "all", label: "All" },
+          { k: "Buy", label: "🟢 Buy" },
+          { k: "Sell", label: "🔴 Sell" },
+          { k: "Hold", label: "⚪ Hold" },
+          { k: "ob", label: "Overbought" },
+          { k: "os", label: "Oversold" },
+        ] as const).map((c) => (
+          <button key={c.k} onClick={() => setFilter(c.k)} className={`text-[12px] font-bold px-3 py-1.5 rounded-xl border transition ${filter === c.k ? "bg-slate-900 text-white border-slate-900" : "bg-white text-slate-600 border-slate-200 hover:bg-slate-50"}`}>{c.label}</button>
+        ))}
+      </div>
       {loading && !ind.length ? (
         <div className="text-sm text-slate-500 px-1 py-10 text-center">Reading sector trends…</div>
       ) : (
         <div className="grid md:grid-cols-2 gap-4">
-          <SectorList title="India sectors" flag="🇮🇳" rows={ind} />
-          <SectorList title="US sectors" flag="🇺🇸" rows={us} />
+          <SectorList title="India sectors" flag="🇮🇳" rows={apply(ind)} />
+          <SectorList title="US sectors" flag="🇺🇸" rows={apply(us)} />
         </div>
       )}
       {at && <div className="text-[11px] text-slate-400 text-center">Updated {new Date(at).toLocaleTimeString()} · research support only, not advice</div>}
