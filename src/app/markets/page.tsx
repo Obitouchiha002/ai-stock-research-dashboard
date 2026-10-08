@@ -223,6 +223,7 @@ export default function MarketsPage() {
   const [auto, setAuto] = useState(false);
   const [tab, setTab] = useState("us");
   const [mktView, setMktView] = useState<"quotes" | "technical">("quotes");
+  const [moveFilter, setMoveFilter] = useState<"all" | "up" | "down">("all"); // today's gainers / losers
   // user's own symbols ("Custom" tab)
   const [custom, setCustom] = useState<{ symbol: string; label: string }[]>([]);
   const [marks, setMarks] = useState<Record<string, string>>({});
@@ -507,7 +508,13 @@ export default function MarketsPage() {
     const recent = (arr: any[]) => recentSort
       ? [...arr].sort((a, b) => Number(plans[b.symbol]?.updatedAt || 0) - Number(plans[a.symbol]?.updatedAt || 0))
       : arr;
-    if (trendFilter === "all") return recent(baseRows.filter(byCombo));
+    const byMove = (r: any) => {
+      if (moveFilter === "all") return true;
+      const cp = r.q?.changePct;
+      if (typeof cp !== "number") return false;
+      return moveFilter === "up" ? cp >= 0 : cp < 0;
+    };
+    if (trendFilter === "all") return recent(baseRows.filter((r) => byCombo(r) && byMove(r)));
     const up = ["up", "strong_up"];
     const down = ["down", "strong_down"];
     const match = (st?: string) => {
@@ -521,8 +528,8 @@ export default function MarketsPage() {
         default: return true;
       }
     };
-    return recent(baseRows.filter((r) => match(trendMap[r.symbol]) && byCombo(r)));
-  }, [baseRows, trendFilter, trendMap, plans, comboFilter, recentSort]);
+    return recent(baseRows.filter((r) => match(trendMap[r.symbol]) && byCombo(r) && byMove(r)));
+  }, [baseRows, trendFilter, trendMap, plans, comboFilter, recentSort, moveFilter]);
 
   const TREND_OPTIONS = [
     { key: "all", label: "All trends" },
@@ -677,6 +684,11 @@ export default function MarketsPage() {
             className={`text-[11px] font-bold rounded-lg px-2.5 py-1.5 border transition ${recentSort ? "bg-indigo-600 text-white border-indigo-600" : "bg-white text-slate-600 border-slate-200 hover:bg-slate-50"}`}>
             🕐 Recently changed
           </button>
+          <span className="w-px h-5 bg-slate-200 mx-0.5" />
+          <button onClick={() => setMoveFilter(moveFilter === "up" ? "all" : "up")}
+            className={`text-[11px] font-bold rounded-lg px-2.5 py-1.5 border transition ${moveFilter === "up" ? "bg-emerald-600 text-white border-emerald-600" : "bg-white text-slate-600 border-slate-200 hover:bg-slate-50"}`}>▲ Gainers</button>
+          <button onClick={() => setMoveFilter(moveFilter === "down" ? "all" : "down")}
+            className={`text-[11px] font-bold rounded-lg px-2.5 py-1.5 border transition ${moveFilter === "down" ? "bg-rose-600 text-white border-rose-600" : "bg-white text-slate-600 border-slate-200 hover:bg-slate-50"}`}>▼ Losers</button>
           {(hidden[tab]?.length || 0) > 0 && (
             <button onClick={restoreHidden} className="text-[11px] font-bold text-slate-500 hover:text-indigo-600 bg-slate-100 hover:bg-indigo-50 rounded-lg px-2.5 py-1.5 ml-1">
               ↩ Restore {hidden[tab].length} hidden

@@ -129,6 +129,7 @@ export default function WatchlistPage() {
   const [activeSub, setActiveSub] = useState<string>("All"); // sub-list within a category
   const [search, setSearch] = useState("");
   const [markFilter, setMarkFilter] = useState("all"); // all | green | red | yellow | unmarked
+  const [moveFilter, setMoveFilter] = useState<"all" | "up" | "down">("all"); // today's gainers / losers
   const [comboFilter, setComboFilter] = useState("all"); // all | __attached | __none | <comboId>
   const [recentSort, setRecentSort] = useState(false);
   const [quotes, setQuotes] = useState<Record<string, any>>({});
@@ -228,6 +229,12 @@ export default function WatchlistPage() {
     if (comboFilter === "__attached") { if (!item.comboId) return false; }
     else if (comboFilter === "__none") { if (item.comboId) return false; }
     else if (comboFilter !== "all" && item.comboId !== comboFilter) return false;
+    // today's move filter (gainers / losers)
+    if (moveFilter !== "all") {
+      const cp = quotes[String(item.symbol).toUpperCase()]?.changePct;
+      if (typeof cp !== "number") return false;
+      if (moveFilter === "up" ? cp < 0 : cp >= 0) return false;
+    }
     if (!search) return true;
     const s = search.toLowerCase();
     return (
@@ -698,6 +705,11 @@ export default function WatchlistPage() {
           className={`px-2.5 py-1 rounded-lg text-xs font-bold transition ${markFilter === "unmarked" ? "bg-slate-900 text-white" : "bg-white text-slate-400 border border-slate-200 hover:bg-slate-50"}`}>Unmarked</button>
         <button onClick={() => setRecentSort((v) => !v)}
           className={`px-2.5 py-1 rounded-lg text-xs font-bold transition border ml-1 ${recentSort ? "bg-indigo-600 text-white border-indigo-600" : "bg-white text-slate-600 border-slate-200 hover:bg-slate-50"}`}>🕐 Recently changed</button>
+        <span className="w-px h-5 bg-slate-200 mx-0.5" />
+        <button onClick={() => setMoveFilter(moveFilter === "up" ? "all" : "up")}
+          className={`px-2.5 py-1 rounded-lg text-xs font-bold transition border ${moveFilter === "up" ? "bg-emerald-600 text-white border-emerald-600" : "bg-white text-slate-600 border-slate-200 hover:bg-slate-50"}`}>▲ Gainers</button>
+        <button onClick={() => setMoveFilter(moveFilter === "down" ? "all" : "down")}
+          className={`px-2.5 py-1 rounded-lg text-xs font-bold transition border ${moveFilter === "down" ? "bg-rose-600 text-white border-rose-600" : "bg-white text-slate-600 border-slate-200 hover:bg-slate-50"}`}>▼ Losers</button>
       </div>
 
       {/* Combination filter — see which stocks a saved combo is attached to */}

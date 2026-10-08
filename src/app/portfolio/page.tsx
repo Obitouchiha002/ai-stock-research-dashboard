@@ -137,6 +137,7 @@ export default function PortfolioPage() {
   };
   const [search, setSearch] = useState("");
   const [trendFilter, setTrendFilter] = useState("all"); // all | up | down | side
+  const [plFilter, setPlFilter] = useState<"all" | "profit" | "loss">("all"); // in profit / in loss
   const [recentSort, setRecentSort] = useState(false);
   const [order, setOrder] = useState<string[]>([]);
   const [dragId, setDragId] = useState<string | null>(null);
@@ -323,6 +324,10 @@ export default function PortfolioPage() {
   const marketHoldings = holdings.filter((h) => h.market === market);
   const visibleHoldings = marketHoldings.filter((h) => {
     if (trendFilter !== "all" && (h.trend || "") !== trendFilter) return false;
+    if (plFilter !== "all") {
+      const gain = ((h.currentPrice || h.buyPrice) - h.buyPrice) * h.shares;
+      if (plFilter === "profit" ? gain < 0 : gain >= 0) return false;
+    }
     if (search.trim()) {
       const s = search.trim().toLowerCase();
       if (!(String(h.symbol || "").toLowerCase().includes(s) || String(h.name || "").toLowerCase().includes(s))) return false;
@@ -1030,6 +1035,11 @@ export default function PortfolioPage() {
           ))}
           <button onClick={() => setRecentSort((v) => !v)}
             className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all duration-200 hover:scale-105 active:scale-95 border ml-1 ${recentSort ? "bg-indigo-600 text-white border-indigo-600 shadow-md" : "bg-white text-slate-600 border-slate-200 hover:border-slate-300 hover:shadow-sm"}`}>🕐 Recently changed</button>
+          <span className="w-px h-5 bg-slate-200 mx-0.5" />
+          <button onClick={() => setPlFilter(plFilter === "profit" ? "all" : "profit")}
+            className={`px-3 py-1.5 rounded-xl text-xs font-bold transition border ${plFilter === "profit" ? "bg-emerald-600 text-white border-emerald-600 shadow-md" : "bg-white text-slate-600 border-slate-200 hover:border-slate-300"}`}>🟢 In profit</button>
+          <button onClick={() => setPlFilter(plFilter === "loss" ? "all" : "loss")}
+            className={`px-3 py-1.5 rounded-xl text-xs font-bold transition border ${plFilter === "loss" ? "bg-rose-600 text-white border-rose-600 shadow-md" : "bg-white text-slate-600 border-slate-200 hover:border-slate-300"}`}>🔴 In loss</button>
         </div>}
         {view === "plan" && (
           <>
