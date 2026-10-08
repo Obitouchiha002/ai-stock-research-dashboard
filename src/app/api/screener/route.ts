@@ -29,13 +29,16 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "No market data returned." }, { status: 502 });
     }
 
-    // Liquid, real common stocks only — drop ETFs, warrants, penny & micro-caps.
+    // Universe: the TOP 1000 US common stocks by market cap (drops ETFs,
+    // warrants, penny names), then the screens run within that large-cap set.
     const rows = all
       .filter((r) =>
         r && r.type === "Common Stock" &&
-        num(r.close) > 1 && num(r.MarketCapitalization) > 3e8 &&
-        num(r.avgvol_14d) > 1e5 && num(r.hi_250d) > 0 && num(r.lo_250d) > 0,
+        num(r.close) > 1 && num(r.MarketCapitalization) > 0 &&
+        num(r.hi_250d) > 0 && num(r.lo_250d) > 0,
       )
+      .sort((a, b) => num(b.MarketCapitalization) - num(a.MarketCapitalization))
+      .slice(0, 1000)
       .map((r) => {
         const close = num(r.close);
         return {

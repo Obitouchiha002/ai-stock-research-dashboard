@@ -34,8 +34,6 @@ async function getJson(path: string): Promise<any> {
 }
 
 export const eodhdRealTime = (sym: string) => getJson(`/real-time/${sym}`);
-export const eodhdDividends = (sym: string, from?: string) => getJson(`/div/${sym}${from ? `?from=${from}` : ""}`);
-export const eodhdSplits = (sym: string, from?: string) => getJson(`/splits/${sym}${from ? `?from=${from}` : ""}`);
 export const eodhdFundamentals = (sym: string) => getJson(`/fundamentals/${sym}`);
 export const eodhdEod = (sym: string, from?: string) => getJson(`/eod/${sym}${from ? `?from=${from}` : ""}`);
 // All symbols listed on an exchange (e.g. "US", "NSE") — the basis of a true full-universe scan.
