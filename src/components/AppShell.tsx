@@ -99,7 +99,7 @@ const PRIMARY_NAV = [
   { name: "Analyze Stock", href: "/analyze", icon: Activity },
   { name: "Chart Analytics", href: "/charts", icon: CandlestickChart },
   { name: "Markets", href: "/markets", icon: Globe },
-  { name: "Sector Pulse", href: "/sectors", icon: Gauge },
+  { name: "Sector Pulse", href: "/sectors", icon: Gauge, badge: "NEW" },
   { name: "Daily Overview", href: "/market-overview", icon: Sunrise },
   { name: "Watchlist", href: "/watchlist", icon: Star },
   { name: "Portfolio", href: "/portfolio", icon: Briefcase },
@@ -110,7 +110,7 @@ const MORE_GROUPS = [
   {
     label: "Research tools",
     items: [
-      { name: "Market Screener", href: "/screener", icon: Search },
+      { name: "Market Screener", href: "/screener", icon: Search, badge: "NEW" },
       { name: "Combinations", href: "/combos", icon: SlidersHorizontal },
       { name: "Compare Stocks", href: "/compare", icon: ArrowLeftRight },
       { name: "AI Research", href: "/ai-chat", icon: MessageSquare },
@@ -232,7 +232,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     if (inMore) setMoreOpen(true);
   }, [inMore]);
 
-  const renderNavItem = (item: { name: string; href: string; icon: any }) => {
+  const renderNavItem = (item: { name: string; href: string; icon: any; badge?: string }) => {
     const isActive = isItemActive(item.href);
     return (
       <Link
@@ -245,6 +245,9 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           className={`w-5 h-5 flex-shrink-0 ${isActive ? "text-amber-400" : "text-slate-400 group-hover:text-slate-200"}`}
         />
         {(!isCollapsed || mobileOpen) && <span className="truncate">{item.name}</span>}
+        {item.badge && (!isCollapsed || mobileOpen) && (
+          <span className="ml-auto text-[9px] font-black px-1.5 py-0.5 rounded-full bg-emerald-500 text-white tracking-wider">{item.badge}</span>
+        )}
       </Link>
     );
   };

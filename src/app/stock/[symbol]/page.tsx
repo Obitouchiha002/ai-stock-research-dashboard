@@ -18,6 +18,7 @@ import {
   Download,
   Bookmark,
 } from "lucide-react";
+import DividendCard from "@/components/DividendCard";
 import {
   Area,
   AreaChart,
@@ -632,6 +633,8 @@ export default function StockDetailPage() {
             </div>
           </div>
         )}
+
+        {activeTab === "overview" && symbol && <DividendCard symbol={symbol} />}
 
         {activeTab !== "overview" && (
           <div className="bg-white rounded-2xl p-8 border border-slate-200 shadow-sm text-center">
