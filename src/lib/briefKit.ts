@@ -275,6 +275,34 @@ export function portfolioSummary(
   return acc;
 }
 
+// One-line sector strip for the email: the day's strongest & weakest sector per
+// region. Symbols are app tickers (the quotes route resolves their live move).
+export type SectorMove = { name: string; pct: number };
+export type SectorBrief = { in?: { top?: SectorMove; bot?: SectorMove }; us?: { top?: SectorMove; bot?: SectorMove } };
+export const SECTOR_SYMBOLS: { region: "in" | "us"; name: string; symbol: string }[] = [
+  { region: "in", name: "Bank", symbol: "^NSEBANK" }, { region: "in", name: "IT", symbol: "^CNXIT" },
+  { region: "in", name: "Auto", symbol: "^CNXAUTO" }, { region: "in", name: "FMCG", symbol: "^CNXFMCG" },
+  { region: "in", name: "Pharma", symbol: "^CNXPHARMA" }, { region: "in", name: "Metal", symbol: "^CNXMETAL" },
+  { region: "in", name: "Energy", symbol: "^CNXENERGY" }, { region: "in", name: "Realty", symbol: "NIFTYREAL.NS" },
+  { region: "in", name: "Media", symbol: "^CNXMEDIA" }, { region: "in", name: "PSU Bank", symbol: "^CNXPSUBANK" },
+  { region: "us", name: "Tech", symbol: "^SP500-45" }, { region: "us", name: "Financials", symbol: "^SP500-40" },
+  { region: "us", name: "Health", symbol: "^SP500-35" }, { region: "us", name: "Staples", symbol: "^SP500-30" },
+  { region: "us", name: "Industrials", symbol: "^SP500-20" }, { region: "us", name: "Materials", symbol: "^SP500-15" },
+  { region: "us", name: "Utilities", symbol: "^SP500-55" }, { region: "us", name: "Real Estate", symbol: "^SP500-6020" },
+];
+
+// Top & bottom sector per region from a quotes map (symbol → { changePct }).
+export function sectorMovers(quotes: Record<string, any>): SectorBrief {
+  const forRegion = (region: "in" | "us") => {
+    const rows = SECTOR_SYMBOLS.filter((s) => s.region === region)
+      .map((s) => ({ name: s.name, pct: quotes[s.symbol.toUpperCase()]?.changePct }))
+      .filter((x) => typeof x.pct === "number")
+      .sort((a, b) => (b.pct as number) - (a.pct as number));
+    return rows.length ? { top: rows[0] as SectorMove, bot: rows[rows.length - 1] as SectorMove } : undefined;
+  };
+  return { in: forRegion("in"), us: forRegion("us") };
+}
+
 export type BriefData = {
   india: Row[];
   us: Row[];
@@ -284,6 +312,7 @@ export type BriefData = {
   marketUS: any | null;
   combos: { symbol: string; label: string }[];
   portfolio?: PortfolioSummary;
+  sectors?: SectorBrief;
 };
 
 const wrap = (inner: string) =>
@@ -430,6 +459,21 @@ export function buildDashboard(slot: Slot, data: BriefData, dateStr: string): { 
     </tr></table>`;
   }
 
+  // One compact sector line — day's strongest ▲ / weakest ▼ per region.
+  const sct = data.sectors;
+  const side = (r: "in" | "us") => {
+    const s = sct?.[r];
+    if (!s || (!s.top && !s.bot)) return "";
+    const flag = r === "in" ? "🇮🇳" : "🇺🇸";
+    const t = s.top ? `▲ ${esc(s.top.name)} ${pctHtml(s.top.pct, false)}` : "";
+    const b = s.bot && s.bot !== s.top ? ` ▼ ${esc(s.bot.name)} ${pctHtml(s.bot.pct, false)}` : "";
+    return `${flag} ${t}${b}`;
+  };
+  const inSide = side("in"), usSide = side("us");
+  const sectorLine = (inSide || usSide)
+    ? `<div style="margin-top:6px;font-size:11.5px;color:#334155;background:#fff;border:1px solid #e2e8f0;border-radius:10px;padding:8px 12px">🔥 <b>Sectors</b> — ${inSide}${inSide && usSide ? " &nbsp;·&nbsp; " : ""}${usSide}</div>`
+    : "";
+
   const comboLine = data.combos.length
     ? `<div style="margin-top:6px;font-size:11.5px;color:#4338ca;background:#eef2ff;border-radius:10px;padding:8px 12px">🧩 <b>${data.combos.length} combo${data.combos.length > 1 ? "s" : ""} matched</b> — ${esc(data.combos.slice(0, 4).map((c) => c.symbol).join(", "))}${data.combos.length > 4 ? ` +${data.combos.length - 4} more` : ""}</div>`
     : "";
@@ -438,7 +482,7 @@ export function buildDashboard(slot: Slot, data: BriefData, dateStr: string): { 
 
   return {
     subject: `${meta.emoji} ${meta.name} — StockAnalytix · ${dateStr}`,
-    html: wrap(header + portfolioBar(data.portfolio) + grid + highlights + comboLine + cta + `<p style="color:#94a3b8;font-size:10.5px;margin-top:12px;text-align:center">Live day-change · research support only, not advice. A ≥${MOVE_THRESHOLD}% move often signals fresh news.</p>`),
+    html: wrap(header + portfolioBar(data.portfolio) + grid + highlights + sectorLine + comboLine + cta + `<p style="color:#94a3b8;font-size:10.5px;margin-top:12px;text-align:center">Live day-change · research support only, not advice. A ≥${MOVE_THRESHOLD}% move often signals fresh news.</p>`),
   };
 }
 

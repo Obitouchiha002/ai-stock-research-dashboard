@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import {
   buildDashboard, fetchQuotes, fetchMarket, fetchNews, rowsFrom, portfolioSummary,
-  MOVE_THRESHOLD, SLOT_META, type Slot, type BriefData,
+  sectorMovers, SECTOR_SYMBOLS, MOVE_THRESHOLD, SLOT_META, type Slot, type BriefData,
 } from "@/lib/briefKit";
 import { evalConditions } from "@/lib/comboEval";
 import { getAllCronUsers } from "@/lib/cronUsers";
@@ -80,6 +80,9 @@ async function handle(req: NextRequest) {
     ? await Promise.all([fetchMarket(SELF_BASE, "in"), fetchMarket(SELF_BASE, "us")])
     : [null, null];
 
+  // Sector pulse strip (also user-independent) — one compact line in the email.
+  const sectors = sectorMovers(await fetchQuotes(SELF_BASE, SECTOR_SYMBOLS.map((s) => s.symbol)));
+
   // Every user, from Supabase accounts + legacy sync codes, deduped by email.
   const users = await getAllCronUsers();
 
@@ -140,7 +143,7 @@ async function handle(req: NextRequest) {
         .filter((h) => h.symbol && h.shares);
       const pSummary = holdings.length ? portfolioSummary(holdings, quotes) : undefined;
 
-      const data: BriefData = { india, us, movers, news, marketIN, marketUS, combos: matched, portfolio: pSummary };
+      const data: BriefData = { india, us, movers, news, marketIN, marketUS, combos: matched, portfolio: pSummary, sectors };
       const r = buildDashboard(slot, data, dateStr);
       // Preview: show the first user's brief as a page and stop (no send).
       if (isPreview) return new NextResponse(r.html, { headers: { "content-type": "text/html; charset=utf-8" } });
