@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import YahooFinance from "yahoo-finance2";
 import { subDays } from "date-fns";
+import { appToEodhd, eodhdConfigured, eodhdEodRows } from "@/lib/eodhd";
 
 const yahooFinance = new YahooFinance();
 
@@ -136,7 +137,23 @@ export async function POST(req: NextRequest) {
     ]);
 
     const quotes = (chartRes as any)?.quotes || [];
-    const rows = quotes.filter((q: any) => q && q.close != null && q.open != null);
+    let rows = quotes.filter((q: any) => q && q.close != null && q.open != null);
+
+    // Yahoo has no history for sectoral/thematic INDICES (returns ~1 bar). When
+    // the Yahoo pull is thin and EODHD can serve this symbol (index or US), pull
+    // daily/weekly candles from EODHD instead — this is what makes NSE sector
+    // indices chartable at all. (Intraday stays on Yahoo.)
+    if (rows.length < 30 && interval !== "1h" && eodhdConfigured()) {
+      const e = appToEodhd(symbol);
+      if (e) {
+        try {
+          const er = await eodhdEodRows(e.sym, period1, interval === "1wk" ? "w" : "d");
+          const valid = er.filter((r: any) => r && r.close != null && r.open != null);
+          if (valid.length > rows.length) rows = valid;
+        } catch { /* keep Yahoo rows */ }
+      }
+    }
+
     if (rows.length === 0) {
       return NextResponse.json({ error: "No chart data for this symbol/timeframe." }, { status: 404 });
     }

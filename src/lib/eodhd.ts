@@ -72,6 +72,13 @@ export function appToEodhd(symbol: string): { sym: string; kind: "index" | "us" 
   return { sym: `${s}.US`, kind: "us" };
 }
 
+// Raw EOD rows (with date) for charting — daily/weekly/monthly. Shape matches
+// what the chart route expects from Yahoo ({date, open, high, low, close, volume}).
+export async function eodhdEodRows(sym: string, from?: string, period: "d" | "w" | "m" = "d"): Promise<any[]> {
+  const j = await getJson(`/eod/${sym}?period=${period}${from ? `&from=${from}` : ""}`);
+  return Array.isArray(j) ? j : [];
+}
+
 export type EodhdCandle = { open: number; high: number; low: number; close: number; volume: number };
 
 // Daily (or 1h intraday) candles from EODHD, mapped to the app's OHLC shape.
