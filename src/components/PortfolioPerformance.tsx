@@ -32,7 +32,7 @@ function computeLive(holdings: any[], quotes: Record<string, any>): Live {
   for (const h of holdings) {
     const sym = String(h.symbol || h.stockName || "").toUpperCase();
     const shares = N(h.shares), buy = N(h.buyPrice);
-    const cp = isFinite(N(h.currentPrice)) ? N(h.currentPrice) : N(quotes[sym]?.price);
+    const cp = isFinite(N(quotes[sym]?.price)) ? N(quotes[sym]?.price) : N(h.currentPrice);
     const price = isFinite(cp) ? cp : buy; // fall back to cost if no live price yet
     const value = isFinite(shares) && isFinite(price) ? shares * price : NaN;
     const invested = isFinite(shares) && isFinite(buy) ? shares * buy : NaN;
@@ -93,9 +93,10 @@ export default function PortfolioPerformance() {
     let cancelled = false;
     let quotes: Record<string, any> = {};
     const compute = () => { if (!cancelled) setLive(computeLive(readHoldings(), quotes)); };
-    compute(); // instant from stored values
-    // Recompute only when data actually changes (sync / this component's own
-    // fetch below) — no blind 8s polling re-render of unchanged numbers.
+    // No eager paint from stored values — that showed a STALE price for a moment
+    // before the live quote arrived (the "old value then it jumps" flash). The
+    // card stays hidden until the quote fetch below computes a fresh value.
+    // Recompute when data actually changes (sync / this component's own fetch).
     window.addEventListener("sa-synced", compute);
 
     // Fill any missing current prices + the USD→INR rate from a live quote fetch.
@@ -109,7 +110,7 @@ export default function PortfolioPerformance() {
         const rate = Number(quotes["USDINR=X"]?.price);
         if (!cancelled && isFinite(rate) && rate > 0) setFx(rate);
         compute();
-      } catch { /* stored values remain */ }
+      } catch { compute(); /* live fetch failed — fall back to stored values */ }
     })();
 
     (async () => {

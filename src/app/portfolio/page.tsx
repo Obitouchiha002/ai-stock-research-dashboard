@@ -164,6 +164,9 @@ export default function PortfolioPage() {
   const [showAdd, setShowAdd] = useState(false);
   const [form, setForm] = useState({ symbol: "", shares: "", price: "" });
   const [refreshing, setRefreshing] = useState(false);
+  // False until the first live-price fetch resolves — price/P&L cells show a
+  // skeleton till then instead of the stale persisted price ("old then jumps").
+  const [priced, setPriced] = useState(false);
   const [reviewLoading, setReviewLoading] = useState(false);
   const [review, setReview] = useState<any | null>(null);
   // Per-holding factual chart read (trend / RSI / DMA position). NOT advice.
@@ -437,6 +440,7 @@ export default function PortfolioPage() {
       /* keep last known prices */
     }
     setHoldings(getPortfolio());
+    setPriced(true); // first live prices are in — reveal the price/P&L cells
     setRefreshing(false);
   };
 
@@ -720,22 +724,25 @@ export default function PortfolioPage() {
         <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm min-w-0">
           <div className="text-xs font-bold text-slate-500 uppercase tracking-widest mb-2">Current Value</div>
           <div className="text-2xl lg:text-3xl font-black text-slate-900 tabular-nums truncate">
-            {cur}
-            {totals.currentVal.toLocaleString(undefined, { maximumFractionDigits: 2 })}
+            {priced ? <>{cur}{totals.currentVal.toLocaleString(undefined, { maximumFractionDigits: 2 })}</> : <span className="inline-block h-7 w-28 bg-slate-200 rounded animate-pulse align-middle" />}
           </div>
         </div>
         <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm min-w-0">
           <div className="text-xs font-bold text-slate-500 uppercase tracking-widest mb-2">Total P/L</div>
           <div className={`flex flex-wrap items-baseline gap-x-2 gap-y-1 tabular-nums ${totals.pl >= 0 ? "text-emerald-500" : "text-rose-500"}`}>
-            <span className="text-2xl lg:text-3xl font-black truncate">
-              {totals.pl >= 0 ? "+" : "-"}
-              {cur}
-              {Math.abs(totals.pl).toLocaleString(undefined, { maximumFractionDigits: 2 })}
-            </span>
-            <span className="text-sm font-bold px-2 py-0.5 bg-slate-50 rounded-lg whitespace-nowrap">
-              {totals.pl >= 0 ? "+" : ""}
-              {totals.pct.toFixed(2)}%
-            </span>
+            {priced ? (
+              <>
+                <span className="text-2xl lg:text-3xl font-black truncate">
+                  {totals.pl >= 0 ? "+" : "-"}
+                  {cur}
+                  {Math.abs(totals.pl).toLocaleString(undefined, { maximumFractionDigits: 2 })}
+                </span>
+                <span className="text-sm font-bold px-2 py-0.5 bg-slate-50 rounded-lg whitespace-nowrap">
+                  {totals.pl >= 0 ? "+" : ""}
+                  {totals.pct.toFixed(2)}%
+                </span>
+              </>
+            ) : <span className="inline-block h-7 w-32 bg-slate-200 rounded animate-pulse" />}
           </div>
         </div>
       </div>
@@ -1243,8 +1250,8 @@ export default function PortfolioPage() {
                         </div>
                       </div>
                     </td>
-                    <td className="p-3 text-right tabular-nums font-bold text-slate-800 whitespace-nowrap">{money(ltp)}</td>
-                    <td className="p-3 text-right tabular-nums font-bold text-slate-800 whitespace-nowrap">{money(ltp * h.shares)}</td>
+                    <td className="p-3 text-right tabular-nums font-bold text-slate-800 whitespace-nowrap">{priced ? money(ltp) : <span className="inline-block h-4 w-14 bg-slate-200 rounded animate-pulse align-middle" />}</td>
+                    <td className="p-3 text-right tabular-nums font-bold text-slate-800 whitespace-nowrap">{priced ? money(ltp * h.shares) : <span className="inline-block h-4 w-16 bg-slate-200 rounded animate-pulse align-middle" />}</td>
                     <td className="p-3 text-center">
                       {(() => {
                         const t = PF_TREND.find((x) => x.v === (h.trend || "")) || PF_TREND[0];
@@ -1331,17 +1338,21 @@ export default function PortfolioPage() {
                         <span className="ml-1.5 text-xs text-slate-400 font-bold">({h.symbol})</span>
                       )}
                       <div className="text-[11px] font-bold text-slate-400 tabular-nums mt-0.5">
-                        LTP {money(ltp)}
+                        LTP {priced ? money(ltp) : <span className="inline-block h-3 w-10 bg-slate-200 rounded animate-pulse align-middle" />}
                       </div>
                     </td>
                     <td className="p-3 tabular-nums font-bold text-slate-700 text-right">{h.shares}</td>
                     <td className="p-3 tabular-nums font-bold text-slate-700 text-right hidden md:table-cell">{money(h.buyPrice)}</td>
-                    <td className="p-3 tabular-nums font-bold text-slate-900 text-right">{money(marketValue)}</td>
+                    <td className="p-3 tabular-nums font-bold text-slate-900 text-right">{priced ? money(marketValue) : <span className="inline-block h-4 w-16 bg-slate-200 rounded animate-pulse align-middle" />}</td>
                     <td className="p-3 tabular-nums font-bold text-slate-700 text-right hidden md:table-cell">{money(costValue)}</td>
                     <td className={`p-3 tabular-nums font-bold text-right ${up ? "text-emerald-600" : "text-rose-600"}`}>
-                      {up ? "+" : "-"}
-                      {money(Math.abs(gain))}
-                      <span className="block text-[10px] font-medium">({up ? "+" : ""}{gainPct.toFixed(2)}%)</span>
+                      {priced ? (
+                        <>
+                          {up ? "+" : "-"}
+                          {money(Math.abs(gain))}
+                          <span className="block text-[10px] font-medium">({up ? "+" : ""}{gainPct.toFixed(2)}%)</span>
+                        </>
+                      ) : <span className="inline-block h-4 w-16 bg-slate-200 rounded animate-pulse align-middle" />}
                     </td>
                     <td className="p-3">
                       {(() => {
@@ -1407,15 +1418,17 @@ export default function PortfolioPage() {
                   <div className="flex flex-wrap items-center justify-end gap-x-6 gap-y-1 text-sm">
                     <span className="mr-auto text-xs uppercase tracking-wide text-slate-500">Total ({market})</span>
                     <span className="text-slate-500">
-                      Value <span className="text-slate-900 tabular-nums">{cur}{totals.currentVal.toLocaleString(undefined, { maximumFractionDigits: 2 })}</span>
+                      Value <span className="text-slate-900 tabular-nums">{priced ? `${cur}${totals.currentVal.toLocaleString(undefined, { maximumFractionDigits: 2 })}` : <span className="inline-block h-3.5 w-16 bg-slate-200 rounded animate-pulse align-middle" />}</span>
                     </span>
                     <span className="text-slate-500 hidden sm:inline">
                       Invested <span className="text-slate-700 tabular-nums">{cur}{totals.invested.toLocaleString(undefined, { maximumFractionDigits: 2 })}</span>
                     </span>
-                    <span className={totals.pl >= 0 ? "text-emerald-600" : "text-rose-600"}>
-                      {totals.pl >= 0 ? "+" : "-"}{cur}{Math.abs(totals.pl).toLocaleString(undefined, { maximumFractionDigits: 2 })}
-                      <span className="ml-1 text-xs">({totals.pl >= 0 ? "+" : ""}{totals.pct.toFixed(2)}%)</span>
-                    </span>
+                    {priced ? (
+                      <span className={totals.pl >= 0 ? "text-emerald-600" : "text-rose-600"}>
+                        {totals.pl >= 0 ? "+" : "-"}{cur}{Math.abs(totals.pl).toLocaleString(undefined, { maximumFractionDigits: 2 })}
+                        <span className="ml-1 text-xs">({totals.pl >= 0 ? "+" : ""}{totals.pct.toFixed(2)}%)</span>
+                      </span>
+                    ) : <span className="inline-block h-3.5 w-20 bg-slate-200 rounded animate-pulse align-middle" />}
                   </div>
                 </td>
               </tr>
