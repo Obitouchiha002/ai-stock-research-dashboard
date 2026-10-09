@@ -22,30 +22,52 @@ export default function ScreenerPage() {
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState("");
   const [tab, setTab] = useState<(typeof TABS)[number]["key"]>("near52High");
+  const [market, setMarket] = useState<"us" | "in">("us");
+  const [date, setDate] = useState(""); // "" = today/latest; a past YYYY-MM-DD = calendar
+  const today = new Date().toISOString().slice(0, 10);
 
   const load = useCallback(async () => {
     setLoading(true); setErr("");
     try {
-      const r = await fetch("/api/screener", { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}" });
+      const r = await fetch("/api/screener", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ market, date: date || undefined }) });
       const j = await r.json();
-      if (j.error) setErr(j.error); else setData(j);
+      if (j.error) { setErr(j.error); if (j.noHistory) setData(null); }
+      else setData(j);
     } catch { setErr("Could not load the screener. Try again."); }
     setLoading(false);
-  }, []);
+  }, [market, date]);
 
   useEffect(() => { load(); }, [load]);
 
   const active = TABS.find((t) => t.key === tab)!;
   const rows = (data?.[tab] as Stock[]) || [];
+  const cur = market === "in" ? "₹" : "$";
 
   return (
     <div className="max-w-4xl mx-auto space-y-4">
       <div className="flex items-center gap-2 flex-wrap">
         <h1 className="text-xl font-black text-slate-900">🔍 Market Screener</h1>
-        {data && <span className="text-[12px] text-slate-400 font-medium">scanned {data.universe.toLocaleString()} US stocks · {data.asOf}</span>}
+        {data && <span className="text-[12px] text-slate-400 font-medium">{data.universe.toLocaleString()} {market === "in" ? "India" : "US"} stocks · {data.asOf}{date ? " · past date 📅" : ""}</span>}
         <button onClick={load} disabled={loading} className="ml-auto flex items-center gap-1.5 text-[12px] font-bold text-slate-600 bg-white border border-slate-200 rounded-lg px-3 py-1.5 hover:bg-slate-50 disabled:opacity-50">
           <RefreshCw className={`w-3.5 h-3.5 ${loading ? "animate-spin" : ""}`} /> Refresh
         </button>
+      </div>
+
+      <div className="flex items-center gap-3 flex-wrap">
+        <div className="inline-flex rounded-xl border border-slate-200 overflow-hidden">
+          {(["us", "in"] as const).map((m) => (
+            <button key={m} onClick={() => { setMarket(m); if (m === "in") setDate(""); }} className={`text-[12.5px] font-bold px-3.5 py-1.5 transition ${market === m ? "bg-slate-900 text-white" : "bg-white text-slate-600 hover:bg-slate-50"}`}>{m === "us" ? "🇺🇸 US" : "🇮🇳 India"}</button>
+          ))}
+        </div>
+        {market === "us" ? (
+          <div className="flex items-center gap-1.5">
+            <span className="text-[13px]">📅</span>
+            <input type="date" max={today} value={date} onChange={(e) => setDate(e.target.value)} className="text-[12.5px] font-bold text-slate-700 bg-white border border-slate-200 rounded-lg px-2.5 py-1.5 outline-none focus:ring-2 focus:ring-indigo-200" />
+            {date && <button onClick={() => setDate("")} className="text-[12px] font-bold text-indigo-600 hover:underline">→ Today</button>}
+          </div>
+        ) : (
+          <span className="text-[11.5px] text-slate-400 font-medium">India = today only (no historical bulk for NSE)</span>
+        )}
       </div>
 
       <div className="flex gap-2 flex-wrap">
@@ -68,7 +90,7 @@ export default function ScreenerPage() {
           <div className="text-[11px] text-slate-400 mt-0.5">{active.hint}</div>
         </div>
         {loading && !data ? (
-          <div className="text-sm text-slate-500 px-4 py-12 text-center flex items-center justify-center gap-2"><RefreshCw className="w-4 h-4 animate-spin" /> Scanning the whole US market…</div>
+          <div className="text-sm text-slate-500 px-4 py-12 text-center flex items-center justify-center gap-2"><RefreshCw className="w-4 h-4 animate-spin" /> Scanning the {market === "in" ? "Nifty 500" : "US market"}…</div>
         ) : rows.length === 0 ? (
           <div className="text-sm text-slate-500 px-4 py-10 text-center">Nothing matched this screen today.</div>
         ) : (
@@ -81,8 +103,8 @@ export default function ScreenerPage() {
                   <div className="text-[11px] text-slate-400 truncate">{s.name}</div>
                 </div>
                 <div className="text-right">
-                  <div className="font-black text-slate-800 text-[13px] tabular-nums">${s.close.toLocaleString()}</div>
-                  <div className="text-[10px] text-slate-400">${s.mcapB}B</div>
+                  <div className="font-black text-slate-800 text-[13px] tabular-nums">{cur}{s.close.toLocaleString()}</div>
+                  <div className="text-[10px] text-slate-400">{cur}{s.mcapB}B</div>
                 </div>
                 <span className={`text-[11.5px] font-black tabular-nums w-24 text-right ${active.tint}`}>{active.metric(s)}</span>
               </Link>
@@ -90,7 +112,7 @@ export default function ScreenerPage() {
           </div>
         )}
       </div>
-      <div className="text-[11px] text-slate-400 text-center">US common stocks &gt; $300M mcap &amp; liquid · EOD data · research support only, not advice</div>
+      <div className="text-[11px] text-slate-400 text-center">{market === "in" ? "NSE Nifty 500 · live" : "Top 1000 US common stocks by mcap · EOD"} · 📅 pick a past date for the US calendar · research support only, not advice</div>
     </div>
   );
 }
