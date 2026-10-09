@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { Sunrise, RefreshCw, Loader2, TrendingUp, TrendingDown, Activity, ArrowUpNarrowWide, ArrowDownNarrowWide, Trophy } from "lucide-react";
 
@@ -27,15 +27,18 @@ export default function MarketOverviewPage() {
   const [date, setDate] = useState(""); // "" = today; a past YYYY-MM-DD = calendar (US only)
   const today = new Date().toISOString().slice(0, 10);
 
+  const reqId = useRef(0);
   const load = async (force = false) => {
+    const id = ++reqId.current; // race guard — drop superseded responses
     setLoading(true); setErr("");
     try {
       const res = await fetch("/api/market-overview", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ market, date: date || undefined, force }) });
       const j = await res.json();
-      if (j.error) { setErr(j.error); if (j.noHistory) setData(null); return; }
-      setData(j);
-    } catch { setErr("Could not load the market overview. Please try again."); }
-    finally { setLoading(false); }
+      if (id !== reqId.current) return;
+      if (j.error) { setErr(j.error); setData(null); return; } // clear stale rows on any error
+      setErr(""); setData(j);
+    } catch { if (id === reqId.current) setErr("Could not load the market overview. Please try again."); }
+    finally { if (id === reqId.current) setLoading(false); }
   };
   useEffect(() => { load(); /* eslint-disable-next-line */ }, [market, date]);
 
@@ -50,7 +53,7 @@ export default function MarketOverviewPage() {
         <div>
           <h1 className="text-3xl font-black text-slate-900 tracking-tight flex items-center gap-2"><Sunrise className="w-8 h-8 text-amber-500" /> Daily Market Overview</h1>
           <p className="text-slate-500 mt-1 font-medium">
-            {date ? `As of ${data?.asOf || date} 📅` : "What moved today."}{" "}
+            {date && date < today ? `As of ${data?.asOf || date} 📅` : "What moved today."}{" "}
             {data?.universe ? `Top ${Number(data.universe).toLocaleString()} by mcap.` : data?.scanned ? `Scanned ${data.scanned} large/mid caps.` : ""}
             {data?.dayMoveIsCandle ? " · gainers/losers = that day's candle (open→close)" : ""}
           </p>
@@ -63,12 +66,14 @@ export default function MarketOverviewPage() {
               </button>
             ))}
           </div>
-          {market === "us" && (
+          {market === "us" ? (
             <div className="flex items-center gap-1.5">
               <span className="text-base">📅</span>
-              <input type="date" max={today} value={date} onChange={(e) => setDate(e.target.value)} className="text-[13px] font-bold text-slate-700 bg-white border border-slate-200 rounded-lg px-2.5 py-2 outline-none focus:ring-2 focus:ring-indigo-200" />
+              <input type="date" min="2000-01-01" max={today} value={date} onChange={(e) => setDate(e.target.value)} className="text-[13px] font-bold text-slate-700 bg-white border border-slate-200 rounded-lg px-2.5 py-2 outline-none focus:ring-2 focus:ring-indigo-200" />
               {date && <button onClick={() => setDate("")} className="text-[12px] font-bold text-indigo-600 hover:underline">→ Today</button>}
             </div>
+          ) : (
+            <span className="text-[11.5px] text-slate-400 font-medium">today only (NSE not in EODHD)</span>
           )}
           <button onClick={() => load(true)} disabled={loading} className="px-4 py-2.5 bg-indigo-600 text-white rounded-xl text-sm font-black hover:bg-indigo-700 flex items-center gap-2 disabled:opacity-50">
             <RefreshCw className={`w-4 h-4 ${loading ? "animate-spin" : ""}`} /> Refresh
@@ -99,7 +104,7 @@ export default function MarketOverviewPage() {
         {loading && !data ? (
           <div className="flex items-center gap-2 text-sm text-slate-500 px-5 py-12"><Loader2 className="w-4 h-4 animate-spin" /> Scanning the market…</div>
         ) : rows.length === 0 ? (
-          <div className="px-5 py-12 text-[14px] text-slate-400">Nothing in “{activeTab.label}” today.</div>
+          <div className="px-5 py-12 text-[14px] text-slate-400">Nothing in “{activeTab.label}”{date ? ` on ${date}` : ""}.</div>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-sm">

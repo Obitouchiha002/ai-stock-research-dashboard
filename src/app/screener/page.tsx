@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 import Link from "next/link";
 import { RefreshCw, TrendingUp, TrendingDown, Flame, LineChart } from "lucide-react";
 
@@ -26,15 +26,18 @@ export default function ScreenerPage() {
   const [date, setDate] = useState(""); // "" = today/latest; a past YYYY-MM-DD = calendar
   const today = new Date().toISOString().slice(0, 10);
 
-  const load = useCallback(async () => {
+  const reqId = useRef(0);
+  const load = useCallback(async (force = false) => {
+    const id = ++reqId.current; // ignore responses from superseded requests (race guard)
     setLoading(true); setErr("");
     try {
-      const r = await fetch("/api/screener", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ market, date: date || undefined }) });
+      const r = await fetch("/api/screener", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ market, date: date || undefined, force }) });
       const j = await r.json();
-      if (j.error) { setErr(j.error); if (j.noHistory) setData(null); }
-      else setData(j);
-    } catch { setErr("Could not load the screener. Try again."); }
-    setLoading(false);
+      if (id !== reqId.current) return; // a newer request already won
+      if (j.error) { setErr(j.error); setData(null); } // clear stale rows on any error
+      else { setErr(""); setData(j); }
+    } catch { if (id === reqId.current) setErr("Could not load the screener. Try again."); }
+    finally { if (id === reqId.current) setLoading(false); }
   }, [market, date]);
 
   useEffect(() => { load(); }, [load]);
@@ -47,8 +50,8 @@ export default function ScreenerPage() {
     <div className="max-w-4xl mx-auto space-y-4">
       <div className="flex items-center gap-2 flex-wrap">
         <h1 className="text-xl font-black text-slate-900">🔍 Market Screener</h1>
-        {data && <span className="text-[12px] text-slate-400 font-medium">{data.universe.toLocaleString()} {market === "in" ? "India" : "US"} stocks · {data.asOf}{date ? " · past date 📅" : ""}</span>}
-        <button onClick={load} disabled={loading} className="ml-auto flex items-center gap-1.5 text-[12px] font-bold text-slate-600 bg-white border border-slate-200 rounded-lg px-3 py-1.5 hover:bg-slate-50 disabled:opacity-50">
+        {data && <span className="text-[12px] text-slate-400 font-medium">{data.universe.toLocaleString()} {market === "in" ? "India" : "US"} stocks · {data.asOf}{date && date < today ? " · past date 📅" : ""}</span>}
+        <button onClick={() => load(true)} disabled={loading} className="ml-auto flex items-center gap-1.5 text-[12px] font-bold text-slate-600 bg-white border border-slate-200 rounded-lg px-3 py-1.5 hover:bg-slate-50 disabled:opacity-50">
           <RefreshCw className={`w-3.5 h-3.5 ${loading ? "animate-spin" : ""}`} /> Refresh
         </button>
       </div>
@@ -62,7 +65,7 @@ export default function ScreenerPage() {
         {market === "us" ? (
           <div className="flex items-center gap-1.5">
             <span className="text-[13px]">📅</span>
-            <input type="date" max={today} value={date} onChange={(e) => setDate(e.target.value)} className="text-[12.5px] font-bold text-slate-700 bg-white border border-slate-200 rounded-lg px-2.5 py-1.5 outline-none focus:ring-2 focus:ring-indigo-200" />
+            <input type="date" min="2000-01-01" max={today} value={date} onChange={(e) => setDate(e.target.value)} className="text-[12.5px] font-bold text-slate-700 bg-white border border-slate-200 rounded-lg px-2.5 py-1.5 outline-none focus:ring-2 focus:ring-indigo-200" />
             {date && <button onClick={() => setDate("")} className="text-[12px] font-bold text-indigo-600 hover:underline">→ Today</button>}
           </div>
         ) : (
@@ -92,7 +95,7 @@ export default function ScreenerPage() {
         {loading && !data ? (
           <div className="text-sm text-slate-500 px-4 py-12 text-center flex items-center justify-center gap-2"><RefreshCw className="w-4 h-4 animate-spin" /> Scanning the {market === "in" ? "Nifty 500" : "US market"}…</div>
         ) : rows.length === 0 ? (
-          <div className="text-sm text-slate-500 px-4 py-10 text-center">Nothing matched this screen today.</div>
+          <div className="text-sm text-slate-500 px-4 py-10 text-center">Nothing matched this screen{date ? ` on ${date}` : ""}.</div>
         ) : (
           <div className="divide-y divide-slate-100">
             {rows.map((s, i) => (

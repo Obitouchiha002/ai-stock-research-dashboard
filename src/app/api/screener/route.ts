@@ -95,10 +95,12 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "US screener needs an EODHD key." }, { status: 503 });
     }
 
+    const force = body.force === true;
     const key = `${market}:${date || "latest"}`;
     const cached = CACHE[key];
     // Live data caches for the day; a past date never changes, so cache it hard.
-    if (cached && (!isToday(date) || Date.now() - cached.at < 3 * 3600_000)) {
+    // Refresh (force) bypasses only the live cache (a past date is immutable).
+    if (cached && (!isToday(date) || (!force && Date.now() - cached.at < 3 * 3600_000))) {
       return NextResponse.json({ ...cached.data, cached: true });
     }
 
