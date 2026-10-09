@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import YahooFinance from "yahoo-finance2";
 import { eodhdBulkEodExtended, eodhdConfigured } from "@/lib/eodhd";
 import { NIFTY500 } from "@/lib/universe";
+import { getSupabaseAdmin } from "@/lib/supabaseAdmin";
 
 // Full-market screener.
 //   US  → one EODHD bulk-EOD extended call scans the whole US exchange; an
@@ -89,7 +90,13 @@ export async function POST(req: NextRequest) {
     if (date && date >= today) date = undefined; // today or future → live
 
     if (market === "in" && date) {
-      return NextResponse.json({ error: "India has no historical data (EODHD doesn't cover NSE stocks) — showing today only.", market, noHistory: true }, { status: 200 });
+      // India has no EODHD history — read our own daily snapshot for that day.
+      const sb = getSupabaseAdmin();
+      if (sb) {
+        const { data: snap } = await sb.from("market_snapshots").select("data").eq("snap_date", date).eq("market", "in").eq("kind", "screener").maybeSingle();
+        if (snap?.data) return NextResponse.json({ ...snap.data, requestedDate: date, fromSnapshot: true });
+      }
+      return NextResponse.json({ error: "No India snapshot for that day yet — India history builds daily from when tracking started.", noHistory: true }, { status: 200 });
     }
     if (market === "us" && !eodhdConfigured()) {
       return NextResponse.json({ error: "US screener needs an EODHD key." }, { status: 503 });

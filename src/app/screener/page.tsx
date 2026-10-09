@@ -59,18 +59,15 @@ export default function ScreenerPage() {
       <div className="flex items-center gap-3 flex-wrap">
         <div className="inline-flex rounded-xl border border-slate-200 overflow-hidden">
           {(["us", "in"] as const).map((m) => (
-            <button key={m} onClick={() => { setMarket(m); if (m === "in") setDate(""); }} className={`text-[12.5px] font-bold px-3.5 py-1.5 transition ${market === m ? "bg-slate-900 text-white" : "bg-white text-slate-600 hover:bg-slate-50"}`}>{m === "us" ? "🇺🇸 US" : "🇮🇳 India"}</button>
+            <button key={m} onClick={() => setMarket(m)} className={`text-[12.5px] font-bold px-3.5 py-1.5 transition ${market === m ? "bg-slate-900 text-white" : "bg-white text-slate-600 hover:bg-slate-50"}`}>{m === "us" ? "🇺🇸 US" : "🇮🇳 India"}</button>
           ))}
         </div>
-        {market === "us" ? (
-          <div className="flex items-center gap-1.5">
-            <span className="text-[13px]">📅</span>
-            <input type="date" min="2000-01-01" max={today} value={date} onChange={(e) => setDate(e.target.value)} className="text-[12.5px] font-bold text-slate-700 bg-white border border-slate-200 rounded-lg px-2.5 py-1.5 outline-none focus:ring-2 focus:ring-indigo-200" />
-            {date && <button onClick={() => setDate("")} className="text-[12px] font-bold text-indigo-600 hover:underline">→ Today</button>}
-          </div>
-        ) : (
-          <span className="text-[11.5px] text-slate-400 font-medium">India = today only (no historical bulk for NSE)</span>
-        )}
+        <div className="flex items-center gap-1.5">
+          <span className="text-[13px]">📅</span>
+          <input type="date" min="2000-01-01" max={today} value={date} onChange={(e) => setDate(e.target.value)} className="text-[12.5px] font-bold text-slate-700 bg-white border border-slate-200 rounded-lg px-2.5 py-1.5 outline-none focus:ring-2 focus:ring-indigo-200" />
+          {date && <button onClick={() => setDate("")} className="text-[12px] font-bold text-indigo-600 hover:underline">→ Today</button>}
+        </div>
+        {market === "in" && <span className="text-[11px] text-slate-400 font-medium">India history builds daily — past days show once tracked</span>}
       </div>
 
       <div className="flex gap-2 flex-wrap">

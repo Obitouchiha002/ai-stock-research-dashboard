@@ -66,15 +66,11 @@ export default function MarketOverviewPage() {
               </button>
             ))}
           </div>
-          {market === "us" ? (
-            <div className="flex items-center gap-1.5">
-              <span className="text-base">📅</span>
-              <input type="date" min="2000-01-01" max={today} value={date} onChange={(e) => setDate(e.target.value)} className="text-[13px] font-bold text-slate-700 bg-white border border-slate-200 rounded-lg px-2.5 py-2 outline-none focus:ring-2 focus:ring-indigo-200" />
-              {date && <button onClick={() => setDate("")} className="text-[12px] font-bold text-indigo-600 hover:underline">→ Today</button>}
-            </div>
-          ) : (
-            <span className="text-[11.5px] text-slate-400 font-medium">today only (NSE not in EODHD)</span>
-          )}
+          <div className="flex items-center gap-1.5">
+            <span className="text-base">📅</span>
+            <input type="date" min="2000-01-01" max={today} value={date} onChange={(e) => setDate(e.target.value)} className="text-[13px] font-bold text-slate-700 bg-white border border-slate-200 rounded-lg px-2.5 py-2 outline-none focus:ring-2 focus:ring-indigo-200" />
+            {date && <button onClick={() => setDate("")} className="text-[12px] font-bold text-indigo-600 hover:underline">→ Today</button>}
+          </div>
           <button onClick={() => load(true)} disabled={loading} className="px-4 py-2.5 bg-indigo-600 text-white rounded-xl text-sm font-black hover:bg-indigo-700 flex items-center gap-2 disabled:opacity-50">
             <RefreshCw className={`w-4 h-4 ${loading ? "animate-spin" : ""}`} /> Refresh
           </button>

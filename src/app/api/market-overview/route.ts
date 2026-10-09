@@ -3,6 +3,7 @@ import YahooFinance from "yahoo-finance2";
 import { subDays } from "date-fns";
 import { US_UNIVERSE, IN_UNIVERSE } from "@/lib/marketUniverse";
 import { eodhdBulkEodExtended, eodhdConfigured } from "@/lib/eodhd";
+import { getSupabaseAdmin } from "@/lib/supabaseAdmin";
 
 const n2 = (v: any) => (typeof v === "number" ? v : Number(v));
 // US overview straight from the EODHD bulk — top 1000 by mcap, any date (the
@@ -96,7 +97,13 @@ export async function POST(req: NextRequest) {
       return NextResponse.json(data);
     }
     if (market === "in" && date) {
-      return NextResponse.json({ error: "India has no historical market data (NSE isn't in EODHD) — today only.", noHistory: true }, { status: 200 });
+      // India has no EODHD history — read our own daily snapshot for that day.
+      const sb = getSupabaseAdmin();
+      if (sb) {
+        const { data: snap } = await sb.from("market_snapshots").select("data").eq("snap_date", date).eq("market", "in").eq("kind", "overview").maybeSingle();
+        if (snap?.data) return NextResponse.json({ ...snap.data, requestedDate: date, fromSnapshot: true });
+      }
+      return NextResponse.json({ error: "No India snapshot for that day yet — India history builds daily from when tracking started.", noHistory: true }, { status: 200 });
     }
 
     const universe = market === "in" ? IN_UNIVERSE : US_UNIVERSE;
