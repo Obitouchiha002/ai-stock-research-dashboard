@@ -2,6 +2,41 @@ import { NextRequest, NextResponse } from "next/server";
 import YahooFinance from "yahoo-finance2";
 import { subDays } from "date-fns";
 import { US_UNIVERSE, IN_UNIVERSE } from "@/lib/marketUniverse";
+import { eodhdBulkEodExtended, eodhdConfigured } from "@/lib/eodhd";
+
+const n2 = (v: any) => (typeof v === "number" ? v : Number(v));
+// US overview straight from the EODHD bulk — top 1000 by mcap, any date (the
+// calendar). Day move here is the day's own candle (open→close), since the bulk
+// carries no previous close; 52w highs/lows & most-active are exact as-of-date.
+function usOverviewFromBulk(all: any[], date: string | undefined) {
+  const asOf = (Array.isArray(all) && all[0]?.date) || date || new Date().toISOString().slice(0, 10);
+  const rows = (Array.isArray(all) ? all : [])
+    .filter((r) => r && r.type === "Common Stock" && n2(r.close) > 1 && n2(r.MarketCapitalization) > 0 && n2(r.hi_250d) > 0 && n2(r.lo_250d) > 0)
+    .sort((a, b) => n2(b.MarketCapitalization) - n2(a.MarketCapitalization))
+    .slice(0, 1000)
+    .map((r) => {
+      const close = n2(r.close), open = n2(r.open);
+      return {
+        symbol: r.code, name: String(r.name || r.code).slice(0, 40), price: Math.round(close * 100) / 100,
+        changePct: open > 0 ? Math.round(((close - open) / open) * 1000) / 10 : null,
+        volume: n2(r.volume), high52: n2(r.hi_250d), low52: n2(r.lo_250d),
+        marketCap: n2(r.MarketCapitalization), currency: "$",
+      } as Row;
+    });
+  const near = (p: number | null, ref: number | null, dir: "hi" | "lo") => p != null && ref != null && ref > 0 && (dir === "hi" ? p >= ref * 0.985 : p <= ref * 1.015);
+  const dvol = (r: Row) => (r.price || 0) * (r.volume || 0);
+  return {
+    market: "us", asOf, currency: "$", universe: rows.length, source: "eodhd", dayMoveIsCandle: true,
+    buckets: {
+      newHighs: rows.filter((r) => near(r.price, r.high52, "hi")).sort((a, b) => (b.changePct || 0) - (a.changePct || 0)).slice(0, 25),
+      newLows: rows.filter((r) => near(r.price, r.low52, "lo")).sort((a, b) => (a.changePct || 0) - (b.changePct || 0)).slice(0, 25),
+      mostActive: [...rows].sort((a, b) => dvol(b) - dvol(a)).slice(0, 25),
+      gainers: [...rows].filter((r) => r.changePct != null).sort((a, b) => (b.changePct || 0) - (a.changePct || 0)).slice(0, 25),
+      losers: [...rows].filter((r) => r.changePct != null).sort((a, b) => (a.changePct || 0) - (b.changePct || 0)).slice(0, 25),
+      nearAth: rows.filter((r) => near(r.price, r.high52, "hi")).slice(0, 15),
+    },
+  };
+}
 
 const yahooFinance = new YahooFinance();
 export const runtime = "nodejs";
@@ -46,7 +81,23 @@ export async function POST(req: NextRequest) {
   try {
     const body = await req.json().catch(() => ({}));
     const market: "us" | "in" = body.market === "in" ? "in" : "us";
-    if (!body.force && cache[market] && Date.now() - cache[market].at < TTL) return NextResponse.json({ ...cache[market].data, cached: true });
+    const today = new Date().toISOString().slice(0, 10);
+    let date: string | undefined = typeof body.date === "string" && /^\d{4}-\d{2}-\d{2}$/.test(body.date) ? body.date : undefined;
+    if (date && date >= today) date = undefined;
+    const ckey = `${market}:${date || "latest"}`;
+    if (!body.force && cache[ckey] && (date || Date.now() - cache[ckey].at < TTL)) return NextResponse.json({ ...cache[ckey].data, cached: true });
+
+    // US → EODHD bulk (top 1000, any date). India has no EODHD stocks → Yahoo.
+    if (market === "us" && eodhdConfigured()) {
+      const all: any[] = await eodhdBulkEodExtended("US", date);
+      if (!Array.isArray(all) || !all.length) return NextResponse.json({ error: "No market data for that day." }, { status: 502 });
+      const data = usOverviewFromBulk(all, date);
+      cache[ckey] = { at: Date.now(), data };
+      return NextResponse.json(data);
+    }
+    if (market === "in" && date) {
+      return NextResponse.json({ error: "India has no historical market data (NSE isn't in EODHD) — today only.", noHistory: true }, { status: 200 });
+    }
 
     const universe = market === "in" ? IN_UNIVERSE : US_UNIVERSE;
     const cur = market === "in" ? "₹" : "$";
@@ -96,15 +147,15 @@ export async function POST(req: NextRequest) {
 
     // If Yahoo throttled this sweep and almost nothing came back, don't return a
     // near-empty scan — serve the last good one so the page never blanks out.
-    if (rows.length < 25 && cache[market]?.data) {
-      return NextResponse.json({ ...cache[market].data, cached: true, stale: true });
+    if (rows.length < 25 && cache[ckey]?.data) {
+      return NextResponse.json({ ...cache[ckey].data, cached: true, stale: true });
     }
 
     const data = {
       market, currency: cur, scanned: rows.length,
       buckets: { newHighs, newLows, mostActive, gainers, losers, nearAth },
     };
-    cache[market] = { at: Date.now(), data };
+    cache[ckey] = { at: Date.now(), data };
     return NextResponse.json(data);
   } catch (e: any) {
     return NextResponse.json({ error: e?.message || String(e) }, { status: 500 });

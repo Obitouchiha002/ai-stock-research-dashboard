@@ -24,18 +24,20 @@ export default function MarketOverviewPage() {
   const [data, setData] = useState<any | null>(null);
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState("");
+  const [date, setDate] = useState(""); // "" = today; a past YYYY-MM-DD = calendar (US only)
+  const today = new Date().toISOString().slice(0, 10);
 
   const load = async (force = false) => {
     setLoading(true); setErr("");
     try {
-      const res = await fetch("/api/market-overview", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ market, force }) });
+      const res = await fetch("/api/market-overview", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ market, date: date || undefined, force }) });
       const j = await res.json();
-      if (j.error) { setErr(j.error); return; }
+      if (j.error) { setErr(j.error); if (j.noHistory) setData(null); return; }
       setData(j);
     } catch { setErr("Could not load the market overview. Please try again."); }
     finally { setLoading(false); }
   };
-  useEffect(() => { load(); /* eslint-disable-next-line */ }, [market]);
+  useEffect(() => { load(); /* eslint-disable-next-line */ }, [market, date]);
 
   const cur = data?.currency || (market === "in" ? "₹" : "$");
   const rows: Row[] = (data?.buckets?.[tab] || []) as Row[];
@@ -47,16 +49,27 @@ export default function MarketOverviewPage() {
       <div className="flex flex-col md:flex-row md:items-center justify-between mb-4 gap-4">
         <div>
           <h1 className="text-3xl font-black text-slate-900 tracking-tight flex items-center gap-2"><Sunrise className="w-8 h-8 text-amber-500" /> Daily Market Overview</h1>
-          <p className="text-slate-500 mt-1 font-medium">What moved today. {data?.scanned ? `Scanned ${data.scanned} large/mid caps.` : ""}</p>
+          <p className="text-slate-500 mt-1 font-medium">
+            {date ? `As of ${data?.asOf || date} 📅` : "What moved today."}{" "}
+            {data?.universe ? `Top ${Number(data.universe).toLocaleString()} by mcap.` : data?.scanned ? `Scanned ${data.scanned} large/mid caps.` : ""}
+            {data?.dayMoveIsCandle ? " · gainers/losers = that day's candle (open→close)" : ""}
+          </p>
         </div>
         <div className="flex items-center gap-3">
           <div className="flex rounded-xl bg-slate-100 p-1 border border-slate-200">
             {(["in", "us"] as const).map((m) => (
-              <button key={m} onClick={() => setMarket(m)} className={`px-4 py-2 rounded-lg text-[13px] font-black transition ${market === m ? "bg-white text-indigo-700 shadow-sm" : "text-slate-500 hover:text-slate-800"}`}>
+              <button key={m} onClick={() => { setMarket(m); if (m === "in") setDate(""); }} className={`px-4 py-2 rounded-lg text-[13px] font-black transition ${market === m ? "bg-white text-indigo-700 shadow-sm" : "text-slate-500 hover:text-slate-800"}`}>
                 {m === "in" ? "🇮🇳 India" : "🇺🇸 US"}
               </button>
             ))}
           </div>
+          {market === "us" && (
+            <div className="flex items-center gap-1.5">
+              <span className="text-base">📅</span>
+              <input type="date" max={today} value={date} onChange={(e) => setDate(e.target.value)} className="text-[13px] font-bold text-slate-700 bg-white border border-slate-200 rounded-lg px-2.5 py-2 outline-none focus:ring-2 focus:ring-indigo-200" />
+              {date && <button onClick={() => setDate("")} className="text-[12px] font-bold text-indigo-600 hover:underline">→ Today</button>}
+            </div>
+          )}
           <button onClick={() => load(true)} disabled={loading} className="px-4 py-2.5 bg-indigo-600 text-white rounded-xl text-sm font-black hover:bg-indigo-700 flex items-center gap-2 disabled:opacity-50">
             <RefreshCw className={`w-4 h-4 ${loading ? "animate-spin" : ""}`} /> Refresh
           </button>
