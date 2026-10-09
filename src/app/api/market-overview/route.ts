@@ -4,6 +4,7 @@ import { subDays } from "date-fns";
 import { US_UNIVERSE, IN_UNIVERSE } from "@/lib/marketUniverse";
 import { eodhdBulkEodExtended, eodhdConfigured } from "@/lib/eodhd";
 import { getSupabaseAdmin } from "@/lib/supabaseAdmin";
+import { NIFTY500 } from "@/lib/universe";
 
 const n2 = (v: any) => (typeof v === "number" ? v : Number(v));
 // US overview straight from the EODHD bulk — top 1000 by mcap, any date (the
@@ -106,7 +107,10 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "No India snapshot for that day yet — India history builds daily from when tracking started.", noHistory: true }, { status: 200 });
     }
 
-    const universe = market === "in" ? IN_UNIVERSE : US_UNIVERSE;
+    // India: the full NSE Nifty 500 + any extra large-caps we already tracked
+    // (deduped) — EODHD has no India bulk, so this Yahoo basket is the broadest
+    // reliable India universe (a true "top 1000" isn't accessible for NSE).
+    const universe = market === "in" ? Array.from(new Set([...NIFTY500, ...IN_UNIVERSE])) : US_UNIVERSE;
     const cur = market === "in" ? "₹" : "$";
 
     // 1) Chunked quote scan over the whole universe.
